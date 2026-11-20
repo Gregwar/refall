@@ -282,6 +282,7 @@ void main() {
     float outA = 1.0;
     float lineK = 1.0;  // how much of the ink outline this surface gets
     vec3 lineC = vec3(-1.0);
+    vec4 inkOver = vec4(0.0); // an ink of its own over the shaded surface (rgb, amount): the board's cell outlines
 
     if (mat == 0) {
         // plaster: flat, clean color
@@ -318,6 +319,8 @@ void main() {
         float rim = max(0.08 * min(h.x * 2.0, h.z * 2.0), px * 1.1);   // the boards' thickness (a pixel at least)
         float detail = 1.0 - smoothstep(0.25, 0.7, px / max(min(h.x, h.y), 1e-4) * 2.0);
         lineK = 0.7;
+        vec3 base = alb;
+        bool cellBook = uBoard > 0.5 && vE.y >= 0.0;   // a book of a board's cell (vE.y: its outline's sides)
         if (face == 2 && vLN.z > 0.0) {
             float u = L.x, v = L.y;   // u across the thickness, v along the length
             float pu = fwidth(u) + 1e-4, pv = fwidth(v) + 1e-4;
@@ -346,6 +349,8 @@ void main() {
                 alb = mix(alb, ink, RECT(0.68, 0.77, 0.42) * detail * 0.6);
                 alb = mix(alb, light, RECT(-0.84, -0.76, 2.0) * detail);
             }
+            // (on the board, quieter: a cell reads as one block first, as books second)
+            if (cellBook) alb = mix(base, alb, 0.4);
             spec = 0.15; rough = 18.0;
             emit += alb * vMat.z * 1.2 + uLed * vMat.z * 0.25;
         } else if (face == 1 || (face == 2 && vLN.z < 0.0)) {
@@ -356,27 +361,50 @@ void main() {
             float pages = (1.0 - covers) * (1.0 - spineSide);
             // (a hint of its leaves: fine lines along the boards, while they are a few pixels apart)
             float lf = 0.5 + 0.5 * cos(L.x * h.x * 6.2832 / 0.075);
-            alb = mix(alb, uPaper * (1.0 - 0.12 * lf * (1.0 - smoothstep(0.025, 0.04, px))), pages);
+            vec3 paper = cellBook ? mix(uPaper, base, 0.45) * 0.88 : uPaper;   // (on the board, tinted: quieter)
+            alb = mix(alb, paper * (1.0 - (cellBook ? 0.05 : 0.12) * lf * (1.0 - smoothstep(0.025, 0.04, px))), pages);
             emit += uPaper * vMat.z * 0.4 * pages;
         } else {
             alb *= 0.92;
             emit += alb * vMat.z * 0.6;
         }
-        if (uBoard > 0.5) {
+        if (cellBook) {
             // on the board, packed on a shelf (vE.w < -15: a cell above it): soft occlusion. Its top darker toward the
-            // back (under the cell above, deep in its shade); its spine darker at its foot and along its edges against
-            // its neighbours; its covers, down the narrow gaps, in shade, deeper toward the back
+            // back (under the cell above, deep in its shade); its spine darker at its foot; its covers, down the narrow
+            // gaps, in shade (on the cell's outline, the gap between two cells: deep, the darkest between two pieces)
             float covered = vE.w < -15.0 ? 1.0 : 0.0;
+            int fl = int(vE.y + 0.5);
+            bool outL = (fl & 1) != 0, outR = (fl & 2) != 0;          // its sides on the cell's outline
+            bool sameL = (fl & 4) != 0, sameR = (fl & 8) != 0, sameD = (fl & 16) != 0, sameU = (fl & 32) != 0;
             if (face == 1 && vLN.y > 0.0) {
                 float back = 0.5 - 0.5 * L.z;
                 alb *= mix(1.0, mix(0.86, 0.5, covered), smoothstep(0.1, 1.0, back));
             } else if (face == 2 && vLN.z > 0.0) {
                 float foot = 1.0 - smoothstep(0.0, 0.12, (L.y + 1.0) * h.y);
-                float side = 1.0 - smoothstep(0.0, 0.045, (1.0 - abs(L.x)) * h.x);
                 float head = (1.0 - smoothstep(0.0, 0.1, (1.0 - L.y) * h.y)) * covered;
-                alb *= (1.0 - 0.25 * foot) * (1.0 - 0.16 * side) * (1.0 - 0.12 * head);
+                alb *= (1.0 - 0.18 * foot) * (1.0 - 0.1 * head);
             } else if (face == 0) {
-                alb *= 0.74 * mix(0.6, 1.0, 0.5 + 0.5 * L.z);
+                bool outer = vLN.x < 0.0 ? outL : outR;
+                bool same = vLN.x < 0.0 ? sameL : sameR;
+                alb *= outer ? (same ? 0.42 : 0.26) : 0.74 * mix(0.6, 1.0, 0.5 + 0.5 * L.z);
+            }
+            // the ink, its own: the cell's outline crisp (wider and darker where it meets another piece or the empty
+            // well), the seams between its own books faint. (Front: left, right, foot, head; top: left, right, back,
+            // front; in pixels from each edge.)
+            lineK = 0.0;
+            if ((face == 2 && vLN.z > 0.0) || (face == 1 && vLN.y > 0.0)) {
+                vec2 e0 = (q + sz) / pq, e1 = (sz - q) / pq;   // to the low and high edges, in pixels
+                float wc = uLineW * 1.0, wp = uLineW * 2.6, ws = uLineW * 0.7;
+                #define EDGE(d, w) (1.0 - smoothstep((w) * 0.5, (w) * 0.5 + 1.0, d))
+                float ink = 0.0;
+                ink = max(ink, outL ? EDGE(e0.x, sameL ? wc : wp) * (sameL ? 0.6 : 1.0) : EDGE(e0.x, ws) * 0.3);
+                ink = max(ink, outR ? EDGE(e1.x, sameR ? wc : wp) * (sameR ? 0.6 : 1.0) : EDGE(e1.x, ws) * 0.3);
+                bool sameLow = face == 2 ? sameD : sameU;   // the front's foot, the top's back
+                ink = max(ink, EDGE(e0.y, sameLow ? wc : wp) * (sameLow ? 0.6 : 1.0));
+                ink = max(ink, EDGE(e1.y, ws) * 0.3);       // the front's head, the top's front: within the books
+                #undef EDGE
+                ink *= smoothstep(1.5, 5.0, min(sz.x / pq.x, sz.y / pq.y));   // (a face too small to carry it)
+                inkOver = vec4(vCol.rgb * vec3(0.1, 0.09, 0.15) + vec3(0.006, 0.004, 0.02), ink * (1.0 - vMat.w));
             }
         }
         if (uWorld > 0.5) {
@@ -526,6 +554,7 @@ R"(            float seam = smoothstep(0.0, 0.04 + px / w, min(pl.x, 1.0 - pl.x)
         vec3 lc = lineC.x >= 0.0 ? lineC : uLineCol * (0.3 + 0.7 * alb);
         c = mix(c, lc, ol * lineK * (uWorld > 0.5 ? 0.6 : 0.85));
     }
+    c = mix(c, inkOver.rgb, inkOver.a);
     if (uBoard < 0.5) c = applyFog(c, vP);
     if (uPremul > 0.5) frag = vec4(c * outA, outA);
     else frag = vec4(c, uStackA);

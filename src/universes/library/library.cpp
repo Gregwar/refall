@@ -514,22 +514,24 @@ TransitionHints LibraryUniverse::hints() const {
 // above), in their piece's full color and a little stockier, closer to a cube, so they fill the cell. All from the
 // cell's seed: a cell keeps its books through falls and clears. along / up / out: its frame (a toppling cell turns it),
 // k its size, fade its dissolve into light (0 none .. 1 gone), covered: a cell above it (its books' tops in its shade,
-// toward the back).
+// toward the back), same: the sides on which it touches its own piece (the shader inks a cell's outline, darker and
+// wider where it meets another piece or the empty well; the seams between its own books faint). Each book carries the
+// sides it has on the cell's outline (1 left, 2 right) and the cell's `same` (x4) in e[1].
 void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade,
-                               uint32_t seed, bool covered) {
+                               uint32_t seed, bool covered, int same) {
     const float sw = k * (1.f + 0.05f * fade);
     const vec3 outD = cross(along, up);
     const float H = 0.468f * sw;          // the cell's half side
     const float D = 0.62f * sw;           // the books' depth
     const vec3 col = pieceColor(type);
-    auto put = [&](const vec3& cc, const vec3& X, const vec3& Y, const vec3& Z, const vec3& cl, int mat, float p0, float sd) {
+    auto put = [&](const vec3& cc, const vec3& X, const vec3& Y, const vec3& Z, const vec3& cl, int mat, float p0, float sd, int edges) {
         Inst in;
         in.c[0] = cc.x; in.c[1] = cc.y; in.c[2] = cc.z; in.c[3] = (float)mat;
         in.x[0] = X.x; in.x[1] = X.y; in.x[2] = X.z; in.x[3] = p0;
         in.y[0] = Y.x; in.y[1] = Y.y; in.y[2] = Y.z; in.y[3] = 0.f;
         in.z[0] = Z.x; in.z[1] = Z.y; in.z[2] = Z.z; in.z[3] = fade;
         in.col[0] = cl.x; in.col[1] = cl.y; in.col[2] = cl.z; in.col[3] = sd;
-        in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = -1.f; in.e[3] = covered ? -20.f : -10.f;
+        in.e[0] = -100.f; in.e[1] = (float)(edges | same << 2); in.e[2] = -1.f; in.e[3] = covered ? -20.f : -10.f;
         out.push_back(in);
     };
     // the books, left to right: two (more often) or three, of a little uneven widths, all of one height and depth (their
@@ -539,17 +541,17 @@ void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, 
     const int n = r.chance(0.6f) ? 2 : 3;
     float w[3], tot = 0.f;
     for (int i = 0; i < n; i++) tot += (w[i] = r.range(0.78f, 1.22f));
-    const float gap = 0.018f * sw;
+    const float gap = 0.01f * sw;
     float x0 = -H;
     for (int i = 0; i < n; i++) {
         const float bw = (2.f * H - gap * (n - 1)) * w[i] / tot;
         const float bh = 2.f * H * 0.88f, bd = D;
         // (the room's spine designs; more of the labels, bands and caps)
         const int style = (int)"0001144423"[r.next() % 10] - '0';
-        const vec3 bc = col * r.range(0.9f, 1.07f);
+        const vec3 bc = col * r.range(0.96f, 1.04f);   // (close shades: the cell reads as one block)
         const float bs = (float)(r.next() % 1000) / 97.f;
         put(c + along * (x0 + bw * 0.5f) + up * (bh * 0.5f - H) - outD * (bd * 0.5f), along * (bw * 0.5f), up * (bh * 0.5f),
-            outD * (bd * 0.5f), bc, M_BOOK, (float)style, bs);
+            outD * (bd * 0.5f), bc, M_BOOK, (float)style, bs, (i == 0 ? 1 : 0) | (i == n - 1 ? 2 : 0));
         x0 += bw + gap;
     }
 }
@@ -559,6 +561,7 @@ uint32_t LibraryUniverse::cellSeed(int x, int y, int type) {
     if (typeGrid_[y][x] != type) {
         // not seen lock (a universe entering mid-game): a seed of its own
         seedGrid_[y][x] = hash32(0xC0FFEEull + (uint64_t)(x * 977 + y * 31) + ((uint64_t)spawnN_ << 20));
+        pieceGrid_[y][x] = 0x80000000u | (uint32_t)type; // (its piece unknown: one with its neighbours of its color)
         typeGrid_[y][x] = (int8_t)type;
     }
     return seedGrid_[y][x];
@@ -703,6 +706,7 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells) {
             if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) {
                 seedGrid_[c.y][c.x] = hash32(((uint64_t)spawnN_ << 3) + (uint64_t)i);
+                pieceGrid_[c.y][c.x] = spawnN_;
                 typeGrid_[c.y][c.x] = (int8_t)c.type;
             }
             i++;
@@ -740,6 +744,7 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (full[y]) continue;
             if (dst != y) {
                 std::memcpy(seedGrid_[dst], seedGrid_[y], sizeof(seedGrid_[y]));
+                std::memcpy(pieceGrid_[dst], pieceGrid_[y], sizeof(pieceGrid_[y]));
                 std::memcpy(typeGrid_[dst], typeGrid_[y], sizeof(typeGrid_[y]));
             }
             dst--;
@@ -784,7 +789,20 @@ void LibraryUniverse::buildBoard(const Game& g) {
             const Cell& c = g.cell(x, y);
             if (c.type < 0) continue;
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
-            pushCell(cells_, c.type, p, X, UP, 1.f, 0.f, cellSeed(x, y, c.type), y > 0 && g.cell(x, y - 1).type >= 0);
+            // (its own piece's cells around it: the outlines run round the pieces)
+            auto pieceAt = [&](int cx, int cy, int t) {
+                cellSeed(cx, cy, t); // (a cell not seen locking gets its ids)
+                return pieceGrid_[cy][cx];
+            };
+            const uint32_t pc = pieceAt(x, y, c.type);
+            auto own = [&](int nx, int ny) {
+                if (nx < 0 || nx >= Game::W || ny < 0 || ny >= Game::H) return false;
+                const int t = g.cell(nx, ny).type;
+                return t >= 0 && pieceAt(nx, ny, t) == pc;
+            };
+            const int same = (own(x - 1, y) ? SAME_L : 0) | (own(x + 1, y) ? SAME_R : 0) | (own(x, y + 1) ? SAME_D : 0) |
+                             (own(x, y - 1) ? SAME_U : 0);
+            pushCell(cells_, c.type, p, X, UP, 1.f, 0.f, cellSeed(x, y, c.type), y > 0 && g.cell(x, y - 1).type >= 0, same);
         }
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
@@ -798,7 +816,9 @@ void LibraryUniverse::buildBoard(const Game& g) {
         };
         for (int i = 0; i < 4; i++)
             pushCell(cells_, p.type, layout::cellPos(cells[i][0] + dx, cells[i][1] + dy), X, UP, 1.f, 0.f,
-                     hash32(((uint64_t)spawnN_ << 3) + (uint64_t)i), inPiece(cells[i][0], cells[i][1] - 1));
+                     hash32(((uint64_t)spawnN_ << 3) + (uint64_t)i), inPiece(cells[i][0], cells[i][1] - 1),
+                     (inPiece(cells[i][0] - 1, cells[i][1]) ? SAME_L : 0) | (inPiece(cells[i][0] + 1, cells[i][1]) ? SAME_R : 0) |
+                         (inPiece(cells[i][0], cells[i][1] + 1) ? SAME_D : 0) | (inPiece(cells[i][0], cells[i][1] - 1) ? SAME_U : 0));
         // the ghost: a fine outline where it lands
         Piece gp = p;
         gp.y = g.ghostY();
@@ -838,10 +858,17 @@ void LibraryUniverse::buildBoard(const Game& g) {
             minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
             miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
         }
+        auto in = [&](int x, int y) {
+            for (auto& c : cells)
+                if (c[0] == x && c[1] == y) return true;
+            return false;
+        };
         for (int i = 0; i < 4; i++) {
             const float ox = cells[i][0] - (minx + maxx) * 0.5f, oy = cells[i][1] - (miny + maxy) * 0.5f;
+            const int x = cells[i][0], y = cells[i][1];
             pushCell(cells_, type, vec3(center.x + ox * sc, center.y - oy * sc, 0.f), X, UP, sc * 0.95f, 0.f,
-                     hash32((spawn << 3) + (uint64_t)i));
+                     hash32((spawn << 3) + (uint64_t)i), in(x, y - 1),
+                     (in(x - 1, y) ? SAME_L : 0) | (in(x + 1, y) ? SAME_R : 0) | (in(x, y + 1) ? SAME_D : 0) | (in(x, y - 1) ? SAME_U : 0));
         }
     };
     if (!g.over()) {

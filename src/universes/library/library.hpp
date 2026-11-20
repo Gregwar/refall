@@ -76,12 +76,15 @@ private:
 
     // ---- The board's cells' seeds (a book's look follows its cell).
     uint32_t seedGrid_[22][10] = {};
+    uint32_t pieceGrid_[22][10] = {};   // the piece each cell came with (its lock's spawn number): the pieces' outlines
     int8_t typeGrid_[22][10];
     uint32_t spawnN_ = 1;
     uint32_t cellSeed(int x, int y, int type);
     // a cell of the board: a bit of a packed shelf, two or three of the room's books standing on their spines (from its seed)
+    // (same: the sides on which it touches a cell of its own piece, SAME_L | SAME_R | SAME_D | SAME_U)
+    enum { SAME_L = 1, SAME_R = 2, SAME_D = 4, SAME_U = 8 };
     void pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade, uint32_t seed,
-                  bool covered = false);
+                  bool covered = false, int same = 0);
 
     // ---- The collection: three big books for every cleared line, placed in the order they came along runs (a shelf,
     // or a row of piles on the floor), never moved again.
