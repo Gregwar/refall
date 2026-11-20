@@ -959,7 +959,7 @@ void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face,
     set2f(progPanda_, "uEars", p.earN, p.earF);
     const float night = 1.f - 0.5f * smoothstepf(0.f, 1.f, over_);
     set3f(progPanda_, "uAmb", sheet_ ? vec3(1.f) : l.amb * night);
-    set3f(progPanda_, "uKey", sheet_ ? vec3(0.f) : l.key * night * (1.f + 0.6f * dropAmt_));
+    set3f(progPanda_, "uKey", sheet_ ? vec3(0.f) : l.key * night * (1.f + 0.25f * dropAmt_));
     set3f(progPanda_, "uRimC", l.rim * night);
     const float kl = std::sqrt(l.keyX * l.keyX + l.keyY * l.keyY) + 1e-4f;
     set2f(progPanda_, "uKeyDir", l.keyX / kl, l.keyY / kl);
@@ -1463,7 +1463,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         set3f(pw, "uSunCol", look.sunCol);
         set4f(pw, "uSun", look.sunX, look.sunY - viewY_ * 0.08f, look.sunR, look.sun);
         set3f(pw, "uBridgeCol", bridge_.color);
-        set1f(pw, "uLamp", look.lamp * (1.f + 0.15f * wp + 0.6f * dropAmt_));
+        set1f(pw, "uLamp", look.lamp * (1.f + 0.15f * wp + 0.2f * dropAmt_));
     };
     // the cub is inside the train (behind its near side) from its door to the terminus
     const bool inside = (train_ == T_WAIT && P_ > XB - 0.35) || train_ == T_RIDE || (train_ == T_TERM && P_ < XA + 0.35);

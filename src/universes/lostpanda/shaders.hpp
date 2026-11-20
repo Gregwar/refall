@@ -2123,11 +2123,16 @@ R"(        bandC = surfaceBand(w, p);
     if (COUNTRY && air) c = grassFront(p, w, c, 1.35);
     if (air) c = rain(p, c, uRain);
     if (CITY && air && w.x < 1251.0) c = bokeh(p, c, uRain * 0.9 + uDrop * 0.3, vec3(1.0, 0.7, 0.4), vec3(0.5, 0.7, 1.0));
-    // the drop: the night warms through: a golden wash over the whole world (its shadows lifted), a strong glow up
-    // from the ground
-    vec3 warm = mix(uSunCol, vec3(1.0, 0.72, 0.42), 0.55);
-    c = mix(c, c * (1.0 + warm * 0.85) + warm * 0.035, uDrop * 0.7);
-    c += warm * uDrop * 0.16 * smoothstep(4.0, -10.0, p.y);
+    // the drop: the scene's hues turn (its brightness kept): the hue wheel rotated in YIQ, the night's violets going
+    // rose and the lamps' ambers gold, a little more saturated
+    {
+        const mat3 toYIQ = mat3(0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312);
+        const mat3 toRGB = mat3(1.0, 1.0, 1.0, 0.956, -0.272, -1.106, 0.621, -0.647, 1.703);
+        vec3 yiq = toYIQ * c;
+        float ang = uDrop * 1.1, cs = cos(ang), sn = sin(ang);
+        yiq.yz = mat2(cs, sn, -sn, cs) * yiq.yz * (1.0 + 0.25 * uDrop);
+        c = max(toRGB * yiq, 0.0);
+    }
     c = mix(c, c * vec3(0.3, 0.32, 0.4), uOver * 0.75);
     c = mix(uBridgeCol, c, uWorldA);
     frag = vec4(max(c, 0.0), 1.0);
@@ -2739,6 +2744,13 @@ void main() {
              * mix(0.93, 1.04, smoothstep(-0.45, 0.45, q.y));
     c = mix(c, t * 0.55, streak * (0.5 + 0.3 * h5) * lod2(aa));
     c = mix(c, mix(t, vec3(1.0), 0.35), pale * 0.45 * lod2(aa));
+    // dark shadows, irregular: blotches where the cane darkened, and a shade creeping in from one side with a ragged
+    // edge (each block its own side and amount)
+    float blot = n1(gx * 0.33 + 3.0, h0 + 9.0) * (0.35 + 0.65 * n1(g.y * 1.7 + h0 * 4.0, h0 + 11.0));   // (along the fibres)
+    c *= 1.0 - 0.5 * smoothstep(0.25, 0.7, blot);
+    float ang0 = h4 * 6.2832;
+    float sideD = dot(q, vec2(cos(ang0), sin(ang0))) + 0.09 * (n1(dot(q, vec2(-sin(ang0), cos(ang0))) * 7.0, h0 + 13.0) - 0.5);
+    c *= 1.0 - (0.25 + 0.25 * h5) * smoothstep(0.12, 0.42, sideD);
     vec2 kp = vec2(fract(h0 * 3.7) - 0.5, fract(h0 * 5.3) - 0.5) * 0.5;
     float knot = exp(-dot((q - kp) / vec2(0.05, 0.09), (q - kp) / vec2(0.05, 0.09))) * step(0.68, fract(h0 * 9.1));
     c = mix(c, t * 0.55, knot * 0.65);
