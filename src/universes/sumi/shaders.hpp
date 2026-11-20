@@ -259,7 +259,9 @@ float brush(float u, float v, float L, float seed, float dry, float taper) {
     return body * mix(1.0, breakup, sat(dry * 1.5)) * dens;
 }
 
-// Rounded box distance, with connected sides pushed outward (no edge there).
+// Rounded box distance, with connected sides pushed outward (no edge there). An inner corner (both sides there
+// connected, the cell across the corner not of the piece: mask 16 up-left, 32 up-right, 64 down-left, 128 down-right)
+// turns round, along its two neighbours' free sides, so the outline runs on unbroken round it.
 float blockSD(vec2 q, int mask, float inset, float r) {
     float L = (mask & 1) != 0 ? 0.9 : 0.5 - inset;
     float R = (mask & 2) != 0 ? 0.9 : 0.5 - inset;
@@ -267,7 +269,15 @@ float blockSD(vec2 q, int mask, float inset, float r) {
     float U = (mask & 8) != 0 ? 0.9 : 0.5 - inset;
     vec2 c = vec2((R - L) * 0.5, (U - D) * 0.5), h = vec2((R + L) * 0.5, (U + D) * 0.5);
     vec2 d = abs(q - c) - (h - r);
-    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
+    float sd = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
+    for (int k = 0; k < 4; k++) {
+        vec2 s = vec2(k == 1 || k == 3 ? 1.0 : -1.0, k < 2 ? 1.0 : -1.0);
+        int sx = s.x > 0.0 ? 2 : 1, sy = s.y > 0.0 ? 8 : 4;
+        if ((mask & sx) == 0 || (mask & sy) == 0 || (mask & (16 << k)) != 0) continue;
+        vec2 e = vec2(r) - (s * q - vec2(0.5 - inset));
+        sd = max(sd, r - (length(max(e, 0.0)) + min(max(e.x, e.y), 0.0)));
+    }
+    return sd;
 }
 
 vec4 inkOut(float dens, vec3 ink) { return vec4(sat(dens) * (1.0 - ink), 1.0); }

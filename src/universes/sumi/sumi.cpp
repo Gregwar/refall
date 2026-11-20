@@ -873,6 +873,10 @@ void SumiUniverse::collectBoard(const Game& g, const MusicState&, std::vector<Sp
             if (joined(x + 1, y)) mask |= 2;
             if (joined(x, y + 1)) mask |= 4; // board y grows downward
             if (joined(x, y - 1)) mask |= 8;
+            if (joined(x - 1, y - 1)) mask |= 16; // (the cells across its corners)
+            if (joined(x + 1, y - 1)) mask |= 32;
+            if (joined(x - 1, y + 1)) mask |= 64;
+            if (joined(x + 1, y + 1)) mask |= 128;
             vec3 p = cellPos((float)x, y - g.rowOffset(y));
             vec2 nc = known ? ic.nc : v2(x + 13.7f, -(float)y + 5.1f);
             float seed = known ? (float)(ic.id % 97) : 3.f;
@@ -895,6 +899,10 @@ void SumiUniverse::collectBoard(const Game& g, const MusicState&, std::vector<Sp
             if (dx == 1 && dy == 0) m |= 2;
             if (dx == 0 && dy == 1) m |= 4;
             if (dx == 0 && dy == -1) m |= 8;
+            if (dx == -1 && dy == -1) m |= 16;
+            if (dx == 1 && dy == -1) m |= 32;
+            if (dx == -1 && dy == 1) m |= 64;
+            if (dx == 1 && dy == 1) m |= 128;
         }
         return m;
     };
