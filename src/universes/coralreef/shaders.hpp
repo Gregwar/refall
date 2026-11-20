@@ -920,15 +920,15 @@ vec4 staghorn(vec2 q, float d) {
     for (int k = 0; k < 2; k++) {
         vec2 cc = gCol - vec2(0.0, float(k));
         vec2 o = vec2(0.0, -float(k));
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 3; i++) {
             float fi = float(i);
             vec2 sd = gColOff + cc * 7.13 + fi * 3.71;
             vec2 r = hash2(sd), r2 = hash2(sd.yx + 1.9), r3 = hash2(sd * 1.3 + 4.2);
             // in front: antlers rising, leaning apart
-            vec2 a = o + vec2(-0.22 + 0.44 * fi + (r.x - 0.5) * 0.2, -0.62 + r.y * 0.6);
-            front = max(front, antler(q, a, 1.571 + (r2.x - 0.5) * 1.0 - (fi - 0.5) * 0.9, 0.36 + 0.12 * r2.y, 0.138, fi > 0.5 ? 1.0 : -1.0));
+            vec2 a = o + vec2(-0.3 + 0.3 * fi + (r.x - 0.5) * 0.2, -0.62 + r.y * 0.6);
+            if (i < 2 || k == 0) front = max(front, antler(q, a, 1.571 + (r2.x - 0.5) * 1.0 - (fi - 1.0) * 0.6, 0.36 + 0.12 * r2.y, 0.13, r3.y > 0.5 ? 1.0 : -1.0));
             // behind them, in their shade: more, any way
-            if (k == 0) {
+            if (k == 0 && i < 2) {
                 float ang = r3.x * 6.283;
                 vec2 b = vec2(r3.y - 0.5, r.x - 0.5) * 0.4 - vec2(cos(ang), sin(ang)) * 0.24;
                 back = max(back, antler(q, b, ang, 0.46, 0.12, r2.y > 0.5 ? 1.0 : -1.0));
@@ -966,7 +966,7 @@ vec4 star(vec2 q) {
     float fade = smoothstep(2.0, 4.0, r * 6.283 / n / gAA) * gLod;
     float pit = smoothstep(0.08, 0.015, r);
     float fuzz = vnoise(q * 34.0 + gOff) - 0.5;
-    float sp = smoothstep(-0.6, 0.9, sept + fuzz * 0.8) * fade;
+    float sp = smoothstep(-0.7, 0.9, sept + fuzz * 1.3) * fade;
     float h = (0.022 * sp + 0.06 * smoothstep(R, 0.05, r)) * mix(0.5, 1.0, valley) - 0.04 * pit;
     // (bright toward its heart, its outer septa deeper in tone)
     float light = mix(0.45, 1.0, sp) * mix(0.55, 1.08, smoothstep(R * 0.8, R * 0.13, r)) * mix(0.6, 1.0, valley);
@@ -975,7 +975,7 @@ vec4 star(vec2 q) {
 vec4 porous(vec2 q) {
     vec2 id, id2;
     vec4 v = voro(q * 5.6 + gOff, 0.85, id);
-    float rad = 0.3 + 0.12 * hash(id + 3.1);
+    float rad = 0.34 + 0.12 * hash(id + 3.1);
     float pit = smoothstep(rad, rad * 0.55, v.x);
     float lip = smoothstep(rad * 1.6, rad * 1.02, v.x) * (1.0 - pit);
     // and small pits between
@@ -1004,7 +1004,7 @@ vec4 knobs(vec2 q) {
     float r = 0.4 + 0.12 * hash(id + 1.1);
     float k = sqrt(max(1.0 - sq(v.x / r), 0.0));
     float lumps = vnoise(q * 14.0 + gOff) - 0.5;
-    return vec4(0.04 * k + 0.008 * lumps * gLod, mix(0.25, 1.0, k), mix(0.2, 1.0, smoothstep(0.0, 0.45, k)), 1.0);
+    return vec4(0.065 * k + 0.008 * lumps * gLod, mix(0.3, 1.0, k * k), mix(0.15, 1.0, smoothstep(0.0, 0.6, k)), 1.0);
 }
 vec4 plate(vec2 q, float d) {
     // one plate over the whole colony: its swell, its cups, in the colony's own coordinates
@@ -1029,9 +1029,9 @@ vec4 plate(vec2 q, float d) {
 }
 vec4 tubes(vec2 q) {
     vec2 id;
-    vec4 v = voro(q * 3.1 + gOff, 0.35, id);
+    vec4 v = voro(q * 3.5 + gOff, 0.6, id);
     // each tube: a wall from its hole out to its rim, rounded on top, the dark gaps between the tubes
-    float ro = 0.45 + 0.05 * hash(id + 2.3), ri = ro * (0.3 + 0.12 * hash(id + 5.1));
+    float ro = 0.38 + 0.12 * hash(id + 2.3), ri = ro * (0.16 + 0.14 * hash(id + 5.1));
     float wall = smoothstep(ro + 0.03, ro - 0.05, v.x) * smoothstep(ri - 0.03, ri + 0.05, v.x);
     float x = clamp((v.x - ri) / (ro - ri), 0.0, 1.0);
     float top = sqrt(max(1.0 - sq(2.0 * x - 1.0), 0.0));
@@ -1070,6 +1070,8 @@ vec4 brain(vec2 q) {
             wsum += w * w;
         }
     g /= sqrt(wsum) + 1e-4;
+    // (sharpened: where two kernels interfere the grooves close into a labyrinth rather than blur)
+    g = g / (abs(g) + 0.4) * 1.4;
     float fade = gLod;
     // rounded ridges, narrow grooves
     float ridge = mix(0.7, sqrt(clamp((g + 0.75) / 1.6, 0.0, 1.0)), fade);
