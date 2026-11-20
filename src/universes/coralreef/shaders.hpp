@@ -1024,7 +1024,7 @@ vec4 plate(vec2 q, float d) {
     float lip = smoothstep(0.0, -0.025, d) * smoothstep(-0.15, -0.05, d);
     vec4 v = voro(c * 2.6, 0.8, id);
     float has = step(hash(id + 7.7), 0.4);
-    float rad = 0.1 + 0.14 * hash(id + 1.3);
+    float rad = 0.14 + 0.18 * hash(id + 1.3);
     float cup = smoothstep(rad, rad * 0.5, v.x) * has;
     float rim = smoothstep(rad * 1.8, rad, v.x) * (1.0 - cup) * has;
     // a spongy crust: fine pores, grains
@@ -1033,7 +1033,7 @@ vec4 plate(vec2 q, float d) {
     float pore = smoothstep(0.24, 0.08, w.x) * step(0.45, hash(id2)) * gLod;
     float grain = vnoise(c * 24.0) - 0.5;
     float h = 0.022 * sw + 0.06 * lip + 0.012 * rim - 0.05 * cup - 0.012 * pore + 0.014 * grain * gLod;
-    return vec4(h, 0.32 + 1.0 * lip + 0.3 * rim - 0.3 * cup + 0.5 * (sw - 0.5) - 0.3 * pore + 0.4 * grain * gLod,
+    return vec4(h, 0.42 + 0.9 * lip + 0.3 * rim - 0.3 * cup + 0.5 * (sw - 0.5) - 0.3 * pore + 0.4 * grain * gLod,
                 mix(1.0, 0.12, cup) * mix(0.75, 1.0, lip) * (1.0 - 0.6 * pore), 1.0);
 }
 vec4 tubes(vec2 q) {
@@ -1085,7 +1085,7 @@ vec4 brain(vec2 q) {
     // rounded ridges, narrow grooves
     float ridge = mix(0.75, sqrt(clamp((g + 0.95) / 1.5, 0.0, 1.0)), fade);
     float h = 0.03 * ridge;
-    return vec4(h, 0.3 + 0.7 * ridge, mix(0.15, 1.0, ridge), 1.0);
+    return vec4(h, 0.45 + 0.6 * ridge, mix(0.35, 1.0, ridge), 1.0);
 }
 
 // the block's whole surface: its species' relief over the chunk's rounded swell
