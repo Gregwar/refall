@@ -31,8 +31,10 @@
 // Around a song: the setup powers the station up from the core outward as the camera eases in; the teardown powers it
 // down from the rim inward as the camera draws back.
 //
-// The pieces are panels of colored light: satin color, a line of light just inside their edge like an edge-lit
-// pane, a glow at the heart. Cleared rows flare and shrink into their light, which flies out to the module's seat.
+// The pieces are the station's modules: gunmetal frames round each piece's outline, dark insets, and one circuit of
+// cyan light per piece running through its cells (its style by the piece's type, its frame and glow slightly
+// tinted; a piece keeps its id through falls and clears, see syncIds). Cleared rows flare and shrink into their
+// light, which flies out to the module's seat.
 //
 // Layout contract: the board is drawn flat (orthographic at the reference camera's scale); only the world behind it
 // has its own 3D camera.
@@ -232,7 +234,7 @@ bool OrbitalUniverse::init(int width, int height) {
     };
     instanced(glowVao_, glowVbo_, 3, sizeof(Glow));
     instanced(spriteVao_, spriteVbo_, 3, sizeof(SpriteInst));
-    instanced(cellVao_, cellVbo_, 3, sizeof(CellInst));
+    instanced(cellVao_, cellVbo_, 4, sizeof(CellInst));
 
     // ---- the solids: a cube, two parametric grids (fine and coarse), each with its instance buffer
     auto partInstances = [&](GLuint& inst) {
@@ -555,7 +557,7 @@ void OrbitalUniverse::onEvent(const GameEvent& ev, const Game& game) {
                     if (ids_[ny][nx] == id) msk |= 1 << i;
                 }
             }
-            fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), msk, 0.f});
+            fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), msk, 0.f, seedOf(id)});
             if ((int)motes_.size() < MAX_MOTES) {
                 Mote mt;
                 mt.kind = 1;
@@ -601,7 +603,7 @@ void OrbitalUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 if (id && ids_[ny][nx] == id) msk |= 1 << i;
             }
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
-            overCells_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), msk, (float)c.y});
+            overCells_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), msk, (float)c.y, seedOf(id)});
         }
         break;
     }
@@ -613,13 +615,14 @@ void OrbitalUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // Pieces
 // =====================================================================================================
 
-void OrbitalUniverse::cell(float x, float y, float half, int mask, const vec3& tint, float alpha, int mode, float erase, float glow) {
+void OrbitalUniverse::cell(float x, float y, float half, int mask, int type, float seed, float alpha, int mode, float erase, float glow) {
     if (alpha <= 0.003f) return;
-    cells_.push_back({{x, y, half, (float)mask}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, glow, 0.f}});
+    const vec3 tint = pal_.piece[std::clamp(type, 0, 6)];
+    cells_.push_back({{x, y, half, (float)mask}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, glow, 0.f},
+                      {seed, (float)std::clamp(type, 0, 6), 0.f, 0.f}});
 }
 
 void OrbitalUniverse::buildBoard(const Game& g) {
-    auto tintOf = [&](int t) { return pal_.piece[std::clamp(t, 0, 6)]; };
     auto maskOf = [&](int x, int y, auto same) {
         const int dx[8] = {-1, 1, 0, 0, -1, 1, -1, 1}, dy[8] = {0, 0, 1, -1, 1, 1, -1, -1};
         int m = 0;
@@ -640,17 +643,17 @@ void OrbitalUniverse::buildBoard(const Game& g) {
                 return g.cell(nx, ny).type == c.type;
             };
             const vec3 p = layout::cellPos((float)x, y - off);
-            cell(p.x, p.y, 0.5f, maskOf(x, y, same), tintOf(c.type), 1.f, 0, 0.f, glow);
+            cell(p.x, p.y, 0.5f, maskOf(x, y, same), c.type, seedOf(ids_[y][x]), 1.f, 0, 0.f, glow);
         }
     // game over: the stack's light drains from the top down
     if (overT_ >= 0.f)
         for (const Fading& o : overCells_) {
             const float rowFrac = (o.t - Game::HIDDEN) / (float)(Game::H - Game::HIDDEN);
             const float k = smoothstepf(rowFrac * 0.6f, rowFrac * 0.6f + 0.3f, over_);
-            cell(o.x, o.y, 0.5f, o.mask, tintOf(o.type), 1.f - 0.5f * smoothstepf(0.7f, 1.f, over_), 0, 0.f, 0.f);
+            cell(o.x, o.y, 0.5f, o.mask, o.type, o.seed, 1.f - 0.5f * smoothstepf(0.7f, 1.f, over_), 0, 0.f, 0.f);
             cells_.back().c[3] = k;
         }
-    for (const Fading& fd : fading_) cell(fd.x, fd.y, 0.5f, fd.mask, tintOf(fd.type), 1.f, 0, saturate(fd.t / CLEAR_T), 1.f);
+    for (const Fading& fd : fading_) cell(fd.x, fd.y, 0.5f, fd.mask, fd.type, fd.seed, 1.f, 0, saturate(fd.t / CLEAR_T), 1.f);
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -673,17 +676,17 @@ void OrbitalUniverse::buildBoard(const Game& g) {
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                cell(w.x, w.y, 0.5f, maskOf(c[0], c[1], inGhost), tintOf(p.type), 0.6f, 1, 0.f, 0.f);
+                cell(w.x, w.y, 0.5f, maskOf(c[0], c[1], inGhost), p.type, seedOf(nextId_), 0.6f, 1, 0.f, 0.f);
             }
         }
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         for (auto& c : cells) {
             if (c[1] < 0) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            cell(w.x, w.y, 0.5f, maskOf(c[0], c[1], inPiece), tintOf(p.type), 1.f, 0, 0.f, glow + 0.15f);
+            cell(w.x, w.y, 0.5f, maskOf(c[0], c[1], inPiece), p.type, seedOf(nextId_), 1.f, 0, 0.f, glow + 0.15f);
         }
     }
-    auto preview = [&](int type, vec2 center, float sc, float alpha) {
+    auto preview = [&](int type, vec2 center, float sc, float alpha, float seed) {
         if (type < 0) return;
         Piece p{type, 0, 0, 0};
         int cells[4][2];
@@ -700,13 +703,14 @@ void OrbitalUniverse::buildBoard(const Game& g) {
         };
         for (auto& c : cells) {
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            cell(px, py, 0.5f * sc, maskOf(c[0], c[1], inPiece), tintOf(type), alpha, 0, 0.f, 0.f);
+            cell(px, py, 0.5f * sc, maskOf(c[0], c[1], inPiece), type, seed, alpha, 0, 0.f, 0.f);
         }
     };
-    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
+    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f,
+            seedOf(1000 + g.holdType()));
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, seedOf(nextId_ + 1 + i));
     }
 }
 
