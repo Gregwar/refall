@@ -123,36 +123,86 @@ def _draw(N, word, outline, icon=False, t=0.0, ss=SS):
         col = col + (_c(0x8cc4ff) - col) * (rim * (0.25 + 0.6 * lam))[..., None]
         cv.over(col, edge)
 
-    def piece(cells, colour, th, rot, hidden=None):
-        """`hidden`: where the planet covers it (a piece behind the planet, drawn as contours)."""
+    def piece(cells, colour, th, rot, hidden=None, tumble=(0.6, 0.9)):
+        """A piece of cubes, as the menu draws it (Menu::drawOrbitLogo): turned in 3D (`tumble`: its turns about x and y,
+        `rot` about the view), seen straight on, its faces drawn far to near, each lit from the top left and the front
+        with a sheen, a lighter rim and a thin dark edge; the faces between two of its cells left out. `hidden`: where
+        the planet covers it (a piece behind the planet, drawn as contours)."""
         ex, ey = ra * 0.93 * math.cos(th), rb * 0.93 * math.sin(th)
         px0, py0 = cx + ex * ct - ey * st, cy + ex * st + ey * ct
         depth = math.sin(th)
-        cs = cs0 * (1 + 0.25 * depth)
-        c = _c(colour) * (0.7 + 0.15 * (depth + 1))
-        cr, sr = math.cos(rot), math.sin(rot)
-        for a, b in cells:
-            qx = px0 + (a * cr - b * sr) * cs * 1.1
-            qy = py0 - 0.25 * cs + (a * sr + b * cr) * cs * 1.1
-            lx, ly = (x - qx) * cr + (y - qy) * sr, -(x - qx) * sr + (y - qy) * cr
-            inner = np.minimum(cs / 2 - np.abs(lx), cs / 2 - np.abs(ly))
-            if outline:
-                m = np.clip(1 - np.abs(inner) / (line * 0.8), 0, 1)
-                cv.over(white, m if hidden is None else m * (1 - hidden))
-            else:
-                shade = np.clip(0.5 - (lx * 0.6 + ly * 0.8) / cs, 0, 1)[..., None]
-                cv.over(np.clip(c * (0.75 + 0.45 * shade), 0, 255), np.clip(inner / 1.2, 0, 1))
+        cs = cs0 * 1.05 * (1 + 0.25 * depth)
+        c = _c(colour) * (0.78 + 0.11 * (depth + 1))
+        ax, ay, az = tumble[0], tumble[1], rot
+        cxr, sxr, cyr, syr, czr, szr = math.cos(ax), math.sin(ax), math.cos(ay), math.sin(ay), math.cos(az), math.sin(az)
 
-    pieces = [(cells, col, (th + 0.12 * t) % (2 * math.pi), rot + 0.4 * t * (1 if k % 2 else -1)) for k, (cells, col, th, rot) in enumerate(pieces)]
+        def R(v):  # Rz * Ry * Rx
+            vx, vy, vz = v
+            y1, z1 = vy * cxr - vz * sxr, vy * sxr + vz * cxr
+            x2, z2 = vx * cyr + z1 * syr, -vx * syr + z1 * cyr
+            return (x2 * czr - y1 * szr, x2 * szr + y1 * czr, z2)
+
+        mx = sum(a for a, _ in cells) / len(cells)
+        my = sum(b for _, b in cells) / len(cells)
+        L = (-0.45, -0.6, 0.66)
+        hl = math.sqrt(L[0] ** 2 + L[1] ** 2 + (L[2] + 1) ** 2)
+        faces = []
+        for a, b in cells:
+            for n0 in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
+                if n0[2] == 0 and any(abs(a2 - (a + n0[0])) < 0.01 and abs(b2 - (b + n0[1])) < 0.01 for a2, b2 in cells):
+                    continue
+                n = R(n0)
+                if n[2] <= 0:
+                    continue
+                u = (0, 1, 0) if n0[0] else (1, 0, 0)
+                v = (0, 0, 1) if not n0[2] else (0, 1, 0)
+                pts, zc = [], 0.0
+                for e0, e1 in ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)):
+                    lp = (a - mx + n0[0] * 0.5 + u[0] * e0 + v[0] * e1, b - my + n0[1] * 0.5 + u[1] * e0 + v[1] * e1,
+                          n0[2] * 0.5 + u[2] * e0 + v[2] * e1)
+                    o = R(lp)
+                    pts.append((px0 + o[0] * cs, py0 - 0.25 * cs + o[1] * cs))
+                    zc += o[2] / 4
+                lam = max(0.0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2])
+                spec = max(0.0, (n[0] * L[0] + n[1] * L[1] + n[2] * (L[2] + 1)) / hl) ** 24
+                col = np.clip(c * (0.28 + 0.85 * lam) + 150 * spec, 0, 255)
+                faces.append((zc, pts, col))
+        faces.sort(key=lambda f: f[0])
+        for _, pts, col in faces:
+            # the signed distances to its four edges (> 0 inside), whichever way round its corners turn
+            area = sum(pts[i][0] * pts[(i + 1) % 4][1] - pts[(i + 1) % 4][0] * pts[i][1] for i in range(4))
+            sgn = 1.0 if area > 0 else -1.0
+            dmin = None
+            for i in range(4):
+                (x0, y0), (x1, y1) = pts[i], pts[(i + 1) % 4]
+                ln = math.hypot(x1 - x0, y1 - y0) or 1.0
+                dd = sgn * ((x1 - x0) * (y - y0) - (y1 - y0) * (x - x0)) / ln
+                dmin = dd if dmin is None else np.minimum(dmin, dd)
+            if outline:
+                m = np.clip(1 - np.abs(dmin) / (line * 0.8), 0, 1)
+                cv.over(white, m if hidden is None else m * (1 - hidden))
+                continue
+            cover = np.clip(dmin / 1.2 + 0.5, 0, 1)
+            size = math.sqrt(abs(area) / 2) or 1.0
+            edgeband = np.clip((dmin - 0.06 * size) / 1.2 + 0.5, 0, 1)  # inside its thin dark edge
+            rim = np.clip(1 - dmin / (0.35 * size), 0, 1) * edgeband  # lighter toward its border
+            fc = col[None, None, :] * (0.55 + 0.45 * edgeband[..., None])
+            fc = fc + (255 - fc) * (0.18 * rim)[..., None]
+            cv.over(np.clip(fc, 0, 255), cover)
+
+    # (each its own turn in 3D, tumbling slowly with `t`)
+    pieces = [(cells, col, (th + 0.12 * t) % (2 * math.pi), rot + 0.4 * t * (1 if k % 2 else -1),
+               ((0.45 + 0.08 * k) * (1 if k % 2 else -1) + 0.3 * t, (0.6 + 0.07 * k) * (-1 if k % 3 else 1) + 0.2 * t))
+              for k, (cells, col, th, rot) in enumerate(pieces)]  # (a front and a side of each in view)
     behind = [p for p in pieces if math.sin(p[2]) < 0]
     front = [p for p in pieces if math.sin(p[2]) >= 0]
     ring(False)
     for p in behind:  # (as contours: only where the planet doesn't cover them)
-        piece(*p, hidden=np.clip((1 - d) * R / 1.2, 0, 1) if outline else None)
+        piece(*p[:4], hidden=np.clip((1 - d) * R / 1.2, 0, 1) if outline else None, tumble=p[4])
     planet()
     ring(True)
     for p in front:
-        piece(*p)
+        piece(*p[:4], tumble=p[4])
     im = cv.image(N)
     if word:
         _word(im, N, word, ss=ss)
