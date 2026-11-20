@@ -8,7 +8,8 @@
 // every solid of the station (instanced boxes and parametric cylinders, spheres, tori and bands: white hull panels,
 // gold foil, solar cells, radiators, lattice trusses, the forest ring's land), with the sun's shadow map, the
 // planet's light from below and its reflection. GLOW_FS draws the lights (lamps, thrusters, sparks); then the bloom,
-// the veil behind the well, the pieces (panels of colored light), the lettering.
+// the veil behind the well, the pieces (the station's modules,
+// gunmetal and circuits of light), the lettering.
 // World positions are meters in the station's frame (y away from the planet), drawn relative to the eye.
 
 namespace orbital_shaders {
@@ -1153,8 +1154,9 @@ float boxSdf(vec2 p, vec2 b, float r) {
     vec2 k = abs(p) - b + r;
     return length(max(k, 0.0)) + min(max(k.x, k.y), 0.0) - r;
 }
-// The circuit: x the distance to the nearest trace, y to the nearest dot's disc, z the hub's pad (its disc: < 0
-// inside), w the hub's kind (0 none, 1 a glowing pad, 2 a chip's outline of light, 3 a dark chip, 4 the core).
+// A cell's part of the circuit: the distance to the nearest trace, to the nearest dot's disc, to the hub (< 0
+// inside), the hub's kind (0 none, 1 a glowing pad, 2 a chip of light, 3 a dark metal chip, 4 the O's core) and the
+// traces' half width.
 struct Circuit { float line, dot, pad; int hub; float width; };
 Circuit circuit(vec2 p, int mk, int type, float seed) {
     Circuit C;
@@ -1166,7 +1168,7 @@ Circuit circuit(vec2 p, int mk, int type, float seed) {
     bool every = false; // a hub in every cell
     float hubR = 0.14;
     if (type == 0) { n = 2.0; s = 0.1; every = true; C.width = 0.03; C.hub = 3; hubR = 0.15; }
-    else if (type == 2) { n = seed < 0.5 ? 4.0 : 5.0; s = 0.05; C.hub = 2; C.width = 0.016; }
+    else if (type == 2) { n = seed < 0.5 ? 4.0 : 5.0; s = 0.058; C.hub = 2; C.width = 0.013; }
     else if (type == 3 || type == 4) { n = 3.0; s = seed < 0.5 ? 0.07 : 0.08; C.hub = 1; }
     else if (type == 5) { n = 2.0; s = seed < 0.5 ? 0.06 : 0.07; every = true; C.hub = 1; hubR = 0.17; }
     else if (type == 6) { n = seed < 0.5 ? 3.0 : 4.0; s = 0.07; C.hub = 1; }
@@ -1218,30 +1220,8 @@ Circuit circuit(vec2 p, int mk, int type, float seed) {
             if (float(k) >= n) break;
             float o = lanes[k];
             float xe = C.hub == 1 ? sqrt(max(hubR * hubR - o * o, 0.0)) + 0.04 : (C.hub == 3 ? hubR : 0.17) + 0.035;
-            // T's traces fan in: the outer ones step in toward the chip (a 45-degree jog)
-            if (C.hub == 2 && abs(o) > 0.06) {
-                float oi = o * 0.55;
-                float xj = 0.3;
-                C.line = min(C.line, min(segD(q, vec2(0.6, o), vec2(xj, o)), min(segD(q, vec2(xj, o), vec2(xj - abs(o - oi), oi)),
-                                                                                segD(q, vec2(xj - abs(o - oi), oi), vec2(xe, oi)))));
-                C.dot = min(C.dot, length(q - vec2(xe, oi)) - 0.022);
-                continue;
-            }
             C.line = min(C.line, segD(q, vec2(0.6, o), vec2(xe, o)));
             C.dot = min(C.dot, length(q - vec2(xe, o)) - 0.024);
-        }
-    }
-    // an end cell's free traces: stubs off the pad, staggered (the bus's far side)
-    if (deg == 1 && !every) {
-        int sd = cs[0] ? 0 : cs[1] ? 1 : cs[2] ? 2 : 3;
-        vec2 q = toSide(p, sd);
-        for (int k = 0; k < 5; k++) {
-            if (float(k) >= n) break;
-            float o = lanes[k];
-            if (abs(o) < hubR * 0.6) continue;
-            float xe = -0.17 - 0.06 * fract(seed * 3.7 + float(k) * 0.41);
-            C.line = min(C.line, segD(q, vec2(-sqrt(max(hubR * hubR - o * o, 0.0)) - 0.03, o), vec2(xe, o)));
-            C.dot = min(C.dot, length(q - vec2(xe, o)) - 0.02);
         }
     }
     return C;
@@ -1273,7 +1253,7 @@ void main() {
     float inset = smoothstep(FRAME - aa, FRAME + aa, e);
     C.width = max(C.width, aa * 1.1); // (the previews, small: a trace a pixel wide at least)
     float line = 1.0 - smoothstep(C.width - aa, C.width + aa, C.line);
-    float lineGlow = exp(-max(C.line - C.width, 0.0) / 0.03);
+    float lineGlow = exp(-max(C.line - C.width, 0.0) / 0.06);
     float lineCore = 1.0 - smoothstep(0.0, C.width * 0.6 + aa * 0.5, C.line);
     float dotM = 1.0 - smoothstep(-aa, aa, C.dot);
     float dotGlow = exp(-max(C.dot, 0.0) / 0.02);
@@ -1306,11 +1286,23 @@ void main() {
     float outerB = 1.0 - smoothstep(0.01, 0.06, e);
     float innerB = smoothstep(FRAME - 0.04, FRAME - 0.006, e) * (1.0 - inset);
     vec3 col = metal;
-    col *= 1.0 + outerB * facing * 2.2;
+    col *= 1.0 + outerB * facing * 2.6;
     col *= 1.0 - innerB * facing * 1.2;
     col += vec3(0.45, 0.5, 0.55) * pow(max(1.0 - abs(e - 0.062) / 0.01, 0.0), 4.0) * (0.25 + 0.75 * max(facing, 0.0)) * 0.4;
     col *= 1.0 - 0.45 * pow(max(1.0 - abs(e - (FRAME - 0.045)) / 0.008, 0.0), 2.0);
     col *= mix(0.35, 1.0, smoothstep(0.0, 0.012, e)); // the dark seam at the very edge
+    // a rivet in the frame at each outer corner
+    {
+        vec2 q = abs(p);
+        bool corner = (p.x < 0.0 ? !has(mk, 0) : !has(mk, 1)) && (p.y < 0.0 ? !has(mk, 2) : !has(mk, 3));
+        float rd = length(q - vec2(0.355)) - 0.02;
+        if (corner && type != 1) {
+            float rv = 1.0 - smoothstep(-aa, aa, rd);
+            vec2 rn = (q - vec2(0.355)) * sign(p) / 0.02;
+            col = mix(col, metal * (0.7 + 1.6 * max(dot(rn, L), 0.0)), rv);
+            col *= 1.0 - 0.5 * (1.0 - smoothstep(0.0, 0.012, abs(rd - 0.006))) * (1.0 - rv);
+        }
+    }
     // the O's lit corners, small cyan plates in the frame where the outline turns
     if (type == 1) {
         vec2 q = abs(p);
@@ -1342,7 +1334,7 @@ void main() {
         float edge = 1.0 - smoothstep(0.012 - aa, 0.012 + aa, abs(C.pad));
         float in2 = 1.0 - smoothstep(-aa, aa, C.pad);
         deep = mix(deep, vec3(0.02, 0.025, 0.035), in2);
-        light += glowC * edge + glowC * exp(-abs(C.pad) / 0.02) * 0.2 + glowC * in2 * 0.06;
+        light += hotC * edge * 1.5 + glowC * exp(-abs(C.pad) / 0.025) * 0.3 + glowC * in2 * (0.3 + 0.1 * sin(uTime * 2.0 + seed * 9.0));
     } else if (C.hub == 3) {
         // a chip: a dark metal plate sunk in the inset, its upper left lip in shade, its lower right one lit
         float in2 = 1.0 - smoothstep(-aa, aa, C.pad);
@@ -1368,7 +1360,17 @@ void main() {
         light += mix(glowC * 1.2, hotC * 1.3, smoothstep(-0.07, -0.25, C.pad)) * disc * (0.9 + grid) + hotC * ring
                + glowC * exp(-abs(C.pad + 0.07) / 0.03) * 0.3 * well;
     }
-    light += glowC * line * 1.3 + hotC * lineCore * 0.5 + glowC * lineGlow * 0.25;
+    // the board's fine print: dim short traces and pads on a grid of quarter cells, off the circuit
+    {
+        vec2 sg = (p + 0.5) * 4.0, si = floor(sg), sf = fract(sg) - 0.5;
+        float h = hash(si + seed * 37.0 + float(mk & 15) * 3.1);
+        float fine = 9.0;
+        if (h > 0.55) fine = h > 0.8 ? abs(sf.y + (h - 0.9) * 2.0) + max(abs(sf.x) - 0.5, 0.0) : abs(sf.x) + max(abs(sf.y) - 0.42, 0.0);
+        if (h > 0.55 && h < 0.62) fine = length(sf) - 0.1;
+        float fl = (1.0 - smoothstep(0.035, 0.035 + aa * 4.0, fine)) * smoothstep(0.05, 0.09, C.line) * smoothstep(0.05, 0.08, C.pad);
+        light += glowC * fl * 0.3;
+    }
+    light += glowC * line * 1.05 + hotC * lineCore * 0.3 + glowC * lineGlow * 0.26;
     light += mix(glowC, hotC, 0.6) * dotM + glowC * dotGlow * 0.18;
     col = mix(col, deep, inset);
     col += light * inset * lift;
