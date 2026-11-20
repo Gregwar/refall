@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "layout.hpp"
@@ -173,6 +174,7 @@ void DocksUniverse::setupBoxVao(GLuint& vao, GLuint& vbo) {
 
 bool DocksUniverse::init(int width, int height) {
     using shaders::withCommon;
+    if (const char* b = std::getenv("REFALL_DOCKS_BLOCK")) blockStyle_ = std::clamp(std::atoi(b), 0, 5);
     progSky_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::SKY_FS).c_str(), "docks sky");
     progWater_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::WATER_FS).c_str(), "docks water");
     progBox_ = ugl::program(shaders::BOX_VS, withCommon(shaders::BOX_FS, true).c_str(), "docks solids");
@@ -351,6 +353,79 @@ DocksUniverse::~DocksUniverse() {
 
 vec3 DocksUniverse::pieceColor(int type) const { return pal_.piece[std::clamp(type, 0, 6)]; }
 
+// The alternative looks' paint: each look its own colors (the piece's hue kept), a piece a little different from the
+// next by its seed (weathered paint).
+float DocksUniverse::pieceSeed(int serial) const { return hashf((uint64_t)serial * 0x9E3779B97F4A7C15ull + seed_); }
+
+float DocksUniverse::cellSeed(int serial, int rx, int ry) const {
+    return hashf((uint64_t)serial * 0x9E3779B97F4A7C15ull + (uint64_t)(rx * 7 + ry * 131 + 1) * 0xBF58476D1CE4E5B9ull + seed_);
+}
+
+vec3 DocksUniverse::blockColor(int type, float ps) const {
+    type = std::clamp(type, 0, 6);
+    // per look: I O T S Z J L
+    static const unsigned REAL[7] = {0x3d8fb4, 0xd2a12e, 0x80508e, 0x4e8a4c, 0xae3a2e, 0x34508e, 0xcc6a2a};
+    static const unsigned BOLD[7] = {0x2aa8de, 0xffc61e, 0xeeeeea, 0x20a048, 0xd2301c, 0x1c48a8, 0xff7400};
+    static const unsigned FADED[7] = {0x6aa0b4, 0xd2b060, 0x9a7a9e, 0x7a9a6a, 0xb0604c, 0x5a6a94, 0xcc8a52};
+    static const unsigned NIGHT[7] = {0x70b8d8, 0xeccb6e, 0xae8cc8, 0x7cbf88, 0xe08478, 0x7f90d6, 0xeea070};
+    const unsigned* t = blockStyle_ == 3 ? BOLD : blockStyle_ == 4 ? FADED : blockStyle_ == 5 ? NIGHT : REAL;
+    vec3 c = lin(t[type]);
+    if (blockStyle_ == 3) return c;
+    // the weathered paint: a little lighter or darker, a little warmer or cooler
+    const float v = 0.86f + 0.24f * ps, w = (hashf((uint64_t)(ps * 1e6f) + 7) - 0.5f) * 0.12f;
+    return vec3(c.x * (1.f + w), c.y, c.z * (1.f - w)) * v;
+}
+
+// The pieces of the stack, when the board was set without a lock (a test fill, a restart): cells of a type grouped by
+// four, linked to each other.
+void DocksUniverse::syncIds(const Game& g) {
+    int wrong = 0;
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++)
+            if ((g.cell(x, y).type >= 0) != (ids_[y][x] != 0)) wrong++;
+    if (!wrong) return;
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++)
+            if (g.cell(x, y).type < 0) { ids_[y][x] = 0; links_[y][x] = 0; }
+    const int dx[8] = {-1, 1, 0, 0, -1, 1, -1, 1}, dy[8] = {0, 0, -1, 1, -1, -1, 1, 1};
+    for (int y = Game::H - 1; y >= 0; y--)
+        for (int x = 0; x < Game::W; x++) {
+            if (g.cell(x, y).type < 0 || ids_[y][x]) continue;
+            const int id = nextId_++, type = g.cell(x, y).type;
+            int group[4][2], n = 0;
+            group[n][0] = x; group[n][1] = y; n++;
+            ids_[y][x] = id;
+            // from the bottom up, a square of four on a pair of columns first (the test fill's blobs), else the first
+            // four reached
+            auto freeOf = [&](int cx, int cy) { return cx < Game::W && cy >= 0 && !ids_[cy][cx] && g.cell(cx, cy).type == type; };
+            if (x % 2 == 0 && freeOf(x + 1, y) && freeOf(x, y - 1) && freeOf(x + 1, y - 1))
+                for (int k = 1; k < 4; k++) {
+                    group[n][0] = x + (k & 1); group[n][1] = y - (k >> 1); n++;
+                    ids_[y - (k >> 1)][x + (k & 1)] = id;
+                }
+            for (int i = 0; i < n && n < 4; i++)
+                for (int d = 0; d < 4 && n < 4; d++) {
+                    const int nx = group[i][0] + dx[d], ny = group[i][1] + dy[d];
+                    if (nx < 0 || ny < 0 || nx >= Game::W || ny >= Game::H || ids_[ny][nx] || g.cell(nx, ny).type != type) continue;
+                    ids_[ny][nx] = id;
+                    group[n][0] = nx; group[n][1] = ny; n++;
+                }
+            int mx = 99, my = 99;
+            for (int i = 0; i < n; i++) { mx = std::min(mx, group[i][0]); my = std::min(my, group[i][1]); }
+            for (int i = 0; i < n; i++) {
+                const int cx = group[i][0], cy = group[i][1];
+                unsigned char m = 0;
+                for (int d = 0; d < 8; d++) {
+                    const int nx = cx + dx[d], ny = cy + dy[d];
+                    if (nx >= 0 && ny >= 0 && nx < Game::W && ny < Game::H && ids_[ny][nx] == id) m |= (unsigned char)(1 << d);
+                }
+                links_[cy][cx] = m;
+                pseed_[cy][cx] = pieceSeed(id);
+                seeds_[cy][cx] = cellSeed(id, cx - mx, cy - my);
+            }
+        }
+}
+
 vec3 DocksUniverse::cargoColor(int idx) const {
     if (idx >= 0 && idx < 7) return palT_.piece[idx];
     if (idx == 7) return lin(0xd6d6d0);
@@ -442,10 +517,28 @@ void DocksUniverse::onEvent(const GameEvent& ev, const Game& game) {
     case GameEvent::Lock: {
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) seeds_[c.y][c.x] = rng_.uniform();
+        if (blockStyle_) {
+            // the piece keeps the look it had falling: its serial, its links, its cells' seeds
+            int mx = 99, my = 99;
+            for (auto& c : ev.cells) { mx = std::min(mx, c.x); my = std::min(my, c.y); }
+            const int dx[8] = {-1, 1, 0, 0, -1, 1, -1, 1}, dy[8] = {0, 0, -1, 1, -1, -1, 1, 1};
+            for (auto& c : ev.cells) {
+                if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+                unsigned char m = 0;
+                for (int d = 0; d < 8; d++)
+                    for (auto& o : ev.cells)
+                        if (o.x == c.x + dx[d] && o.y == c.y + dy[d]) m |= (unsigned char)(1 << d);
+                ids_[c.y][c.x] = serial_;
+                links_[c.y][c.x] = m;
+                pseed_[c.y][c.x] = pieceSeed(serial_);
+                seeds_[c.y][c.x] = cellSeed(serial_, c.x - mx, c.y - my);
+            }
+        }
         // the lifting beam lets go and rises away
         if (spr_.on) { spr_.rel = 0.f; spr_.relY = spr_.y; }
         break;
     }
+    case GameEvent::Spawn: serial_++; break;
     case GameEvent::Clear: {
         // each container of the row is taken by a crane: lifted back out of the well, then carried to a ship
         std::vector<int> rows;
@@ -460,7 +553,7 @@ void DocksUniverse::onEvent(const GameEvent& ev, const Game& game) {
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             fl.p0 = vec3(p.x, p.y, -CELL_D);
             fl.cur = fl.p0;
-            fl.col = pieceColor(c.type);
+            fl.col = blockStyle_ ? blockColor(c.type, pseed_[c.y][c.x]) : pieceColor(c.type);
             fl.seed = rng_.uniform();
             // out of the well: up and back, the row spreading a little toward its ship
             const float side = c.x < Game::W / 2 ? -1.f : 1.f;
@@ -485,18 +578,33 @@ void DocksUniverse::onEvent(const GameEvent& ev, const Game& game) {
             fl.seed = (float)c.type + 0.5f * fl.seed;
             flights_.push_back(fl);
         }
-        // the seeds of the rows above step down
+        // the seeds of the rows above step down (the pieces' links across a cleared row cut)
         {
             bool cleared[Game::H] = {};
             for (int y : rows) cleared[y] = true;
-            float ns[Game::H][Game::W] = {};
+            for (int y : rows)
+                for (int x = 0; x < Game::W; x++) {
+                    if (y > 0) links_[y - 1][x] &= (unsigned char)~(8 | 64 | 128);
+                    if (y + 1 < Game::H) links_[y + 1][x] &= (unsigned char)~(4 | 16 | 32);
+                }
+            float ns[Game::H][Game::W] = {}, nps[Game::H][Game::W] = {};
+            int nid[Game::H][Game::W] = {};
+            unsigned char nl[Game::H][Game::W] = {};
             int dst = Game::H - 1;
             for (int y = Game::H - 1; y >= 0; y--) {
                 if (cleared[y]) continue;
-                for (int x = 0; x < Game::W; x++) ns[dst][x] = seeds_[y][x];
+                for (int x = 0; x < Game::W; x++) {
+                    ns[dst][x] = seeds_[y][x];
+                    nps[dst][x] = pseed_[y][x];
+                    nid[dst][x] = ids_[y][x];
+                    nl[dst][x] = links_[y][x];
+                }
                 dst--;
             }
             std::memcpy(seeds_, ns, sizeof(seeds_));
+            std::memcpy(pseed_, nps, sizeof(pseed_));
+            std::memcpy(ids_, nid, sizeof(ids_));
+            std::memcpy(links_, nl, sizeof(links_));
         }
         break;
     }
@@ -536,13 +644,53 @@ void DocksUniverse::buildBoard(const Game& g) {
         box(cells_, vec3(c.x, c.y, c.z - CELL_D * half / CELL_H), vec3(half, half, CELL_D * half / CELL_H), pieceColor(type), M_BOX,
             doors ? 0.f : 1.f, 0, 0, seed);
     };
+    // the alternative looks: a cell reaches its piece's neighbours (no gap inside a piece), its links, its place in its
+    // row of the piece (a run: one long container in look 2), its piece's seed and its size to the shader
+    const float gapOut = blockStyle_ == 5 ? 0.045f : blockStyle_ == 3 ? 0.03f : 0.03f;
+    auto cellX = [&](const vec3& c, float sc, int type, float seed, float ps, int mask, int runI, int runN) {
+        const float l = -0.5f + ((mask & 1) ? 0.f : gapOut), r = 0.5f - ((mask & 2) ? 0.f : gapOut);
+        const float t = 0.5f - ((mask & 4) ? 0.f : gapOut), b = -0.5f + ((mask & 8) ? 0.f : gapOut);
+        const float hd = CELL_D * sc;
+        box(cells_, vec3(c.x + 0.5f * (l + r) * sc, c.y + 0.5f * (t + b) * sc, c.z - hd), vec3(0.5f * (r - l) * sc, 0.5f * (t - b) * sc, hd),
+            blockColor(type, ps), M_CELL, (float)(mask + 256 * runI + 1024 * runN), ps, sc, seed);
+    };
+    auto runOf = [](auto maskAt, int x, int y, int& runI, int& runN) {
+        runI = 0;
+        runN = 1;
+        for (int k = x; k > x - 4 && (maskAt(k, y) & 1); k--) runI++;
+        for (int k = x; k < x + 4 && (maskAt(k, y) & 2); k++) runN++;
+        runN += runI;
+    };
+    auto pieceMasks = [](const int cells[4][2], int masks[4]) {
+        const int dx[8] = {-1, 1, 0, 0, -1, 1, -1, 1}, dy[8] = {0, 0, -1, 1, -1, -1, 1, 1};
+        for (int i = 0; i < 4; i++) {
+            masks[i] = 0;
+            for (int d = 0; d < 8; d++)
+                for (int j = 0; j < 4; j++)
+                    if (cells[j][0] == cells[i][0] + dx[d] && cells[j][1] == cells[i][1] + dy[d]) masks[i] |= 1 << d;
+        }
+    };
+    auto pieceMaskAt = [](const int cells[4][2], const int masks[4]) {
+        return [cells, masks](int x, int y) {
+            for (int j = 0; j < 4; j++)
+                if (cells[j][0] == x && cells[j][1] == y) return masks[j];
+            return 0;
+        };
+    };
+    if (blockStyle_) syncIds(g);
     // the stack
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
             if (c.type < 0) continue;
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
-            cell(p, CELL_H, c.type, seeds_[y][x]);
+            if (!blockStyle_) {
+                cell(p, CELL_H, c.type, seeds_[y][x]);
+                continue;
+            }
+            int runI, runN;
+            runOf([&](int k, int yy) { return k >= 0 && k < Game::W ? (int)links_[yy][k] : 0; }, x, y, runI, runN);
+            cellX(p, 1.f, c.type, seeds_[y][x], pseed_[y][x], links_[y][x], runI, runN);
         }
     // the falling piece, exactly as it will lie
     if (g.hasPiece() && !g.over()) {
@@ -550,9 +698,18 @@ void DocksUniverse::buildBoard(const Game& g) {
         int cells[4][2];
         g.pieceCells(p, cells);
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+        int masks[4], mx = 99, my = 99;
+        pieceMasks(cells, masks);
+        for (auto& c : cells) { mx = std::min(mx, c[0]); my = std::min(my, c[1]); }
         for (int i = 0; i < 4; i++) {
             const vec3 w = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
-            cell(w, CELL_H, p.type, 0.37f * i + 0.11f * p.type);
+            if (!blockStyle_) {
+                cell(w, CELL_H, p.type, 0.37f * i + 0.11f * p.type);
+                continue;
+            }
+            int runI, runN;
+            runOf(pieceMaskAt(cells, masks), cells[i][0], cells[i][1], runI, runN);
+            cellX(w, 1.f, p.type, cellSeed(serial_, cells[i][0] - mx, cells[i][1] - my), pieceSeed(serial_), masks[i], runI, runN);
         }
         // the ghost: a thin outline of where it lands
         Piece gp = p;
@@ -589,9 +746,17 @@ void DocksUniverse::buildBoard(const Game& g) {
             minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
             miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
         }
+        int masks[4];
+        pieceMasks(cells, masks);
         for (int i = 0; i < 4; i++) {
             const float ox = cells[i][0] - (minx + maxx) * 0.5f, oy = cells[i][1] - (miny + maxy) * 0.5f;
-            cell(vec3(center.x + ox * sc, center.y - oy * sc, 0.f), CELL_H * sc, type, 0.21f * i);
+            if (!blockStyle_) {
+                cell(vec3(center.x + ox * sc, center.y - oy * sc, 0.f), CELL_H * sc, type, 0.21f * i);
+                continue;
+            }
+            int runI, runN;
+            runOf(pieceMaskAt(cells, masks), cells[i][0], cells[i][1], runI, runN);
+            cellX(vec3(center.x + ox * sc, center.y - oy * sc, 0.f), sc, type, 0.21f * i + 0.13f * type, 0.5f, masks[i], runI, runN);
         }
     };
     if (!g.over()) {
@@ -1063,7 +1228,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
             if (fl.kind == 1 && tt < 0.f) continue;
             if (bare_ && (fl.kind == 1 || tt < LIFT_T)) continue; // the world alone: none still in or by the well
             const int type = std::clamp((int)fl.seed, 0, 6);
-            const vec3 col = pieceColor(type);
+            const vec3 col = blockStyle_ && fl.kind == 0 ? fl.col : pieceColor(type);
             const vec3 hc(CELL_H, CELL_H, CELL_D);
             const vec3 hs(1.27f, 0.47f, 0.46f);
             const vec3 h = lerp(hc, hs, fl.sizeK);
@@ -1141,6 +1306,9 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         set3f(p, "uQuayLine", lin(0xc8a030) * 0.9f);
         set1f(p, "uBay", bare_ ? 0.f : 1.f);
         set1f(p, "uDeckLights", saturate(0.3f + 0.4f * wm + 0.3f * wp + (quadT_ < 4.f ? 0.5f : 0.f)));
+        set1i(p, "uBlock", blockStyle_);
+        set1f(p, "uCellGap", blockStyle_ == 5 ? 0.045f : 0.03f);
+        set3f(p, "uSodium", lerp(P.lampA, vec3(1.f, 0.62f, 0.28f), 0.5f) * (0.7f + 0.3f * wm + 0.3f * fest_));
     };
     auto drawSky = [&](const mat4& vp, bool mirror) {
         glUseProgram(progSky_);

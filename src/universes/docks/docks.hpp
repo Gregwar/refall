@@ -49,6 +49,20 @@ private:
     // ---- The stack: each cell remembers a small seed (dents, stencils).
     float seeds_[22][10] = {};
 
+    // ---- The alternative container looks (REFALL_DOCKS_BLOCK=1..5; 0, the default, the doors above). Each cell
+    // remembers its piece (its serial), its links to the cells of the same piece (L R U D UL UR DL DR, set when it
+    // locks, cut by a clear) and its piece's seed: a container looks the same falling, locked and after rows fall.
+    enum { M_CELL = 10 };
+    int blockStyle_ = 5; // the containers' look: 5 the night sheen (the game's); REFALL_DOCKS_BLOCK=0..4 the others
+    int ids_[22][10] = {};
+    unsigned char links_[22][10] = {};
+    float pseed_[22][10] = {};
+    int serial_ = 1, nextId_ = 1 << 20;
+    void syncIds(const Game& g);
+    float pieceSeed(int serial) const;
+    float cellSeed(int serial, int rx, int ry) const;
+    vec3 blockColor(int type, float pseed) const;
+
     // ---- The crane holding the falling piece: a lifting beam over the piece, its extents eased.
     struct Spreader {
         float x0 = -1, x1 = 1, y = 12, cx = 0;
