@@ -2657,9 +2657,9 @@ void main() {
 )";
 
 // ------------------------------------------------------------------------------------------------ the cells
-// One clean, solid cell per block, a short segment of a bamboo stalk in its piece's color: a soft cylindrical shading
-// across it (a sheen left of its middle), a node ring near its base, a faint fibre, a thin darker line of its own
-// color around it. The ghost is the outline alone; a cleared cell shrinks softly away.
+// One cell per block, a square of bamboo wood in its piece's colour: its corners just rounded, its fibres running up it
+// (each block its own), a faint node across some, a bevel (lit on its top and left, shaded on its bottom and right),
+// a thin darker line round it. The ghost is the outline alone; a cleared cell shrinks softly away.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, -
@@ -2692,7 +2692,9 @@ void main() {
     float aa = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
     float shrink = 1.0 - 0.6 * smoothstep(0.0, 1.0, erase);
     vec2 q = vLocal / shrink;
-    float d = sdBox(q, vec2(0.44 - 0.12)) - 0.12;
+    // a square block of bamboo wood: its corners just rounded, fibres running up it (each block its own, from its
+    // place), a faint node across, a bevel (lit along its top and left, shaded along its bottom and right)
+    float d = sdBox(q, vec2(0.455 - 0.07)) - 0.07;
     float inside = 1.0 - smoothstep(-aa, aa, d * shrink);
     vec3 t = vB.rgb;
     if (mode == 1) {
@@ -2702,16 +2704,22 @@ void main() {
         frag = vec4(c * a, a);
         return;
     }
-    // a stalk: round across (lit a little from above), a sheen, a node ring near its base, a faint fibre
-    float cyl = sat(1.0 - sq(q.x / 0.46));
-    vec3 c = t * mix(0.74, 1.06, sqrt(cyl)) * mix(0.93, 1.04, smoothstep(-0.45, 0.45, q.y));
-    c = mix(c, mix(t, uLightC, 0.5) * 1.12, exp(-sq((q.x + 0.17) / 0.055)) * 0.4);
-    float ny = q.y + 0.29;
-    c = mix(c, t * 0.66, (1.0 - smoothstep(0.02, 0.02 + aa * 1.5, abs(ny))) * 0.75);
-    c = mix(c, mix(t, vec3(1.0), 0.3), (1.0 - smoothstep(0.012, 0.012 + aa * 1.5, abs(ny - 0.045))) * 0.45);
-    c *= 1.0 - 0.03 * smoothstep(0.35, 0.5, abs(fract(q.x * 7.0 + 0.5) - 0.5) * 2.0) * lod2(aa);
-    // its own thin darker edge
-    c = mix(c, t * 0.55, 1.0 - smoothstep(0.0, 0.035 + aa, -d));
+    vec2 sd = floor(vA.xy * 1.7 + 0.5);
+    float h0 = fract(sin(dot(sd, vec2(12.9898, 78.233))) * 43758.5453);
+    float gx = q.x * 9.0 + h0 * 13.0;
+    float fib = 0.5 + 0.5 * sin(gx * 2.1 + sin(q.y * 3.0 + h0 * 6.0) * 0.8) * 0.6 + 0.4 * sin(gx * 5.3 + h0 * 4.0) * 0.5;
+    float streak = smoothstep(0.86, 1.0, fract(gx * 0.37 + h0 * 3.1));
+    vec3 c = t * (0.84 + 0.24 * fib) * mix(0.92, 1.05, smoothstep(-0.45, 0.45, q.y));
+    c = mix(c, t * 0.66, streak * 0.55 * lod2(aa));
+    // a faint node across (some blocks)
+    float nodeY = -0.2 + 0.4 * fract(h0 * 7.13);
+    c = mix(c, t * 0.78, (1.0 - smoothstep(0.012, 0.012 + aa * 1.5, abs(q.y - nodeY))) * 0.5 * step(0.4, h0));
+    // the bevel
+    float edge = -d;
+    float bev = 1.0 - smoothstep(0.0, 0.075, edge);
+    float lit = sat(0.5 + (q.y - q.x) * 1.4);
+    c = mix(c, mix(t * 0.55, mix(t, vec3(1.0), 0.45), lit), bev * 0.9);
+    c = mix(c, t * 0.45, 1.0 - smoothstep(0.0, 0.012 + aa, edge));
     c += t * vC.z * 0.6;
     c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.5);
     c = mix(c, uBridgeInk, uBridge);
