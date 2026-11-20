@@ -2679,9 +2679,9 @@ void main() {
 // intersection of 26 half-spaces: 6 faces, 12 chamfers, 8 corners), seen in a slight perspective from a little above
 // (the eye over the well's middle, far off: the top chamfers show more than the bottom ones, the blocks off the middle
 // a hair of their inner side). Its fibres run up it all round (dense fine strands, bright and dark, in broad bands,
-// a crack now and then, a row of node pores on some); the chamfers and the cut corners cut across them: the end grain,
+// a row of node pores on some); the chamfers and the cut corners cut across them: the end grain,
 // stippled, lighter. Lit by a key from the front, above and a little left (the top chamfers catch it, the bottom ones
-// in shade), a fill; shaded in the grooves where it touches its neighbours; each block its own tone, grain, cracks.
+// in shade), a fill; shaded in the grooves where it touches its neighbours; each block its own tone and grain.
 // The quads are drawn from the far ones to the near ones (the lowest rows first, the middle columns last), so a block
 // hides the top of the one under it. A first pass lays each block's soft contact shadow on what is behind. The ghost
 // is the front's outline alone; a cleared cell shrinks softly away.
@@ -2782,17 +2782,6 @@ vec3 longGrain(vec3 t, float u, float v, float h0, float aa) {
     // bright strands, longer
     float bk = smoothstep(0.8, 0.96, n1(g * 31.0 + 23.0, h0 + 9.0)) * smoothstep(0.25, 0.5, n1(v * 3.0 + floor(g * 31.0) * 2.1, h0 + 4.0));
     c = mix(c, mix(t, vec3(1.0), 0.3) * 1.08, bk * 0.45 * lod(31.0, aa));
-    // a crack up part of it: a dark split, the pale fresh wood showing in its middle where it gapes
-    float cu = (h3 - 0.5) * 0.7;
-    float jag = 0.006 * (n1(v * 40.0, h0 + 5.0) - 0.5) + 0.01 * (n1(v * 7.0, h0 + 6.0) - 0.5);
-    float cy0 = -0.48 + 0.55 * h4 * h4, cy1 = min(0.48, cy0 + 0.3 + 0.5 * h5);
-    float along = smoothstep(cy0, cy0 + 0.08, v) * smoothstep(cy1, cy1 - 0.08, v);
-    float cw = (0.003 + 0.011 * h1) * along * (0.45 + 0.8 * n1(v * 9.0, h0 + 3.0));
-    float dc = abs(u - cu - jag);
-    float crack = (1.0 - smoothstep(cw, cw + aa, dc)) * step(0.72, h2) * along;
-    float halo = (1.0 - smoothstep(cw, cw * 3.0 + aa * 2.0, dc)) * step(0.72, h2) * along;
-    c *= 1.0 - 0.15 * halo;
-    c = mix(c, mix(t * 0.35, mix(t, vec3(0.95, 0.88, 0.72), 0.55), smoothstep(0.008, 0.014, cw) * smoothstep(cw * 0.6, 0.0, dc)), crack * 0.85);
     // the pores of a node: a row of small dark specks across, on some
     // (pits of all sizes, a little taller than wide, strewn about the line, in clusters)
     float ny = -0.25 + 0.5 * fract(h0 * 7.13);
