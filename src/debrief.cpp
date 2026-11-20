@@ -58,11 +58,11 @@ bool Menu::updateDebrief(const Input& in, float dt, Choice& out) {
     debT_ += dt;
     const bool choice = debrief_.retry.kind != Choice::NONE;
     if (leaveT_ < 0) {
-        if (choice) { // RETRY or MENU
+        if (choice) { // RETRY SONG, RETRY STAGE or MENU
             if (debT_ > INPUT_AFTER) {
                 const int d = in.repeatSteps(A_UI_RIGHT) + in.repeatSteps(A_UI_DOWN) - in.repeatSteps(A_UI_LEFT) - in.repeatSteps(A_UI_UP);
-                if (d) { debSel_ = std::clamp(debSel_ + d, 0, 1); lastInput_ = time_; }
-                if (in.pressed(A_UI_OK) || in.pressed(A_UI_ENTER)) { leaveT_ = 0; debRetry_ = debSel_ == 0; }
+                if (d) { debSel_ = std::clamp(debSel_ + d, 0, 2); lastInput_ = time_; }
+                if (in.pressed(A_UI_OK) || in.pressed(A_UI_ENTER)) { leaveT_ = 0; debRetry_ = debSel_ < 2; }
                 else if (in.pressed(A_UI_BACK)) { leaveT_ = 0; debRetry_ = false; }
             }
         } else {
@@ -72,7 +72,7 @@ bool Menu::updateDebrief(const Input& in, float dt, Choice& out) {
             if (key && debT_ > INPUT_AFTER) leaveT_ = 0;
         }
     } else if ((leaveT_ += dt) >= LEAVE && debRetry_) { // the run again
-        out = debrief_.retry;
+        out = debSel_ == 1 && debrief_.retryStage.kind != Choice::NONE ? debrief_.retryStage : debrief_.retry;
         screen_ = CAMPAIGN;
         leaveT_ = -1;
         debRetry_ = false;
@@ -140,11 +140,16 @@ void Menu::drawDebrief(int w, int h) {
     p.text(F::JOSEFIN, debrief_.detail, cx, Y(950), 17 * u, withA(dim, dim.a * a3), 0, 0.3f);
     if (!debrief_.note.empty())
         p.text(F::JOSEFIN, debrief_.note, cx, Y(990), 17 * u, withA(gold, 0.85f * (debrief_.clear ? at(COLOR_AT + 1.2f) : a3)), 0, 0.3f);
-    if (debrief_.retry.kind != Choice::NONE) { // RETRY or MENU, the chosen one underlined
-        static const char* ITEMS[2] = {"RETRY", "MENU"};
-        const float a4 = sstep((t - INPUT_AFTER + 0.4f) / 0.5f) * out, sp = 170 * u, y = Y(1018), size = 26 * u;
-        for (int i = 0; i < 2; i++) {
-            const float x = cx + (i - 0.5f) * 2.f * sp;
+    if (debrief_.retry.kind != Choice::NONE) { // RETRY SONG, RETRY STAGE or MENU, the chosen one underlined
+        static const char* ITEMS[3] = {"RETRY SONG", "RETRY STAGE", "MENU"};
+        const float a4 = sstep((t - INPUT_AFTER + 0.4f) / 0.5f) * out, gap = 90 * u, y = Y(1018), size = 26 * u;
+        // (laid out by their widths, an even gap between them, centred as a row)
+        float w[3], total = 2 * gap;
+        for (int i = 0; i < 3; i++) total += w[i] = p.width(F::JOSEFIN, ITEMS[i], size, 0.35f);
+        float left = cx - total * 0.5f;
+        for (int i = 0; i < 3; i++) {
+            const float x = left + w[i] * 0.5f;
+            left += w[i] + gap;
             const bool on = i == debSel_;
             p.text(F::JOSEFIN, ITEMS[i], x, y, size, withA(ink, (on ? 1.f : 0.45f) * a4), 0, 0.35f);
             if (!on) continue;
