@@ -852,6 +852,7 @@ void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
     case GameEvent::Lock: {
         int minx = 99, maxy = -99;
         for (const auto& c : ev.cells) { minx = std::min(minx, c.x); maxy = std::max(maxy, c.y); }
+        lockN_++;
         for (size_t i = 0; i < ev.cells.size() && i < 4; i++) {
             const auto& c = ev.cells[i];
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
@@ -859,6 +860,7 @@ void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
             colonies_[c.y][c.x] = pieceColony_;
             seedType_[c.y][c.x] = (int8_t)(c.type + 1);
             places_[c.y][c.x] = (int8_t)(std::clamp(c.x - minx, 0, 7) + 8 * std::clamp(maxy - c.y, 0, 7));
+            parts_[c.y][c.x] = lockN_ * 32;
         }
         break;
     }
@@ -951,9 +953,12 @@ void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
         {   // the blocks' seeds follow their rows down
             float ns[Game::H][Game::W] = {}, nc[Game::H][Game::W] = {};
             int8_t nt[Game::H][Game::W] = {}, np[Game::H][Game::W] = {};
-            int dst = Game::H - 1;
+            int npt[Game::H][Game::W] = {};
+            int dst = Game::H - 1, below = 0;
             for (int y = Game::H - 1; y >= 0; y--) {
-                if (rows[y]) continue;
+                if (rows[y]) { below++; continue; }
+                // (the blocks over a cleared row: another part of their colony than those under it)
+                for (int x = 0; x < Game::W; x++) npt[dst][x] = parts_[y][x] + below;
                 std::memcpy(ns[dst], blockSeeds_[y], sizeof(blockSeeds_[y]));
                 std::memcpy(nc[dst], colonies_[y], sizeof(colonies_[y]));
                 std::memcpy(nt[dst], seedType_[y], sizeof(seedType_[y]));
@@ -964,6 +969,7 @@ void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(colonies_, nc, sizeof(colonies_));
             std::memcpy(seedType_, nt, sizeof(seedType_));
             std::memcpy(places_, np, sizeof(places_));
+            std::memcpy(parts_, npt, sizeof(parts_));
         }
         if (!pts.empty()) {
             clearPts_.insert(clearPts_.end(), pts.begin(), pts.end());
@@ -1205,7 +1211,7 @@ vec3 CoralReefUniverse::mantaAt(float t, float enter) const {
 void CoralReefUniverse::cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, int type,
                              float seed, float colony, int nb, int place) {
     if (alpha <= 0.003f) return;
-    cells_.push_back({{x, y, half, (float)(nb + 16 * std::clamp(type, 0, 6) + 128 * (place & 63))}, {tint.x, tint.y, tint.z, alpha},
+    cells_.push_back({{x, y, half, (float)((nb & 15) + 16 * std::clamp(type, 0, 6) + 128 * (place & 63) + 8192 * ((nb >> 4) & 15))}, {tint.x, tint.y, tint.z, alpha},
                       {(float)mode, erase, colony, seed}});
 }
 
@@ -1221,6 +1227,11 @@ void CoralReefUniverse::buildBoard(const Game& g) {
             if (ddx == 0 && ddy == 1) m |= 2;
             if (ddx == -1 && ddy == 0) m |= 4;
             if (ddx == 1 && ddy == 0) m |= 8;
+            // (and its diagonal neighbours: 16 up-left, 32 up-right, 64 down-left, 128 down-right)
+            if (ddx == -1 && ddy == -1) m |= 16;
+            if (ddx == 1 && ddy == -1) m |= 32;
+            if (ddx == -1 && ddy == 1) m |= 64;
+            if (ddx == 1 && ddy == 1) m |= 128;
         }
         return m;
     };
@@ -1268,9 +1279,12 @@ void CoralReefUniverse::buildBoard(const Game& g) {
             // (the blocks of its colony touching it; a row still closing up after a clear touches none)
             auto with = [&](int xx, int yy) {
                 return xx >= 0 && xx < Game::W && yy >= Game::HIDDEN && yy < Game::H && g.cell(xx, yy).type == c.type &&
-                       g.rowOffset(yy) == g.rowOffset(y) && colonyAt(xx, yy) == co;
+                       g.rowOffset(yy) == g.rowOffset(y) && colonyAt(xx, yy) == co &&
+                       (!known(x, y) || !known(xx, yy) || parts_[yy][xx] == parts_[y][x]);
             };
-            const int nb = (with(x, y - 1) ? 1 : 0) | (with(x, y + 1) ? 2 : 0) | (with(x - 1, y) ? 4 : 0) | (with(x + 1, y) ? 8 : 0);
+            const int nb = (with(x, y - 1) ? 1 : 0) | (with(x, y + 1) ? 2 : 0) | (with(x - 1, y) ? 4 : 0) | (with(x + 1, y) ? 8 : 0) |
+                           (with(x - 1, y - 1) ? 16 : 0) | (with(x + 1, y - 1) ? 32 : 0) | (with(x - 1, y + 1) ? 64 : 0) |
+                           (with(x + 1, y + 1) ? 128 : 0);
             cell(p.x, p.y, 0.5f, tintOf(c.type) * darken, 1.f, 0, 0.f, c.type, sd, co, nb, known(x, y) ? places_[y][x] : strayPlace[y][x]);
         }
     // the cleared blocks: a flash of the whole block (a few frames), then its chunks flying apart

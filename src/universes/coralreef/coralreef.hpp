@@ -194,6 +194,8 @@ private:
     float colonies_[22][10] = {};       // their colonies' seeds
     int8_t seedType_[22][10] = {};      // the type the seeds were given for (+1; another type there: not ours)
     int8_t places_[22][10] = {};        // their places in their colonies
+    int parts_[22][10] = {};            // which part of its colony (a colony cut in two by a cleared row: two parts, never joined again)
+    int lockN_ = 0;
     float pieceSeeds_[4] = {0.13f, 0.37f, 0.61f, 0.89f}, pieceColony_ = 0.5f; // the falling piece's
     Rng blockRng_{9157};                // the blocks' seeds (apart from the world's draws)
     struct Fading { float x, y; int type; float t, seed, colony; int nb, place; };

@@ -856,6 +856,7 @@ inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, code: the sides it shares with its colony (1 up, 2 down, 4 left, 8 right)
                                  // + 16 x its type + 128 x its place in its colony (column + 8 x row)
+                                 // + 8192 x its diagonal neighbours in its colony (1 up-left, 2 up-right, 4 down-left, 8 down-right)
 layout(location = 2) in vec4 aB; // tint rgb, alpha
 layout(location = 3) in vec4 aC; // mode (0 block, 1 ghost), erase 0..1, the colony's seed, the block's seed
 uniform mat4 uVP;
@@ -884,6 +885,7 @@ uniform float uTime, uBridge, uShimmer, uPass, uHaloA, uGlow;
 uniform vec2 uHaloOff;
 uniform vec3 uBridgeInk, uLightC, uHaloC;
 int gNb;       // the sides it shares with its colony
+int gDiag;     // the colony's blocks at its corners (1 up-left, 2 up-right, 4 down-left, 8 down-right)
 float gAA;     // a pixel, in cell units
 float gLod;    // 1: the fine detail drawn .. 0: too small on screen for it
 vec2 gOff;     // the block's own offset into its species' texture
@@ -934,6 +936,16 @@ float outline(vec2 q, float joint, float free, float r, float wob, float freq) {
     vec2 c = vec2(eR - eL, eU - eD) * 0.5, b = vec2(eR + eL, eU + eD) * 0.5;
     vec2 d = abs(q - c) - b + r;
     float sd = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
+    // an inner corner (two sides shared, the block across the corner not of the colony): the outline turns in round
+    // it, along its two neighbours' free sides, instead of the corner of this block reaching out into the empty cell
+    for (int k = 0; k < 4; k++) {
+        vec2 s = vec2(k == 1 || k == 3 ? 1.0 : -1.0, k < 2 ? 1.0 : -1.0);
+        int sx = s.x > 0.0 ? 8 : 4, sy = s.y > 0.0 ? 1 : 2;
+        if ((gNb & sx) == 0 || (gNb & sy) == 0 || (gDiag & (1 << k)) != 0) continue;
+        vec2 e = vec2(r) - (s * q - vec2(free));
+        float sq_ = length(max(e, 0.0)) + min(max(e.x, e.y), 0.0);
+        sd = max(sd, r - sq_);
+    }
     vec2 p = (q + gCol) * freq + gColOff;
     return sd + wob * (vnoise(p) - 0.5) + wob * 0.5 * (vnoise(p * 2.4 + 3.7) - 0.5);
 }
@@ -1170,7 +1182,8 @@ void main() {
     int code = int(vA.w + 0.5);
     gNb = code & 15;
     int sp = (code >> 4) & 7;
-    int place = code >> 7;
+    int place = (code >> 7) & 63;
+    gDiag = code >> 13;
     gCol = vec2(float(place & 7), float(place >> 3));
     gAA = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
     gLod = 1.0 - smoothstep(0.045, 0.1, gAA);
