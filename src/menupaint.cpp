@@ -410,37 +410,90 @@ void main() {
     uv += (vec2(h21(cell), h21(cell + 3.7)) - 0.5) * 0.035;
     uv = abs(fract(uv * 0.5) * 2.0 - 1.0);
     vec3 c = uMix <= 0.0 ? src(uSeedA, uv) : uMix >= 1.0 ? src(uSeedB, uv) : mix(src(uSeedA, uv), src(uSeedB, uv), uMix);
-    // large shards over the small facets, slightly turned, each lit from its own side
-    vec2 sc, sf;
-    float se, ss;
-    vec2 g2 = mat2(0.921, -0.389, 0.389, 0.921) * q * 4.8 + vec2(0.37, 0.11);
-    facet(g2, sc, sf, se, ss);
-    float hs = h21(sc + 9.7);
-    vec2 L = vec2(cos(hs * 6.283), sin(hs * 6.283));
-    float lit = clamp(0.5 + dot(sf - 0.4, L) * 1.2, 0.0, 1.0) * (0.55 + 0.6 * h21(sc + 2.2));
-    // cut into gem: the world's light and the facets' read through the crystal's ramp, a little of its colour kept
-    float l = dot(c, vec3(0.299, 0.587, 0.114));
-    float gl = clamp(l * 0.45 + lit * 0.55 + (h21(cell + 9.1) - 0.5) * 0.3, 0.0, 1.0);
-    // the ramp's hue: the tint's, drawn toward the world's own colour where it has one, each shard leaning a little to
-    // one side of the hue wheel (a neighbouring hue), so a universe of one colour still shows a few
+    // SPACE: no glass, deep space on the whole screen (unmirrored): a great nebula of wisps and filaments, cool on the
+    // left in the stage's hue and its neighbours (magenta, blue, a little cyan), warm and golden on the right toward
+    // the star in the corner, dark dust lanes through it; a dense field of stars, thicker in the clouds; asteroids
+    // drifting by, tumbling. The sky slides a little as the stages turn.
     vec3 tv = vivid(uTint, 1.6);
-    float cmax = max(c.r, max(c.g, c.b)), wsat = clamp((cmax - min(c.r, min(c.g, c.b))) / max(cmax, 0.05), 0.0, 1.0);
-    vec3 hue = mix(tv, vivid(c, 1.3), 0.4 * wsat);
-    float lean = h21(sc + 6.6) - 0.5;
-    hue = vivid(mix(hue, lean > 0.0 ? hue.brg : hue.gbr, abs(lean) * 0.45), 1.15);
-    c = mix(gem(gl, hue), c * (0.5 + 0.5 * uTint) * (0.4 + lit), 0.22);
-    c *= 0.92 + 0.16 * smoothstep(0.5, 0.0, edge);
-    c *= 0.92 + 0.16 * vec3(h21(cell + 1.3), h21(cell + 2.7), h21(cell + 4.1));
-    // some shards cut with a prism's rainbow
-    if (h21(sc + 4.4) > 0.7) {
-        float x = dot(sf, vec2(-L.y, L.x)) * 2.2 + uTime * 0.025 + hs * 3.0;
-        float band = smoothstep(0.55, 0.0, abs(fract(x * 0.5) - 0.5) * 2.0);
-        c += (0.5 + 0.5 * cos(6.2831853 * (x + vec3(0.0, 0.33, 0.67)))) * band * 0.14;
+    // a space palette (deep violet blue, magenta pink, a touch of cyan, gold), the stage's hue blended into it
+    vec3 base = mix(vec3(0.45, 0.3, 1.0), tv, 0.25), n2 = mix(vec3(0.95, 0.32, 0.72), tv, 0.25);
+    vec3 n3 = vec3(0.3, 0.85, 1.0), warm = vec3(1.0, 0.7, 0.36);
+    float asp = uRes.x / uRes.y;
+    vec2 sp = fc / uRes.y;
+    vec2 drift = vec2(uRot * 0.03 + uTime * 0.003, uTime * 0.001);
+    vec2 w = sp + drift;
+    float seedOff = mix(h21(vec2(uSeedA, 1.0)), h21(vec2(uSeedB, 1.0)), uMix) * 30.0;
+    vec2 nw = w * 1.4 + vec2(seedOff, 0.0);
+    // domain warping: the gas curls round itself
+    vec2 q1 = vec2(vn(nw * 1.1 + uTime * 0.006), vn(nw * 1.1 + 5.2 - uTime * 0.005));
+    vec2 q2 = vec2(vn(nw * 2.3 + q1 * 2.0 + 1.7), vn(nw * 2.3 + q1 * 2.0 + 9.2));
+    vec2 ww = nw + q2 * 1.4;
+    float fb = 0.0, amp = 0.5, frq = 1.0;
+    for (int i = 0; i < 5; i++) { fb += amp * vn(ww * frq); frq *= 2.07; amp *= 0.5; }
+    // filaments: the ridges of a finer warped noise
+    float rg = 0.0; amp = 0.55; frq = 3.0;
+    for (int i = 0; i < 4; i++) { float n = vn(ww * frq + 3.3); rg += amp * pow(1.0 - abs(2.0 * n - 1.0), 3.0); frq *= 2.1; amp *= 0.5; }
+    // where the clouds are: a broad sweep across from the lower left to the upper right, thicker at both ends
+    float band = exp(-pow((sp.y - (0.62 - 0.32 * sp.x / asp + 0.08 * sin(sp.x * 2.3 + seedOff))) / 0.33, 2.0));
+    float leftC = exp(-dot((sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42), (sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42)));
+    float rightC = exp(-dot((sp - vec2(0.8 * asp, 0.3)) / vec2(0.5, 0.45), (sp - vec2(0.8 * asp, 0.3)) / vec2(0.5, 0.45)));
+    float dens = clamp(band * 0.7 + leftC * 0.8 + rightC * 0.7, 0.0, 1.3);
+    float gas = smoothstep(0.3, 0.85, fb) * dens;
+    float wisp = rg * smoothstep(0.25, 0.7, fb) * dens;
+    float dust = smoothstep(0.42, 0.72, vn(ww * 2.6 - 4.0 + q1));
+    // its colours: cool on the left (the tint, a neighbour, cyan where it is thinnest), warm on the right
+    float warmth = smoothstep(0.35 * asp, 0.85 * asp, sp.x + 0.25 * (fb - 0.5));
+    vec3 cool = mix(base, n2, smoothstep(0.38, 0.62, vn(nw * 0.7 + 2.0 + q1 * 0.8)));
+    cool = mix(cool, n3, smoothstep(0.6, 0.9, q1.y) * 0.5);
+    vec3 gc = vivid(mix(cool, warm, warmth), 1.35);   // (kept saturated: never a grey)
+    vec3 col = vec3(0.006, 0.006, 0.022) + base * 0.04 * dens;
+    col += gc * gas * 0.45;
+    col += mix(gc, vec3(1.0), 0.15) * wisp * 0.4;
+    col += mix(gc, vec3(1.0), 0.12) * pow(gas, 3.0) * 0.3;   // (the clouds' glowing cores)
+    col *= 0.45 + 0.55 * mix(1.0, dust, smoothstep(0.1, 0.5, dens));
+    vec3 space = vec3(0.0); // (added after the brightness cap: the stars)
+    for (int i = 0; i < 4; i++) {
+        float fi = float(i);
+        float ssc = 45.0 + fi * 60.0;
+        vec2 sg = (w + drift * fi * 0.5) * ssc;
+        vec2 si = floor(sg), sf = fract(sg) - 0.5;
+        float sh = h21(si + fi * 31.0);
+        if (sh > 0.955 - fi * 0.008 - 0.03 * dens) {
+            vec2 off = (vec2(h21(si + 7.0), h21(si + 3.0)) - 0.5) * 0.6;
+            float dd = length(sf - off) * (uRes.y / ssc) * (1080.0 / uRes.y);
+            float twk = 0.65 + 0.35 * sin(uTime * (1.0 + 3.0 * h21(si)) + sh * 50.0);
+            vec3 scol = mix(vec3(1.0), mix(vec3(1.0, 0.82, 0.62), vec3(0.72, 0.82, 1.0), h21(si + 1.0)), 0.55);
+            float big = step(0.985, h21(si + 2.0)) * (1.0 - fi * 0.3);
+            float sz = (0.9 + 1.4 * (1.0 - fi * 0.3)) * (1.0 + big * 1.5);
+            space += scol * (exp(-dd * dd / sz) + big * 0.35 * (exp(-abs((sf - off).x) * ssc * 0.8) + exp(-abs((sf - off).y) * ssc * 0.8)) * exp(-dd * 0.25))
+                     * twk * (1.0 - fi * 0.22);
+        }
     }
+    for (int i = 0; i < 6; i++) {   // asteroids, lit from the top right (the star)
+        float fi = float(i);
+        float speed = 0.008 + 0.01 * h21(vec2(fi, 2.0));
+        vec2 ac = vec2(mod(h21(vec2(fi, 5.0)) * asp * 1.5 + uTime * speed, asp * 1.5) - asp * 0.25, 0.1 + 0.8 * h21(vec2(fi, 9.0)));
+        float ar = 0.009 + 0.026 * h21(vec2(fi, 3.0));
+        vec2 da = sp - ac;
+        float ro = uTime * (0.08 + 0.2 * h21(vec2(fi, 6.0))) + fi;
+        vec2 dr = mat2(cos(ro), -sin(ro), sin(ro), cos(ro)) * da;
+        float lumpy = ar * (1.0 + 0.45 * (vn(vec2(atan(dr.y, dr.x) * 1.4 + fi * 7.0, fi)) - 0.5));
+        float inA = smoothstep(lumpy + 1.5 / uRes.y, lumpy - 1.5 / uRes.y, length(dr));
+        if (inA > 0.0) {
+            vec2 nr = da / ar;
+            float lt = clamp(0.4 + nr.x * 0.7 - nr.y * 0.4, 0.0, 1.0);
+            float crat = vn(dr / ar * 3.0 + fi * 11.0);
+            vec3 rock = vec3(0.36, 0.33, 0.31) * (0.06 + 0.94 * lt) * (0.7 + 0.55 * crat);
+            col = mix(col, rock, inA);
+            space *= 1.0 - inA;
+        }
+    }
+    c = col;
     c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, uSat);  // a locked stage: its world greyed
     c *= 0.9 + 0.2 * uLevel;
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
     c *= min(1.0, 0.45 / max(lum, 1e-3));                  // never bright behind the text (a white world stays a glow)
+    c += space * (0.4 + 0.6 * uSat);
     // (no lead: the shards meet edge to edge, told apart by their own light and hue alone)
     c *= 1.0 - 0.5 * smoothstep(0.45, 1.2, r);
     // light on the glass, in the frame's own space (it doesn't turn): a soft flare in the top right corner, and glints
@@ -448,7 +501,7 @@ void main() {
     vec2 fp = (fc - vec2(uRes.x - 0.04 * uRes.y, 0.04 * uRes.y)) / uRes.y;
     float fd = length(fp), fa = atan(fp.y, fp.x);
     float rays = pow(abs(cos(fa * 5.0 + 0.4)), 10.0) + 0.6 * pow(abs(cos(fa * 3.0 - uTime * 0.02)), 14.0);
-    c += mix(tv, vec3(1.0), 0.65) * (0.45 * exp(-fd * 8.0) + 0.14 * exp(-fd * 2.4) + 0.07 * rays * exp(-fd * 3.5)) * (0.5 + 0.5 * uSat);
+    c += vec3(1.0, 0.86, 0.66) * (0.45 * exp(-fd * 8.0) + 0.14 * exp(-fd * 2.4) + 0.07 * rays * exp(-fd * 3.5)) * (0.5 + 0.5 * uSat);
     vec2 gp = fc / uRes.y * 24.0, gi = floor(gp);
     float gh = h21(gi + 17.0);
     if (gh > 0.86) {

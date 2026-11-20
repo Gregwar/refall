@@ -1090,27 +1090,75 @@ void Menu::drawOrbitLogo(float cx, float cy, float k, float color) {
             if (a <= 0.f || (depth >= 0.f) != front) continue;
             float x, y;
             onRing(th, 0.93f, x, y);
-            const float cs = (16.f + 4.f * depth) * u, rot = t * pc.spin + i;
-            const float cr = std::cos(rot), sr = std::sin(rot);
-            const Col c = mixc(tone(stageCol(pc.col % std::max(1, nStages))), H(0x05060c), 0.3f - 0.3f * depth);
+            // each cell a cube; the piece tumbles slowly about its own axes, seen straight on (orthographic): its faces
+            // drawn far to near, each lit from the top left and the front, a sheen on the faces turned to the light,
+            // the faces between two of its cells left out
+            const float cs = (17.f + 4.f * depth) * u;
+            const float ax = t * pc.spin * 0.9f + i * 1.3f, ay = t * pc.spin * 0.6f + i * 2.1f, az = t * pc.spin * 0.35f + i;
+            const float cx_ = std::cos(ax), sx_ = std::sin(ax), cy_ = std::cos(ay), sy_ = std::sin(ay), cz_ = std::cos(az), sz_ = std::sin(az);
+            auto R = [&](float vx, float vy, float vz, float o[3]) { // Rz * Ry * Rx
+                const float y1 = vy * cx_ - vz * sx_, z1 = vy * sx_ + vz * cx_;
+                const float x2 = vx * cy_ + z1 * sy_, z2 = -vx * sy_ + z1 * cy_;
+                o[0] = x2 * cz_ - y1 * sz_;
+                o[1] = x2 * sz_ + y1 * cz_;
+                o[2] = z2;
+            };
+            const Col c = mixc(tone(stageCol(pc.col % std::max(1, nStages))), H(0x05060c), 0.25f - 0.25f * depth);
+            float mxc = 0, myc = 0;
+            for (const auto& ce : pc.cells) { mxc += ce[0] * 0.25f; myc += ce[1] * 0.25f; }
+            struct Face { float P[4][2]; float z; Col col; };
+            Face faces[24];
+            int nf = 0;
+            static const float N0[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+            const float Lx = -0.45f, Ly = -0.6f, Lz = 0.66f; // the light: up-left and toward us (screen y down, z to us)
             for (const auto& ce : pc.cells) {
-                const float lx = ce[0] * cs * 1.1f, ly = ce[1] * cs * 1.1f;
-                const float qx = x + lx * cr - ly * sr, qy = y - 4 * u + lx * sr + ly * cr;
-                const float h = cs * 0.5f;
-                float P[4][2];
-                const float corner[4][2] = {{-h, -h}, {h, -h}, {h, h}, {-h, h}};
-                for (int e = 0; e < 4; e++) {
-                    P[e][0] = qx + corner[e][0] * cr - corner[e][1] * sr;
-                    P[e][1] = qy + corner[e][0] * sr + corner[e][1] * cr;
+                const float ox = ce[0] - mxc, oy = ce[1] - myc;
+                for (int fi = 0; fi < 6; fi++) {
+                    const float* n0 = N0[fi];
+                    bool inner = false; // a neighbour cell on that side
+                    for (const auto& ce2 : pc.cells)
+                        if (std::fabs(ce2[0] - (ce[0] + n0[0])) < 0.01f && std::fabs(ce2[1] - (ce[1] + n0[1])) < 0.01f && n0[2] == 0.f) inner = true;
+                    if (inner) continue;
+                    float n[3];
+                    R(n0[0], n0[1], n0[2], n);
+                    if (n[2] <= 0.f) continue; // facing away
+                    // its corners: the face's centre +- two axes perpendicular to its normal
+                    const float ux = n0[1] != 0.f || n0[2] != 0.f ? 1.f : 0.f, uy = n0[0] != 0.f ? 1.f : 0.f, uz = 0.f;
+                    const float vx = n0[2] != 0.f ? 0.f : (n0[0] != 0.f ? 0.f : 0.f), vy = n0[2] != 0.f ? 1.f : 0.f, vz = n0[2] != 0.f ? 0.f : 1.f;
+                    const float corner[4][2] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}, {-0.5f, 0.5f}};
+                    Face& f = faces[nf++];
+                    float zc = 0;
+                    for (int e = 0; e < 4; e++) {
+                        const float lx = ox + n0[0] * 0.5f + ux * corner[e][0] + vx * corner[e][1];
+                        const float ly = oy + n0[1] * 0.5f + uy * corner[e][0] + vy * corner[e][1];
+                        const float lz = n0[2] * 0.5f + uz * corner[e][0] + vz * corner[e][1];
+                        float o[3];
+                        R(lx, ly, lz, o);
+                        f.P[e][0] = x + o[0] * cs;
+                        f.P[e][1] = y - 4 * u + o[1] * cs;
+                        zc += o[2] * 0.25f;
+                    }
+                    f.z = zc;
+                    const float lam = std::max(0.f, n[0] * Lx + n[1] * Ly + n[2] * Lz);
+                    const float hx = Lx, hy = Ly, hz = Lz + 1.f, hl = std::sqrt(hx * hx + hy * hy + hz * hz);
+                    const float spec = std::pow(std::max(0.f, (n[0] * hx + n[1] * hy + n[2] * hz) / hl), 24.f);
+                    const float sh = 0.28f + 0.85f * lam;
+                    Col fc{std::min(1.f, c.r * sh + 0.6f * spec), std::min(1.f, c.g * sh + 0.6f * spec), std::min(1.f, c.b * sh + 0.6f * spec), a};
+                    f.col = fc;
                 }
-                // lit from the top left: each corner by how it faces the light
-                Col cc[4];
-                for (int e = 0; e < 4; e++) {
-                    const float lit = ((P[e][0] - qx) * -0.6f + (P[e][1] - qy) * -0.8f) / (h * 1.41f);
-                    cc[e] = withA(mixc(c, lit > 0 ? H(0xffffff) : H(0x05060c), std::fabs(lit) * 0.35f), a);
-                }
-                p.tri(P[0][0], P[0][1], P[1][0], P[1][1], P[2][0], P[2][1], cc[0], cc[1], cc[2]);
-                p.tri(P[0][0], P[0][1], P[2][0], P[2][1], P[3][0], P[3][1], cc[0], cc[2], cc[3]);
+            }
+            std::sort(faces, faces + nf, [](const Face& A, const Face& B) { return A.z < B.z; });
+            for (int k2 = 0; k2 < nf; k2++) {
+                const Face& f = faces[k2];
+                // a face: its colour, a slightly lighter rim toward the light and a thin dark edge (the cube's bevel)
+                const Col rim = withA(mixc(f.col, H(0xffffff), 0.18f), a), edge = withA(mixc(f.col, H(0x05060c), 0.45f), a);
+                p.tri(f.P[0][0], f.P[0][1], f.P[1][0], f.P[1][1], f.P[2][0], f.P[2][1], edge, edge, edge);
+                p.tri(f.P[0][0], f.P[0][1], f.P[2][0], f.P[2][1], f.P[3][0], f.P[3][1], edge, edge, edge);
+                float Q[4][2];
+                const float mx2 = (f.P[0][0] + f.P[1][0] + f.P[2][0] + f.P[3][0]) * 0.25f, my2 = (f.P[0][1] + f.P[1][1] + f.P[2][1] + f.P[3][1]) * 0.25f;
+                for (int e = 0; e < 4; e++) { Q[e][0] = mx2 + (f.P[e][0] - mx2) * 0.88f; Q[e][1] = my2 + (f.P[e][1] - my2) * 0.88f; }
+                p.tri(Q[0][0], Q[0][1], Q[1][0], Q[1][1], Q[2][0], Q[2][1], rim, f.col, f.col);
+                p.tri(Q[0][0], Q[0][1], Q[2][0], Q[2][1], Q[3][0], Q[3][1], rim, f.col, f.col);
             }
         }
     };
