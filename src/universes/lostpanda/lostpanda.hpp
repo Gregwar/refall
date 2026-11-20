@@ -106,7 +106,9 @@ private:
     // ---- Pieces.
     struct CellInst { float a[4], b[4], c[4]; };
     std::vector<CellInst> cells_;
-    void cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float glow = 0.f, float seed = 0.f);
+    // (nb: the neighbours touching it, a mask: 1 above, 2 below, 4 left, 8 right; its grooves shaded on those sides)
+    void cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float glow = 0.f, float seed = 0.f,
+              int nb = 0);
     // each block's own grain and tone (a seed): the falling piece's, drawn as it spawns, kept by the stack (moved down
     // with its rows)
     float seeds_[22][10] = {};

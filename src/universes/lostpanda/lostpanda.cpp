@@ -91,14 +91,14 @@ vec3 lin(unsigned c) { return ugl::toLinear(hex(c)); }
 // A variant: the seven pieces, the HUD's accent, the lights' warmth.
 struct VariantDef {
     const char* name;
-    unsigned piece[7]; // the blocks: bamboo, muted (beige, gold, pale, tan; sage, green, olive)
+    unsigned piece[7]; // the blocks: bamboo, after the owner's mockup (beige, honey, pale, tan; sage, green, olive)
     unsigned accent, light;
 };
 const VariantDef VARIANTS[] = {
-    {"LANTERN", {0xcdbb93, 0x9aae74, 0xd6b46e, 0x7f9a5e, 0xd8c9a6, 0xa3a46c, 0xbfae8a}, 0xffc77a, 0xffc070},
-    {"SUNNY", {0xcdbb93, 0x9aae74, 0xd6b46e, 0x7f9a5e, 0xd8c9a6, 0xa3a46c, 0xbfae8a}, 0xa8d8ff, 0xffd890},
-    {"BLOSSOM", {0xcdbb93, 0x9aae74, 0xd6b46e, 0x7f9a5e, 0xd8c9a6, 0xa3a46c, 0xbfae8a}, 0xffb8cc, 0xffc8a0},
-    {"JADE", {0xcdbb93, 0x9aae74, 0xd6b46e, 0x7f9a5e, 0xd8c9a6, 0xa3a46c, 0xbfae8a}, 0xa8e8c0, 0xffd070},
+    {"LANTERN", {0xc1a476, 0x7f8a55, 0xc9a65c, 0x6f7e52, 0xcbae7c, 0x7a7a47, 0xb5a078}, 0xffc77a, 0xffc070},
+    {"SUNNY", {0xc1a476, 0x7f8a55, 0xc9a65c, 0x6f7e52, 0xcbae7c, 0x7a7a47, 0xb5a078}, 0xa8d8ff, 0xffd890},
+    {"BLOSSOM", {0xc1a476, 0x7f8a55, 0xc9a65c, 0x6f7e52, 0xcbae7c, 0x7a7a47, 0xb5a078}, 0xffb8cc, 0xffc8a0},
+    {"JADE", {0xc1a476, 0x7f8a55, 0xc9a65c, 0x6f7e52, 0xcbae7c, 0x7a7a47, 0xb5a078}, 0xa8e8c0, 0xffd070},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT; }
@@ -736,9 +736,9 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
 // =====================================================================================================
 
 void LostPandaUniverse::cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float glow,
-                             float seed) {
+                             float seed, int nb) {
     if (alpha <= 0.003f) return;
-    cells_.push_back({{x, y, half, 0.f}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, glow, seed}});
+    cells_.push_back({{x, y, half, (float)nb}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, glow, seed}});
 }
 
 float LostPandaUniverse::rideS() const { return T_RIDE_S * std::min(1.f, 1.f / paceScale()); }
@@ -747,6 +747,18 @@ void LostPandaUniverse::buildBoard(const Game& g) {
     const VariantDef& vd = VARIANTS[wrapV(variant_)];
     auto tintOf = [&](int t) { return lin(vd.piece[std::clamp(t, 0, 6)]); };
     const float darken = 1.f - 0.45f * smoothstepf(0.f, 1.f, over_);
+    // a piece's block's neighbours among its own four
+    auto pieceMask = [](const int (&cs)[4][2], int i) {
+        int m = 0;
+        for (int j = 0; j < 4; j++) {
+            const int ddx = cs[j][0] - cs[i][0], ddy = cs[j][1] - cs[i][1];
+            if (ddx == 0 && ddy == -1) m |= 1;
+            if (ddx == 0 && ddy == 1) m |= 2;
+            if (ddx == -1 && ddy == 0) m |= 4;
+            if (ddx == 1 && ddy == 0) m |= 8;
+        }
+        return m;
+    };
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
@@ -754,9 +766,13 @@ void LostPandaUniverse::buildBoard(const Game& g) {
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
             float& sd = seeds_[y][x];
             if (sd <= 0.f) sd = 0.02f + 0.96f * std::fmod(std::sin(x * 12.9898f + y * 78.233f) * 43758.5453f + 1e5f, 1.f);
-            // (a block with another on it: the shade of that one on its top; the seed's sign carries it)
-            const bool covered = y > Game::HIDDEN && g.cell(x, y - 1).type >= 0;
-            cell(p.x, p.y, 0.5f, tintOf(c.type) * darken, 1.f, 0, 0.f, 0.f, covered ? -sd : sd);
+            // (the blocks touching it: its grooves in their shade; a row still closing up after a clear touches none)
+            auto at = [&](int xx, int yy) {
+                return xx >= 0 && xx < Game::W && yy >= Game::HIDDEN && yy < Game::H && g.cell(xx, yy).type >= 0 &&
+                       g.rowOffset(yy) == g.rowOffset(y);
+            };
+            const int nb = (at(x, y - 1) ? 1 : 0) | (at(x, y + 1) ? 2 : 0) | (at(x - 1, y) ? 4 : 0) | (at(x + 1, y) ? 8 : 0);
+            cell(p.x, p.y, 0.5f, tintOf(c.type) * darken, 1.f, 0, 0.f, 0.f, sd, nb);
         }
     for (const Fading& f : fading_) cell(f.x, f.y, 0.5f, tintOf(f.type), 1.f, 0, saturate(f.t / CLEAR_T), 0.f, f.seed);
     if (g.hasPiece() && !g.over()) {
@@ -779,7 +795,7 @@ void LostPandaUniverse::buildBoard(const Game& g) {
             const auto& c = cells[i];
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            cell(w.x, w.y, 0.5f, tintOf(p.type), 1.f, 0, 0.f, 0.f, pieceSeeds_[i]);
+            cell(w.x, w.y, 0.5f, tintOf(p.type), 1.f, 0, 0.f, 0.f, pieceSeeds_[i], pieceMask(cells, i));
         }
     }
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
@@ -795,7 +811,7 @@ void LostPandaUniverse::buildBoard(const Game& g) {
         for (int i = 0; i < 4; i++) {
             const auto& c = cells[i];
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            cell(px, py, 0.5f * sc, tintOf(type), alpha, 0, 0.f, 0.f, 0.1f + 0.11f * type + 0.2f * i);
+            cell(px, py, 0.5f * sc, tintOf(type), alpha, 0, 0.f, 0.f, 0.1f + 0.11f * type + 0.2f * i, pieceMask(cells, i));
         }
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
@@ -803,6 +819,14 @@ void LostPandaUniverse::buildBoard(const Game& g) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
     }
+    // the cubes drawn from the far ones to the near ones as the eye sees them (it looks down on them from over the
+    // well's middle): the ghost first, then the lowest rows first, and in a row the outer columns first, so a block
+    // hides the top of the one under it and the inner side of the one beside it
+    std::stable_sort(cells_.begin(), cells_.end(), [](const CellInst& a, const CellInst& b) {
+        if (a.c[0] != b.c[0]) return a.c[0] > b.c[0];
+        if (std::fabs(a.a[1] - b.a[1]) > 0.01f) return a.a[1] < b.a[1];
+        return std::fabs(a.a[0]) > std::fabs(b.a[0]);
+    });
 }
 
 void LostPandaUniverse::sprite(std::vector<SpriteInst>& out, vec2 p, float size, const vec3& col, float alpha, int mode,
@@ -1585,12 +1609,20 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     if (!cells_.empty()) {
         glUseProgram(progCell_);
         setMat(progCell_, "uVP", vp_);
-        set3f(progCell_, "uLightC", lerp(look.key, vec3(1.f), 0.5f));
+        set3f(progCell_, "uLightC", lerp(look.key, vec3(1.f), 0.75f));
         set1f(progCell_, "uBridge", smoothstepf(0.2f, 0.9f, bridge));
         set3f(progCell_, "uBridgeInk", bridge_.ink);
+        // the eye the cubes are seen from: over the well's middle, far off, looking down a little
+        set1f(progCell_, "uEyeX", 0.f);
+        set1f(progCell_, "uEyeD", 110.f);
+        set1f(progCell_, "uTilt", 0.08f);
         glBindVertexArray(cellVao_);
         glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
         glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);
+        // their contact shadows first (on what is behind), then the cubes
+        set1f(progCell_, "uPass", 1.f);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
+        set1f(progCell_, "uPass", 0.f);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
     }
     drawSprites(sprites_, false);
