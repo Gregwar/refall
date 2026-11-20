@@ -518,15 +518,16 @@ void Worlds::kalCampaign() {
         const float mid = (ns - 1) * 0.5f;
         for (int k = 0; k < ns; k++) {
             const bool b = o && beaten(s, k);
-            const Col sc = o ? songCol(s, k) : hex(0x4a4c55);
+            // (a solved song in its colour; any other, locked or not, grey and faint)
+            const Col sc = b ? songCol(s, k) : hex(0x8a8c96);
             if (op < 0.98f) {
                 const float da = 0.07f * wk * (k - mid), r = (268 + 44 * f) * u;
-                p.circle(cx + std::cos(a + da) * r, cy + std::sin(a + da) * r, 4.2f * u, withA(sc, (1.f - op) * (!o ? 0.4f : b ? 1.f : 0.3f)));
+                p.circle(cx + std::cos(a + da) * r, cy + std::sin(a + da) * r, 4.2f * u, withA(sc, (1.f - op) * (b ? 1.f : 0.35f)));
             }
             if (op > 0.02f) {
                 const float da = fanStep(ns) * (k - mid) * op;
                 const float r0 = (300 + 18 * op) * u, r1 = r0 + 74 * u * op;
-                kite(cx, cy, a + da, r0, r1, 0.055f * op, b ? sc : mixc(sc, hex(0x101018), 0.4f), 0.95f * op, true, hex(0x08080c, 0.9f * op));
+                kite(cx, cy, a + da, r0, r1, 0.055f * op, b ? sc : mixc(sc, hex(0x101018), 0.55f), (b ? 0.95f : 0.6f) * op, true, hex(0x08080c, 0.9f * op));
                 if (b) {
                     const float r = (r0 + r1) * 0.5f;
                     p.setAdditive(true);
