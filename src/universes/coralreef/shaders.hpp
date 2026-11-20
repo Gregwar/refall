@@ -951,34 +951,40 @@ vec4 staghorn(vec2 q, float d) {
     return vec4(h, light, open, cover);
 }
 vec4 star(vec2 q) {
-    // one great corallite in the block, its fine septa radiating from its central pit out to the block's edges (in
-    // its second form a few smaller ones, packed, a valley between them)
-    vec2 c0 = (hash2(gOff + 1.7) - 0.5) * 0.22, id;
+    // one great corallite in the block, a pincushion: its septa short spikes radiating from its heart out to the
+    // block's edges (jittered cells in its polar coordinates, periodic round it: drawn out along the radius,
+    // crowding toward the heart); in its second form more of them, finer, a deeper gold
+    vec2 c0 = (hash2(gOff + 1.7) - 0.5) * 0.2;
     vec2 v = q - c0;
-    float r = length(v), n = 30.0, valley = 1.0, R = 0.75;
-    if (gAlt) {
-        vec4 w = voro(q * 2.1 + gOff, 0.7, id);
-        v = -w.zw / 2.1; r = w.x / 2.1; n = 18.0; R = 0.42;
-        valley = smoothstep(0.0, 0.25, w.y - w.x);
-    }
-    float ang = atan(v.y, v.x);
-    float sept = cos(ang * n + 4.0 * vnoise(q * 4.0 + gOff) + 2.0 * vnoise(q * 11.0 + gOff.yx) + r * 4.0);
-    // (broken here and there along their length, spiky)
-    sept = mix(sept, -0.2, smoothstep(0.45, 0.8, vnoise(vec2(ang * 3.0, r * 14.0) + gOff)) * 0.8);
-    // (they fade out toward the pit, where they crowd closer than a few pixels)
-    float fade = smoothstep(2.0, 4.0, r * 6.283 / n / gAA) * gLod;
-    float pit = smoothstep(0.06, 0.01, r) * 0.35;
+    float r = length(v), ang = atan(v.y, v.x);
+    float N = gAlt ? 30.0 : 22.0;
+    vec2 p = vec2((ang / 6.2832 + 0.5) * N, r * (gAlt ? 9.0 : 7.0) + gOff.y);
+    p.x += vnoise(vec2(r * 6.0, gOff.x)) * 1.5;
+    vec2 i = floor(p), f = fract(p);
+    float d1 = 8.0;
+    for (int y = -1; y <= 1; y++)
+        for (int x = -1; x <= 1; x++) {
+            vec2 g = vec2(x, y);
+            vec2 o = hash2(vec2(mod(i.x + g.x, N), i.y + g.y) + gOff.x);
+            vec2 rr = g + 0.5 + 0.7 * (o - 0.5) - f;
+            rr.y *= 0.45;
+            d1 = min(d1, dot(rr, rr));
+        }
+    // (fading out toward the heart, where they crowd closer than a few pixels)
+    float fade = smoothstep(1.5, 3.5, r * 6.2832 / N / gAA) * gLod;
+    float spike = smoothstep(0.55, 0.05, sqrt(d1)) * fade;
     float fuzz = vnoise(q * 26.0 + gOff) - 0.5;
-    float sp = smoothstep(-0.7, 0.9, sept + fuzz * 1.3) * fade;
-    float h = (0.022 * sp + 0.06 * smoothstep(R, 0.05, r)) * mix(0.5, 1.0, valley) - 0.04 * pit;
-    // (bright toward its heart, its outer septa deeper in tone)
-    float light = mix(0.45, 1.0, sp) * mix(0.45, 1.15, smoothstep(R * 0.85, R * 0.05, r)) * mix(0.6, 1.0, valley);
-    return vec4(h, light, mix(mix(0.45, 1.0, smoothstep(-0.8, 0.3, sept * fade + fuzz * 0.3)), 0.12, pit) * mix(0.5, 1.0, valley), 1.0);
+    float heart = smoothstep(0.7, 0.0, r);
+    float h = 0.025 * spike + 0.06 * heart + 0.006 * fuzz * gLod;
+    // (bright toward its heart, the deep between its outer spikes darker, warmer)
+    float light = mix(0.35, 1.05, max(spike, 1.0 - fade)) * mix(0.5, 1.15, heart) + 0.2 * fuzz * gLod;
+    float open = mix(0.4, 1.0, max(spike, 1.0 - fade * 0.8));
+    return vec4(h, light, open, 1.0);
 }
 vec4 porous(vec2 q) {
     vec2 id, id2;
-    vec4 v = voro(q * 5.6 + gOff, 0.85, id);
-    float rad = 0.34 + 0.12 * hash(id + 3.1);
+    vec4 v = voro(q * 4.8 + gOff, 0.8, id);
+    float rad = 0.32 + 0.12 * hash(id + 3.1);
     float pit = smoothstep(rad, rad * 0.55, v.x);
     float lip = smoothstep(rad * 1.6, rad * 1.02, v.x) * (1.0 - pit);
     // and small pits between
