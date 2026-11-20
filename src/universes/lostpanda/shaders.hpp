@@ -2719,30 +2719,39 @@ void main() {
     // each block its own tone: a little lighter or darker, a little warmer or cooler
     float h1 = fract(h0 * 17.31), h2 = fract(h0 * 41.7);
     t *= (0.88 + 0.22 * h1) * vec3(1.0 + 0.06 * (h2 - 0.5), 1.0, 1.0 - 0.08 * (h2 - 0.5));
-    // fibres: irregular in width and spacing, wandering a little as they run up, a few darker streaks of varying
-    // weight, now and then one broken off; a small knot on some blocks
-    float gx = q.x * 9.0 + 0.55 * n1(q.y * 2.3 + h0 * 9.0, h0) + 0.25 * n1(q.y * 6.1, h0 + 3.0);
+    // fibres, strong and irregular: each block its own density and contrast, wandering as they run, darker streaks
+    // of varying weight broken here and there, pale ones; some blocks cut across the grain (it runs sideways); a knot
+    // now and then
+    float h3 = fract(h0 * 63.1), h4 = fract(h0 * 91.7), h5 = fract(h0 * 27.9);
+    vec2 g = h3 > 0.78 ? vec2(q.y, -q.x) : q;   // (across the grain: about one block in five)
+    float dens = 7.0 + 6.0 * h4;
+    float gx = g.x * dens + 0.22 * n1(g.y * 1.6 + h0 * 9.0, h0) + 0.08 * n1(g.y * 5.1, h0 + 3.0);   // (straight, barely wandering)
     float fib = 0.5 * n1(gx * 1.3, h0) + 0.3 * n1(gx * 3.7 + 5.0, h0) + 0.2 * n1(gx * 9.3 + 2.0, h0);
     float sn = n1(gx * 2.2 + 11.0, h0);
-    float streak = smoothstep(0.78, 0.97, sn) * (0.4 + 0.6 * n1(gx * 0.7 + 3.0, h0));
-    streak *= smoothstep(0.15, 0.35, n1(q.y * 3.0 + gx * 0.5, h0 + 7.0));   // (broken here and there)
+    float streak = smoothstep(0.7, 0.95, sn) * (0.4 + 0.6 * n1(gx * 0.7 + 3.0, h0));
+    streak *= smoothstep(0.12, 0.32, n1(g.y * 3.0 + gx * 0.5, h0 + 7.0));
+    float pale = smoothstep(0.8, 0.97, n1(gx * 1.7 + 23.0, h0)) * smoothstep(0.1, 0.3, n1(g.y * 2.0 + gx, h0 + 2.0));
+    float contrast = 0.32 + 0.22 * h5;
+    // its shading: round across, but each block its own (how round, which side catches more light)
     float cyl = sat(1.0 - sq(q.x / 0.5));
-    vec3 c = t * (0.87 + 0.2 * fib) * mix(0.88, 1.02, sqrt(cyl)) * mix(0.94, 1.03, smoothstep(-0.45, 0.45, q.y));
-    c = mix(c, t * 0.7, streak * 0.45 * lod2(aa));
-    // a few pale fibres too
-    c = mix(c, mix(t, vec3(1.0), 0.3), smoothstep(0.85, 0.98, n1(gx * 1.7 + 23.0, h0)) * 0.35 * lod2(aa));
+    float side = (h1 - 0.5) * 0.24;
+    vec3 c = t * (1.0 - contrast * 0.5 + contrast * fib) * mix(0.8 + 0.12 * h2, 1.03, sqrt(cyl)) * (1.0 + side * q.x * 2.0)
+             * mix(0.93, 1.04, smoothstep(-0.45, 0.45, q.y));
+    c = mix(c, t * 0.55, streak * (0.5 + 0.3 * h5) * lod2(aa));
+    c = mix(c, mix(t, vec3(1.0), 0.35), pale * 0.45 * lod2(aa));
     vec2 kp = vec2(fract(h0 * 3.7) - 0.5, fract(h0 * 5.3) - 0.5) * 0.5;
-    float knot = exp(-dot((q - kp) / vec2(0.05, 0.09), (q - kp) / vec2(0.05, 0.09))) * step(0.7, fract(h0 * 9.1));
-    c = mix(c, t * 0.6, knot * 0.6);
-    // a faint node across (some blocks)
-    float nodeY = -0.2 + 0.4 * fract(h0 * 7.13);
-    c = mix(c, t * 0.78, (1.0 - smoothstep(0.012, 0.012 + aa * 1.5, abs(q.y - nodeY))) * 0.5 * step(0.4, h0));
-    // its top face, seen a little from above: a pale band along the top, its lower edge bowed a touch; a little
-    // shade along its bottom; a thin darker line round it
+    float knot = exp(-dot((q - kp) / vec2(0.05, 0.09), (q - kp) / vec2(0.05, 0.09))) * step(0.68, fract(h0 * 9.1));
+    c = mix(c, t * 0.55, knot * 0.65);
+    // a node across (some blocks, along the grain's blocks only)
+    float nodeY = -0.25 + 0.5 * fract(h0 * 7.13);
+    c = mix(c, t * 0.72, (1.0 - smoothstep(0.012, 0.012 + aa * 1.5, abs(q.y - nodeY + 0.008 * sin(q.x * 9.0 + h0 * 5.0)))) * 0.55
+                             * step(0.45, h0) * step(h3, 0.78));
+    // its top face, seen a little from above: a soft pale band along the top (each block its own), a little shade
+    // along its bottom
     float yt = 0.3 - 0.025 * sqrt(cyl);
     float topF = smoothstep(yt - 0.05, yt + 0.12, q.y);
-    c = mix(c, mix(t, vec3(1.0), 0.2) * mix(0.96, 1.04, sqrt(cyl)), topF * 0.6);
-    c *= mix(0.86, 1.0, smoothstep(-0.45, -0.34, q.y));
+    c = mix(c, mix(t, vec3(1.0), 0.2) * mix(0.96, 1.04, sqrt(cyl)), topF * (0.4 + 0.35 * h4));
+    c *= mix(0.82 + 0.08 * h2, 1.0, smoothstep(-0.45, -0.32, q.y));
     float edge = -d;
     c *= mix(0.74, 1.0, smoothstep(0.0, 0.07, edge));   // (a soft darker rim: the blocks read apart though touching)
     c = mix(c, t * 0.35, 1.0 - smoothstep(0.0, 0.01 + aa, edge));
