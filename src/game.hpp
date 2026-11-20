@@ -48,6 +48,9 @@ public:
     void setHeldShift(int dir) { heldShift_ = dir; }
     bool rotate(int dir); // +1 CW, -1 CCW
     bool softDrop();      // one row
+    // The bonus: a piece resting on the stack set down (by a fresh press of down, as a hard drop would); false if
+    // none rests there or no bonus runs
+    bool settle();
     void hardDrop();
     void hold();
     // Gravity tick, driven by the music's beat.
@@ -78,6 +81,7 @@ public:
     // Queries
     const Cell& cell(int x, int y) const { return board_[y][x]; }
     bool hasPiece() const { return active_; }
+    bool grounded() const { return active_ && grounded_; } // the piece rests on the stack (as of the last update)
     const Piece& piece() const { return cur_; }
     void pieceCells(const Piece& p, int out[4][2]) const;
     int ghostY() const;
@@ -142,8 +146,8 @@ public:
     // Slow-motion bonus: each cleared line charges one step of a gauge (bonusLines() steps to fill it; a
     // quad charges one extra step, so 5). Once full, activateBonus()
     // starts it: the gauge drains over bonusSeconds(). Meanwhile nothing falls (the app stops gravity, the song keeps
-    // its speed) and a piece resting on the stack never locks by itself (only a hard drop sets it down): time to think
-    // or hold; when it ends, a resting piece gets a fresh lock delay.
+    // its speed) and a piece resting on the stack never locks by itself (a hard drop, or down pressed again once it
+    // rests, sets it down: settle()): time to think or hold; when it ends, a resting piece gets a fresh lock delay.
     // Lines cleared during the bonus don't charge it. EXPERT's is weaker: more lines to charge it, shorter.
     static constexpr int BONUS_LINES = 12, BONUS_LINES_EXPERT = 20;
     static constexpr float BONUS_SECONDS = 10.f, BONUS_SECONDS_EXPERT = 5.f;

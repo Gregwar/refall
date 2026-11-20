@@ -208,6 +208,15 @@ bool Game::softDrop() {
     return true;
 }
 
+bool Game::settle() {
+    if (!active_ || !bonusActive_) return false;
+    Piece below = cur_;
+    below.y++;
+    if (!collides(below)) return false;
+    lockPiece();
+    return true;
+}
+
 void Game::hardDrop() {
     if (!active_) return;
     int gy = ghostY();

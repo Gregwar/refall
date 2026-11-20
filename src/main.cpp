@@ -1901,7 +1901,10 @@ int App::run() {
             } else {
                 for (int i = 0; i < input_.repeatSteps(A_LEFT); i++) game_.move(-1);
                 for (int i = 0; i < input_.repeatSteps(A_RIGHT); i++) game_.move(1);
+                // (the bonus: down pressed again on a piece already resting sets it down; held, it only brings it there)
+                const bool rested = game_.bonusActive() && game_.grounded();
                 for (int i = 0; i < input_.repeatSteps(A_SOFT); i++) game_.softDrop();
+                if (rested && input_.pressed(A_SOFT)) game_.settle();
                 if (input_.pressed(A_CW)) game_.rotate(1);
                 if (input_.pressed(A_CCW)) game_.rotate(-1);
                 if (input_.pressed(A_HOLD)) game_.hold();
