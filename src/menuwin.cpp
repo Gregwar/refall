@@ -140,7 +140,7 @@ struct Worlds {
     void kalVoyages();
     void kalOptions();
     void kalGamepad();
-    static constexpr float OPT_TOP = 250, OPT_STEP = 90; // the options' panel: its top (clear of the title's), a row's step
+    static constexpr float OPT_STEP = 90; // the options' panel: a row's step
     float optMid = 470; // its middle (from its height)
     void optionPanel(const char* title, int n);
     void optionRows(int n, const char* const* label, float focus);
@@ -651,8 +651,9 @@ void Worlds::optionPanel(const char* title, int n) {
     p.glass(X(660), Y(90), 600 * u, 130 * u, 24 * u, u, 0.f, 0.45f);
     p.text(F::JOSEFIN_LIGHT, title, X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
     const float h = std::max(n, 3) * OPT_STEP + 70;
-    optMid = OPT_TOP + h * 0.5f;
-    p.glass(X(560), Y(OPT_TOP), 800 * u, h * u, 24 * u, u, 0.f, 0.5f);
+    // centred in the screen's height below the title's panel (which ends at 220)
+    optMid = 220.f + (1080.f - 220.f) * 0.5f;
+    p.glass(X(560), Y(optMid - h * 0.5f), 800 * u, h * u, 24 * u, u, 0.f, 0.5f);
 }
 
 // lines of text centred in the panel, a row's step apart (alpha each)

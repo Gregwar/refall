@@ -754,7 +754,9 @@ void LostPandaUniverse::buildBoard(const Game& g) {
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
             float& sd = seeds_[y][x];
             if (sd <= 0.f) sd = 0.02f + 0.96f * std::fmod(std::sin(x * 12.9898f + y * 78.233f) * 43758.5453f + 1e5f, 1.f);
-            cell(p.x, p.y, 0.5f, tintOf(c.type) * darken, 1.f, 0, 0.f, 0.f, sd);
+            // (a block with another on it: the shade of that one on its top; the seed's sign carries it)
+            const bool covered = y > Game::HIDDEN && g.cell(x, y - 1).type >= 0;
+            cell(p.x, p.y, 0.5f, tintOf(c.type) * darken, 1.f, 0, 0.f, 0.f, covered ? -sd : sd);
         }
     for (const Fading& f : fading_) cell(f.x, f.y, 0.5f, tintOf(f.type), 1.f, 0, saturate(f.t / CLEAR_T), 0.f, f.seed);
     if (g.hasPiece() && !g.over()) {

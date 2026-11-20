@@ -2709,7 +2709,7 @@ void main() {
     vec2 q = vLocal / shrink;
     // a square block of bamboo wood: its corners just rounded, fibres running up it (each block its own, from its
     // place), a faint node across, a bevel (lit along its top and left, shaded along its bottom and right)
-    float d = sdBox(q, vec2(0.5 - 0.1)) - 0.1;   // (touching its neighbours, stacked: only the corners round off)
+    float d = sdBox(q, vec2(0.5 - 0.17)) - 0.17;   // (touching its neighbours, stacked: only the corners round off)
     float inside = 1.0 - smoothstep(-aa, aa, d * shrink);
     vec3 t = vB.rgb;
     if (mode == 1) {
@@ -2720,7 +2720,8 @@ void main() {
         return;
     }
     vec2 sd = floor(vA.xy * 1.7 + 0.5);
-    float h0 = vC.w > 0.0 ? vC.w : fract(sin(dot(sd, vec2(12.9898, 78.233))) * 43758.5453);
+    float h0 = vC.w != 0.0 ? abs(vC.w) : fract(sin(dot(sd, vec2(12.9898, 78.233))) * 43758.5453);
+    float covered = vC.w < 0.0 ? 1.0 : 0.0;   // (a block resting on it)
     // each block its own tone: a little lighter or darker, a little warmer or cooler
     float h1 = fract(h0 * 17.31), h2 = fract(h0 * 41.7);
     t *= (0.88 + 0.22 * h1) * vec3(1.0 + 0.06 * (h2 - 0.5), 1.0, 1.0 - 0.08 * (h2 - 0.5));
@@ -2744,13 +2745,6 @@ void main() {
              * mix(0.93, 1.04, smoothstep(-0.45, 0.45, q.y));
     c = mix(c, t * 0.55, streak * (0.5 + 0.3 * h5) * lod2(aa));
     c = mix(c, mix(t, vec3(1.0), 0.35), pale * 0.45 * lod2(aa));
-    // dark shadows, irregular: blotches where the cane darkened, and a shade creeping in from one side with a ragged
-    // edge (each block its own side and amount)
-    float blot = n1(gx * 0.33 + 3.0, h0 + 9.0) * (0.35 + 0.65 * n1(g.y * 1.7 + h0 * 4.0, h0 + 11.0));   // (along the fibres)
-    c *= 1.0 - 0.5 * smoothstep(0.25, 0.7, blot);
-    float ang0 = h4 * 6.2832;
-    float sideD = dot(q, vec2(cos(ang0), sin(ang0))) + 0.09 * (n1(dot(q, vec2(-sin(ang0), cos(ang0))) * 7.0, h0 + 13.0) - 0.5);
-    c *= 1.0 - (0.25 + 0.25 * h5) * smoothstep(0.12, 0.42, sideD);
     vec2 kp = vec2(fract(h0 * 3.7) - 0.5, fract(h0 * 5.3) - 0.5) * 0.5;
     float knot = exp(-dot((q - kp) / vec2(0.05, 0.09), (q - kp) / vec2(0.05, 0.09))) * step(0.68, fract(h0 * 9.1));
     c = mix(c, t * 0.55, knot * 0.65);
@@ -2765,7 +2759,12 @@ void main() {
     c = mix(c, mix(t, vec3(1.0), 0.2) * mix(0.96, 1.04, sqrt(cyl)), topF * (0.4 + 0.35 * h4));
     c *= mix(0.82 + 0.08 * h2, 1.0, smoothstep(-0.45, -0.32, q.y));
     float edge = -d;
-    c *= mix(0.74, 1.0, smoothstep(0.0, 0.07, edge));   // (a soft darker rim: the blocks read apart though touching)
+    // the shade cast on its top by the block resting on it
+    c *= 1.0 - covered * 0.32 * smoothstep(0.2, 0.5, q.y);
+    // a dark contour shadow round it, irregular: its width wandering along the edge (each block its own)
+    float around = atan(q.y, q.x);
+    float rimW = 0.05 + 0.07 * n1(around * 2.5 + h0 * 11.0, h0 + 17.0) + 0.03 * n1(around * 7.0, h0 + 19.0);
+    c *= mix(0.42, 1.0, smoothstep(0.0, rimW, edge));
     c = mix(c, t * 0.35, 1.0 - smoothstep(0.0, 0.01 + aa, edge));
     c += t * vC.z * 0.6;
     c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.5);
