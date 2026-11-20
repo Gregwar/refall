@@ -494,6 +494,13 @@ void App::startTrack(std::shared_ptr<Track> t) {
     track_ = std::move(t);
     if (mode_ == MODE_CAMPAIGN) campaignSongStarted();
     if (viewer_) viewerSongStarted();
+    // free play without the menu: a song that ran out over a game over brings a new game (the next one never opens on
+    // the last one's full well)
+    if (mode_ == MODE_FREE && !menuEnabled_ && !viewer_ && game_.over()) {
+        game_.restart();
+        overTime_ = 0;
+        std::printf("[app] game over: a new game with the new song\n");
+    }
     // Coming in from the black with its title card: a song that has an intro plays from the title on; one that
     // starts straight in waits until the game is back and starts with it, on its very first beat.
     songHeld_ = break_ == BREAK_IN && !songHasIntro();
@@ -1814,7 +1821,8 @@ int App::run() {
         if (input_.pressed(A_NEXT_SONG) && !testSkipNow)
             std::printf("[input] next song pressed (%zu songs, next %s)\n", lib_.size(),
                         nextTrack_ ? ("ready: " + nextTrack_->title).c_str() : ("loading: " + lib_.loadingTitle()).c_str());
-        if ((input_.pressed(A_NEXT_SONG) || testSkipNow) && lib_.size() > 1 && mode_ != MODE_CAMPAIGN && !viewer_) {
+        // (not on a game over: Enter, "next song", is one of the keys that start a new game there)
+        if ((input_.pressed(A_NEXT_SONG) || testSkipNow) && lib_.size() > 1 && mode_ != MODE_CAMPAIGN && !viewer_ && !game_.over()) {
             wantSkip_ = true;
             skipToast_ = 2.5f;
         }
@@ -1881,8 +1889,7 @@ int App::run() {
                 // the menu; without the menu (songs on the command line) a key starts a new game.
                 overTime_ += dt;
                 if (menuEnabled_ && overTime_ > 2.5f && anyKeyPressed()) { toMenu(Menu::FREE); swap(); continue; }
-                bool any = false;
-                for (Action a : {A_LEFT, A_RIGHT, A_SOFT, A_HARD, A_CW, A_CCW, A_HOLD, A_PAUSE}) any |= input_.pressed(a);
+                const bool any = anyKeyPressed() || input_.pressed(A_NEXT_SONG); // (Enter too)
                 if ((any && overTime_ > 2.5f) || ((opt_.autoplay || shotMode) && overTime_ > 4.f)) {
                     game_.restart();
                     overTime_ = 0;
