@@ -197,6 +197,9 @@ private:
     float pieceSeeds_[4] = {0.13f, 0.37f, 0.61f, 0.89f}, pieceColony_ = 0.5f; // the falling piece's
     Rng blockRng_{9157};                // the blocks' seeds (apart from the world's draws)
     struct Fading { float x, y; int type; float t, seed, colony; int nb, place; };
+    // a cleared block bursts into chunks of its coral, flung out through the water, slowing, sinking, fading
+    struct Chunk { vec2 p, v; float half, age, life, seed, colony; int type; };
+    std::vector<Chunk> chunks_;
     std::vector<Fading> fading_;
     struct Puff { vec2 p, v; float age, life, size; };
     std::vector<Puff> puffs_;

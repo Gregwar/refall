@@ -914,6 +914,24 @@ void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
             if (sd <= 0.f) sd = 0.02f + 0.96f * blockRng_.uniform();
             fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), 0.f, sd, co, nb, place});
+            // it bursts: a chunk from each part of the block, flung out from its middle (and up a little), each
+            // its own size and coral
+            for (int j = 0; j < 2; j++)
+                for (int i = 0; i < 3; i++) {
+                    Chunk ch;
+                    const float ox = (i - 1) * 0.3f + rng_.range(-0.08f, 0.08f), oy = (j - 0.5f) * 0.42f + rng_.range(-0.08f, 0.08f);
+                    ch.p = vec2{p.x + ox, p.y + oy};
+                    const float sp = rng_.range(1.6f, 4.2f);
+                    const float len = std::max(0.08f, std::sqrt(ox * ox + oy * oy));
+                    ch.v = vec2{ox / len * sp + rng_.range(-1.2f, 1.2f), oy / len * sp + rng_.range(0.5f, 2.5f)};
+                    ch.half = rng_.range(0.2f, 0.3f);
+                    ch.age = 0.f;
+                    ch.life = rng_.range(0.8f, 1.25f);
+                    ch.seed = std::fmod(sd + 0.137f * (i + 3 * j + 1), 1.f) + 0.001f;
+                    ch.colony = co;
+                    ch.type = std::clamp(cl.type, 0, 6);
+                    chunks_.push_back(ch);
+                }
             pts.push_back(V(p.x, p.y));
             // the bubbles burst out of the row sideways behind the well, then rise
             const float dist = camD_ * rng_.range(0.7f, 0.95f), sc = camD_ / 15.6f;
@@ -1255,8 +1273,15 @@ void CoralReefUniverse::buildBoard(const Game& g) {
             const int nb = (with(x, y - 1) ? 1 : 0) | (with(x, y + 1) ? 2 : 0) | (with(x - 1, y) ? 4 : 0) | (with(x + 1, y) ? 8 : 0);
             cell(p.x, p.y, 0.5f, tintOf(c.type) * darken, 1.f, 0, 0.f, c.type, sd, co, nb, known(x, y) ? places_[y][x] : strayPlace[y][x]);
         }
+    // the cleared blocks: a flash of the whole block (a few frames), then its chunks flying apart
     for (const Fading& f : fading_)
-        cell(f.x, f.y, 0.5f, tintOf(f.type), 1.f, 0, saturate(f.t / CLEAR_T), f.type, f.seed, f.colony, f.nb, f.place);
+        if (f.t < 0.05f) cell(f.x, f.y, 0.5f, tintOf(f.type), 1.f, 0, 0.35f, f.type, f.seed, f.colony, f.nb, f.place);
+    for (const Chunk& ch : chunks_) {
+        if (ch.age < 0.04f) continue;
+        const float k = ch.age / ch.life;
+        cell(ch.p.x, ch.p.y, ch.half * (1.f - 0.35f * k * k), tintOf(ch.type), 1.f - smoothstepf(0.55f, 1.f, k), 0, 0.f, ch.type, ch.seed,
+             ch.colony, 0, 0);
+    }
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -1697,6 +1722,13 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     }
     seeds_.erase(std::remove_if(seeds_.begin(), seeds_.end(), [](const Seed& s) { return s.age >= s.life; }), seeds_.end());
     for (auto& fd : fading_) fd.t += dt;
+    for (Chunk& ch : chunks_) { // (water: a strong drag, a slow sinking)
+        ch.age += dt;
+        const float drag = std::exp(-3.2f * dt);
+        ch.v = vec2{ch.v.x * drag, ch.v.y * drag - 2.4f * dt};
+        ch.p = vec2{ch.p.x + ch.v.x * dt, ch.p.y + ch.v.y * dt};
+    }
+    chunks_.erase(std::remove_if(chunks_.begin(), chunks_.end(), [](const Chunk& c) { return c.age > c.life; }), chunks_.end());
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > CLEAR_T; }), fading_.end());
     for (Puff& p : puffs_) {
         p.age += dt;
