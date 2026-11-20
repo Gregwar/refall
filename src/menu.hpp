@@ -60,7 +60,8 @@ public:
         bool clear = false;
         std::string heading, detail, note;
         int score = 0, lines = 0;
-        Choice retry;
+        Choice retry;      // RETRY SONG: the song the game ended on (NONE: no choice, any key leaves)
+        Choice retryStage; // RETRY STAGE: the stage from its first song
     };
     void openDebrief(const Debrief& d);
     // The frame on screen (the bound framebuffer's back buffer) kept as the next debrief's backdrop, frozen and darkened.
@@ -146,8 +147,8 @@ private:
     // the game's logo, the ringed planet (menuwin.cpp): its opening `k` seconds in (99: open), its colours from silver
     // (0, a game over) to full (1)
     void drawOrbitLogo(float cx, float cy, float k, float color);
-    int debSel_ = 0;                               // the game over's choice: 0 RETRY, 1 MENU
-    bool debRetry_ = false;                        // RETRY chosen: the debrief fades out, then the run starts again
+    int debSel_ = 0;                               // the game over's choice: 0 RETRY SONG, 1 RETRY STAGE, 2 MENU
+    bool debRetry_ = false;                        // a RETRY chosen: the debrief fades out, then the run starts again
     bool updateDebrief(const Input& in, float dt, Choice& out); // true while it shows
     void drawDebrief(int w, int h);
     void drawEnterFade();
