@@ -392,7 +392,8 @@ uniform int uNumBoats;
 uniform vec4 uFalls[4];      // x z, radius, -
 uniform int uNumFalls;
 // a crisp edge (antialiased over a pixel) of a value against its threshold
-float edge(float v, float th) { float w = clamp(fwidth(v) * 0.75, 1e-5, th * 0.4); return smoothstep(th - w, th + w, v); }
+// (over a pixel and a half: the depth comes from the half resolution seabed, its steps hidden, the edge steady)
+float edge(float v, float th) { float w = clamp(fwidth(v) * 1.5, 1e-5, th * 0.4); return smoothstep(th - w, th + w, v); }
 // the glints of one scale: in each cell (of size S, world) now and then a white sliver, or two in a V, flattened on
 // the water, drifting with the swell, growing and shrinking over its life; fades out once it shrinks under a pixel
 float glints(vec2 p, float S, float foot, float t) {
@@ -442,21 +443,18 @@ void main() {
     vec4 d4;
     for (int i = 0; i < 4; i++) {
         float a = texelFetch(uSeabed, clamp(h0 + ivec2(i % 2, i / 2), ivec2(0), hm), 0).a;
-        d4[i] = a == 0.0 ? 1e5 : abs(a);
+        d4[i] = a == 0.0 ? t + 60.0 / max(-dy, 0.02) : abs(a);  // (no terrain: as deep as the deepest band)
     }
     float sbd = mix(mix(d4.x, d4.y, hf.x), mix(d4.z, d4.w, hf.x), hf.y);
     float thick = sbd > t ? sbd - t : 1e4;
     float depthV = min(thick * (-dy), 60.0);
-    // the bands: deep blue, a teal ledge, the turquoise shallows
+    // the bands: the deep blue (darker near, lighter toward the horizon), a teal ledge, the turquoise shallows
+    // (their depths clear of a lagoon's floor, which would break into patches)
+    float far = smoothstep(alt * 1.5 + 40.0, alt * 14.0 + 2500.0, t);
+    vec3 col = mix(uDeep * 0.82, mix(uDeep, uShallow, 0.3), far);
     vec3 ledge = mix(uShallow, uDeep, 0.5);
-    vec3 col = uDeep;
-    col = mix(col, ledge, 1.0 - edge(depthV, 9.0));
-    col = mix(col, uShallow, 1.0 - edge(depthV, 3.2));
-    // the open sea: big flat triangles, a shade apart (faded out far, where they would shimmer)
-    vec2 tp = wp / 46.0;
-    vec2 ti = floor(tp), tf = fract(tp);
-    float tri = h21(ti * 1.37 + step(tf.x, tf.y) * 0.5);
-    col *= 1.0 + (tri - 0.5) * 0.07 * (1.0 - smoothstep(4.0, 16.0, foot)) * edge(depthV, 3.2);
+    col = mix(col, ledge, 1.0 - edge(depthV, 16.0));
+    col = mix(col, uShallow, 1.0 - edge(depthV, 7.5));
     // lit by the sky (flat: no glint, no reflection)
     float light = dot(uSunCol, vec3(0.3, 0.5, 0.2)) * 0.5 + dot(uAmb, vec3(0.3, 0.5, 0.2)) * 0.8;
     col *= light;
@@ -499,6 +497,7 @@ void main() {
     }
     // the glints over the open water, two scales (the bigger one only from a little height: skimming the waves, it filled the view)
     float gl = max(glints(wp, 7.0, foot, uTime), glints(wp, 26.0, foot, uTime * 0.8) * step(15.0, alt)) * edge(depthV, 1.5) * (1.0 - uCalm);
+    gl *= step(alt * 4.0 + 6.0, t);  // (none right under a low camera, where they would fill the view)
     foam = max(foam, gl);
     vec3 foamLit = uFoam * (uSunCol * (0.55 * max(uSunDir.y, 0.1) + 0.3) + uAmb * 0.9);
     col = mix(col, foamLit, clamp(foam, 0.0, 1.0));
