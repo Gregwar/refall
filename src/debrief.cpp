@@ -137,12 +137,14 @@ void Menu::drawDebrief(int w, int h) {
     p.tri(cx, Y(832), cx + 7 * u, Y(840), cx, Y(848), withA(hex(0xfff0c8), a2), withA(hex(0xe8c06a), a2), withA(hex(0x8a6a30), a2));
     p.tri(cx, Y(832), cx, Y(848), cx - 7 * u, Y(840), withA(hex(0xfff0c8), a2), withA(hex(0x8a6a30), a2), withA(hex(0xc8a050), a2));
     const float a3 = at(1.3f);
-    p.text(F::JOSEFIN, debrief_.detail, cx, Y(950), 17 * u, withA(dim, dim.a * a3), 0, 0.3f);
+    // (a note over the choices: the three lines spread a little further apart)
+    const bool crowded = debrief_.retry.kind != Choice::NONE && !debrief_.note.empty();
+    p.text(F::JOSEFIN, debrief_.detail, cx, Y(crowded ? 940 : 950), 17 * u, withA(dim, dim.a * a3), 0, 0.3f);
     if (!debrief_.note.empty())
-        p.text(F::JOSEFIN, debrief_.note, cx, Y(990), 17 * u, withA(gold, 0.85f * (debrief_.clear ? at(COLOR_AT + 1.2f) : a3)), 0, 0.3f);
+        p.text(F::JOSEFIN, debrief_.note, cx, Y(crowded ? 974 : 990), 17 * u, withA(gold, 0.85f * (debrief_.clear ? at(COLOR_AT + 1.2f) : a3)), 0, 0.3f);
     if (debrief_.retry.kind != Choice::NONE) { // RETRY SONG, RETRY STAGE or MENU, the chosen one underlined
         static const char* ITEMS[3] = {"RETRY SONG", "RETRY STAGE", "MENU"};
-        const float a4 = sstep((t - INPUT_AFTER + 0.4f) / 0.5f) * out, gap = 90 * u, y = Y(1018), size = 26 * u;
+        const float a4 = sstep((t - INPUT_AFTER + 0.4f) / 0.5f) * out, gap = 90 * u, y = Y(crowded ? 1038 : 1018), size = 26 * u;
         // (laid out by their widths, an even gap between them, centred as a row)
         float w[3], total = 2 * gap;
         for (int i = 0; i < 3; i++) total += w[i] = p.width(F::JOSEFIN, ITEMS[i], size, 0.35f);

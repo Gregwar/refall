@@ -215,8 +215,9 @@ static void usage() {
         "  --progress FILE      the progress file (default: campaign-progress.tsv in the user data folder)\n"
         "  --playlists FILE     free play's remembered playlists (default: playlists.tsv in the user data folder)\n"
         "  --no-menu-music      no music on the menu's screens\n"
-        "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free|debrief-over|debrief-clear,\n"
-        "                       --menu-hover S:SONG, --menu-time SECONDS into the screen), then exit (testing)\n"
+        "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free|debrief-over|debrief-clear|\n"
+        "                       debrief-songs|debrief-over-songs|unlock, --menu-hover S:SONG, --menu-time SECONDS\n"
+        "                       into the screen), then exit (testing)\n"
         "  --menu-clip OUT.mp4  a video walking through the menus (needs ffmpeg), then exit; --menu-demo shows\n"
         "                       made-up campaign progress in shots (clips always do; never saved)\n");
 }
@@ -292,6 +293,10 @@ private:
         // The song's velocity is not a constant: it climbs from `velFrom` to the song's own over its first `velRamp`
         // seconds (a stage's first song from a warm-up, the next ones from where the previous song ended).
         float velFrom = 1, velTo = 1, velRamp = 0;
+        // as it started: the stages open on each difficulty (stage * DIFF_COUNT + difficulty), and whether its stage was
+        // done on its difficulty (cleared, or its songs all beaten)
+        std::vector<char> openBefore;
+        bool doneBefore = false;
     } run_;
     bool muffleWas_ = false;
     // where the menu was: saved next to the progress (debounced while the menu shows, and when leaving it)
@@ -321,6 +326,13 @@ private:
     void campaignSongStarted();
     void campaignSongSurvived();
     void campaignEnd();
+    void runSnapshot(); // (a run's start: what it may open)
+    // A run's end (or game over): its stage, its songs now all beaten (in this run or over several), counts as cleared
+    // (`score` and `lines` its record, kept if better); the stages it opened get their unlocks on the wheel. `fresh`:
+    // the stage is done for the first time on this difficulty (its clear is celebrated), `nextOpened`: the next stage
+    // just opened on it, `expertOpened`: the stage itself on EXPERT (done on HARD).
+    struct RunOutcome { bool fresh = false, nextOpened = false, expertOpened = false; };
+    RunOutcome campaignOutcome(int score, int lines);
     // A Voyage game over: once the board has dissolved, the frame is kept and the debrief comes over it.
     bool debriefPending_ = false;
     void gameOverDebrief();
@@ -1622,6 +1634,7 @@ int App::run() {
                     run_ = Run{};
                     run_.stage = pl.stage;
                     run_.diff = pl.voyageDiff;
+                    runSnapshot();
                     game_.reset(runSeed_);
                     for (int k = 0; k < (int)campaign_.stages()[pl.stage].songs.size(); k++) progress_.setBeaten(pl.stage, k, run_.diff, 0, 0);
                     std::printf("[cheat] stage %d cleared\n", pl.stage + 1);
@@ -1819,7 +1832,13 @@ int App::run() {
             audio_.setPaused(true);
         }
         if (quitNow) {
-            if (menuEnabled_) { toMenu(mode_ == MODE_CAMPAIGN ? Menu::CAMPAIGN : Menu::FREE); swap(); continue; }
+            if (menuEnabled_) {
+                // (the songs survived may have done the stage: its clear and unlocks play on the wheel)
+                if (runStage()) campaignOutcome(run_.survived ? game_.score() : run_.songStartScore, run_.survived ? game_.lines() : run_.songStartLines);
+                toMenu(mode_ == MODE_CAMPAIGN ? Menu::CAMPAIGN : Menu::FREE);
+                swap();
+                continue;
+            }
             quit_ = true;
         }
         // still loading the first song: Esc goes back to the menu
@@ -2455,6 +2474,7 @@ void App::beginSession(const Menu::Choice& c) {
         run_.stage = c.stage;
         run_.from = c.song;
         run_.diff = c.difficulty;
+        runSnapshot();
         for (int k = c.song; k < (int)st.songs.size(); k++) paths.push_back(st.songs[k].entry());
         fixed = st.songs[c.song].level[c.difficulty];
         // EXPERT's fall is a little faster again on top of its velocities (which stop at the top, 40)
@@ -2571,27 +2591,53 @@ void App::campaignSongSurvived() {
     if (run_.current + 1 >= (int)st->songs.size()) run_.finishing = true;
 }
 
-// The stage's last song is over: a clear when the run started from its first song.
+void App::runSnapshot() {
+    run_.openBefore.assign((size_t)campaign_.size() * DIFF_COUNT, 0);
+    for (int s = 0; s < campaign_.size(); s++)
+        for (int d = 0; d < DIFF_COUNT; d++) run_.openBefore[s * DIFF_COUNT + d] = progress_.unlocked(s, d);
+    run_.doneBefore = progress_.cleared(run_.stage, run_.diff) || progress_.allBeaten(run_.stage, run_.diff);
+}
+
+App::RunOutcome App::campaignOutcome(int score, int lines) {
+    const int stage = run_.stage, diff = run_.diff;
+    RunOutcome r;
+    if (progress_.allBeaten(stage, diff)) progress_.setCleared(stage, diff, score, lines);
+    progress_.save();
+    r.fresh = progress_.cleared(stage, diff) && !run_.doneBefore;
+    for (int s = 0; s < campaign_.size() && (size_t)s * DIFF_COUNT < run_.openBefore.size(); s++)
+        for (int d = 0; d < DIFF_COUNT; d++) {
+            if (run_.openBefore[s * DIFF_COUNT + d] || !progress_.unlocked(s, d)) continue;
+            menu_.celebrateUnlock(s, d);
+            if (s == stage + 1 && d == diff) r.nextOpened = true;
+            if (s == stage && d == DIFF_EXPERT) r.expertOpened = true;
+            std::printf("[campaign] stage %d opened on %s\n", s + 1, difficultyName(d));
+        }
+    if (r.fresh) {
+        menu_.setCursor(stage, 0);
+        menu_.celebrateClear(stage, stage + 1 < campaign_.size() ? stage + 1 : -1);
+    }
+    return r;
+}
+
+// The stage's last song is over: a clear when the run started from its first song, or when its songs are now all
+// beaten (the others in earlier runs).
 void App::campaignEnd() {
     const int stage = run_.stage;
+    menu_.setCursor(stage, 0);
+    const RunOutcome r = campaignOutcome(game_.score(), game_.lines());
+    std::string note = r.nextOpened ? "NEXT STAGE UNLOCKED" : "";
+    if (stage + 1 >= campaign_.size() && (run_.from == 0 || r.fresh)) note = "THE VOYAGE IS COMPLETE";
+    if (r.expertOpened) note += note.empty() ? "EXPERT UNLOCKED" : "   /   EXPERT UNLOCKED";
     char sub[128];
-    if (run_.from == 0) {
-        progress_.setCleared(stage, run_.diff, game_.score(), game_.lines());
-        progress_.save();
-        const bool next = stage + 1 < campaign_.size();
-        std::snprintf(sub, sizeof(sub), "%s  SCORE %s  LINES %d%s", difficultyName(run_.diff), text::thousands(game_.score()).c_str(), game_.lines(),
-                      next ? "   NEXT STAGE UNLOCKED" : "   THE VOYAGE IS COMPLETE");
-        std::printf("[campaign] stage %d cleared on %s (%d points, %d lines)\n", stage + 1, difficultyName(run_.diff),
-                    game_.score(), game_.lines());
-        menu_.setCursor(stage, 0);
-        menu_.celebrateClear(stage, next ? stage + 1 : -1);
+    if (run_.from == 0 || r.fresh) {
+        std::printf("[campaign] stage %d cleared on %s (%d points, %d lines)%s\n", stage + 1, difficultyName(run_.diff),
+                    game_.score(), game_.lines(), run_.from == 0 ? "" : ", its last songs beaten");
         std::snprintf(sub, sizeof(sub), "STAGE %d CLEARED   /   %s", stage + 1, difficultyName(run_.diff));
-        toDebrief({true, "CONGRATULATIONS", sub, next ? "NEXT STAGE UNLOCKED" : "THE VOYAGE IS COMPLETE", game_.score(), game_.lines()});
+        toDebrief({true, "CONGRATULATIONS", sub, note, game_.score(), game_.lines()});
     } else {
         std::snprintf(sub, sizeof(sub), "STAGE %d   /   SONGS %d-%zu SURVIVED   /   %s", stage + 1, run_.from + 1,
                       campaign_.stages()[stage].songs.size(), difficultyName(run_.diff));
-        menu_.setCursor(stage, 0);
-        toDebrief({true, "WELL PLAYED", sub, "", game_.score(), game_.lines()});
+        toDebrief({true, "WELL PLAYED", sub, note, game_.score(), game_.lines()});
     }
 }
 
@@ -2603,6 +2649,14 @@ void App::gameOverDebrief() {
                   st ? (int)st->songs.size() : 0, difficultyName(run_.diff));
     std::printf("[campaign] game over: stage %d song %d, %d points, %d lines\n", run_.stage + 1, run_.current + 1,
                 game_.lastScore(), game_.lines());
+    // the songs survived before may have done the stage (its others beaten in earlier runs): told under the words, its
+    // clear and unlocks played on the wheel once back there (the record: the points and lines up to the song lost)
+    const RunOutcome r = campaignOutcome(run_.songStartScore, run_.songStartLines);
+    char note[128] = "";
+    if (r.fresh)
+        std::snprintf(note, sizeof(note), "STAGE %d CLEARED   /   %s", run_.stage + 1,
+                      r.nextOpened ? "NEXT STAGE UNLOCKED" : run_.stage + 1 >= campaign_.size() ? "THE VOYAGE IS COMPLETE" : "ALL SONGS BEATEN");
+    if (r.expertOpened) std::snprintf(note + std::strlen(note), sizeof(note) - std::strlen(note), "%sEXPERT UNLOCKED", r.fresh ? "   /   " : "");
     Menu::Choice retry; // RETRY SONG: the song the game ended on, on to the stage's end from there
     retry.kind = Menu::Choice::PLAY_CAMPAIGN;
     retry.difficulty = run_.diff;
@@ -2610,7 +2664,7 @@ void App::gameOverDebrief() {
     retry.song = run_.current;
     Menu::Choice stage = retry; // RETRY STAGE: the stage from its first song
     stage.song = 0;
-    toDebrief({false, "GAME OVER", sub, "", game_.lastScore(), game_.lines(), retry, stage});
+    toDebrief({false, "GAME OVER", sub, note, game_.lastScore(), game_.lines(), retry, stage});
 }
 
 // The end of a run: back to the menu, on the debrief (then the Voyage's screen, on the same stage and difficulty).
@@ -2749,6 +2803,7 @@ int App::runMenuShot() {
         // made-up progress, in memory only (never saved): by default stages 1 and 2 cleared, stage 3 started, the rest
         // locked; "normal-done": every stage cleared on NORMAL
         progress_ = Progress{};
+        progress_.setCampaign(&campaign_); // (its songs resolved: a stage whose songs are all beaten counts)
         playlists_.demo();
         if (opt_.menuDemoKind == "normal-done") {
             // every stage cleared on NORMAL (every song beaten), the first five on EASY (songs of the sixth beaten),
@@ -2790,7 +2845,7 @@ int App::runMenuShot() {
     }
     menu_.init(&campaign_, &progress_);
     const std::string& sc = opt_.menuScreen;
-    menu_.open(sc == "campaign" || sc.rfind("debrief", 0) == 0 ? Menu::CAMPAIGN : sc == "free" ? Menu::FREE : Menu::TITLE);
+    menu_.open(sc == "campaign" || sc == "unlock" || sc.rfind("debrief", 0) == 0 ? Menu::CAMPAIGN : sc == "free" ? Menu::FREE : Menu::TITLE);
     if (sc == "free" && opt_.levelGiven) menu_.setFreeLevel(opt_.level, true); // (the level's row in focus)
     if (sc == "debrief-over" || sc == "debrief-clear") { // a made-up run's end (over the black: no game frame here)
         const int songs = campaign_.size() > 2 ? (int)campaign_.stages()[2].songs.size() : 5;
@@ -2801,12 +2856,44 @@ int App::runMenuShot() {
         retry.kind = Menu::Choice::PLAY_CAMPAIGN;
         menu_.openDebrief(sc == "debrief-over" ? Menu::Debrief{false, "GAME OVER", b, "", 27340, 96, retry, retry}
                                                : Menu::Debrief{true, "CONGRATULATIONS", b, "NEXT STAGE UNLOCKED", 48710, 163});
-        if (sc == "debrief-clear" && campaign_.size() > 3) { // then back on the Voyage: stage 3 turns cleared
+        if (sc == "debrief-clear" && campaign_.size() > 3) { // then back on the Voyage: stage 3 turns cleared, 4 opens
             progress_.setCleared(2, DIFF_NORMAL, 48710, 163);
             menu_.setCampaignDifficulty(DIFF_NORMAL);
             menu_.setCursor(2, 0);
             menu_.celebrateClear(2, 3);
+            menu_.celebrateUnlock(3, DIFF_NORMAL);
         }
+    }
+    // the stage 3 done over several runs (its first two songs beaten before), as the game ends it: its last two songs
+    // survived (debrief-songs), or song 3 survived and song 4, beaten before, lost (debrief-over-songs); then the wheel
+    if ((sc == "debrief-songs" || sc == "debrief-over-songs") && campaign_.size() > 3) {
+        const int ns = (int)campaign_.stages()[2].songs.size();
+        menu_.setCampaignDifficulty(DIFF_NORMAL);
+        menu_.setCursor(2, 2);
+        if (sc == "debrief-over-songs") progress_.setBeaten(2, ns - 1, DIFF_NORMAL, 10450, 39);
+        run_ = Run{};
+        run_.stage = 2;
+        run_.from = 2;
+        run_.diff = DIFF_NORMAL;
+        runSnapshot();
+        const int last = sc == "debrief-songs" ? ns : ns - 1;
+        for (int k = 2; k < last; k++) progress_.setBeaten(2, k, DIFF_NORMAL, 10100 + 230 * k, 37 + k);
+        if (sc == "debrief-songs") campaignEnd();
+        else {
+            run_.current = ns - 1;
+            mode_ = MODE_CAMPAIGN; // (runStage)
+            gameOverDebrief();
+        }
+        Menu::Debrief d = menu_.debrief(); // (a made-up score: no game was played)
+        d.score = sc == "debrief-songs" ? 21460 : 13870;
+        d.lines = sc == "debrief-songs" ? 79 : 52;
+        menu_.openDebrief(d);
+    }
+    if (sc == "unlock" && campaign_.size() > 3) { // the Voyage, stage 4 just opened (stage 3 done, celebrated before)
+        progress_.setCleared(2, DIFF_NORMAL, 48710, 163);
+        menu_.setCampaignDifficulty(DIFF_NORMAL);
+        menu_.setCursor(2, 0);
+        menu_.celebrateUnlock(3, DIFF_NORMAL);
     }
     if (!opt_.menuHover.empty()) {
         int st = 1, sg = 1;
@@ -2831,7 +2918,7 @@ int App::runMenuShot() {
             {27.1, "right"}, {27.8, "ok"}, {30.8, "enter"}, {32.6, "up"}};
         const double END = std::getenv("REFALL_MENU_CLIP_SECONDS") ? std::atof(std::getenv("REFALL_MENU_CLIP_SECONDS")) : 34.5;
         std::vector<std::pair<double, std::string>> keys = testList("REFALL_TEST_KEYS");
-        if (keys.empty() && sc.rfind("debrief", 0) != 0) { // (a debrief's clip: its animation, no key)
+        if (keys.empty() && sc.rfind("debrief", 0) != 0 && sc != "unlock") { // (a debrief's or an unlock's clip: its animation, no key)
             for (auto& [t, k] : WALK) keys.push_back({t, k});
             const std::string link = "youtube.com/playlist?list=PLPWC9IDC1n_Q";
             for (size_t i = 0; i < link.size(); i++) keys.push_back({28.2 + i * 0.05, "type:" + link.substr(i, 1)});

@@ -67,6 +67,7 @@ public:
     // --reset: forgets everything (the file is removed); prints what it held.
     void reset();
     void unlockAll() { unlockAll_ = true; }
+    void setCampaign(const Campaign* camp) { camp_ = camp; } // (an in-memory progress: the made-up one of shots)
     bool allUnlocked() const { return unlockAll_; }
 
     bool unlocked(int stage, int diff) const {
