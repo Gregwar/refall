@@ -472,11 +472,22 @@ void Worlds::kalCampaign() {
         kite(cx, cy, a, (140 - 5 * f + 10 * op) * u, (246 + 52 * f + 12 * op) * u, (0.17f + 0.09f * f + 0.07f * op) * wk, pc,
              !o ? 0.95f : lerpf(0.85f, 0.97f, ck), true,
              focusClosed && (!cel || cT > TURN + 1.f) ? hex(0xffffff, 0.95f * pulse) : o ? edgeCl : hex(0x8a90a0, 0.6f));
-        if (focusClosed && f > 0.5f) { // the focused petal calls: arcs spreading from its tip
-            const float tip = (246 + 52 * f + 12 * op) * u;
-            for (int w = 0; w < 3; w++) {
-                const float k = std::fmod(t * 0.7f + w / 3.f, 1.f);
-                p.arc(cx, cy, tip + (8 + 26 * k) * u, a - 0.1f * wk, a + 0.1f * wk, 2 * u, withA(mixc(c, hex(0xffffff), 0.5f), 0.8f * std::sin(k * PI) * f));
+        if (focusClosed && f > 0.5f) { // the focused petal calls: now and then a copy of its contour swells out, fading fast
+            const float r0 = (140 - 5 * f + 10 * op) * u, r1 = (246 + 52 * f + 12 * op) * u, ha = (0.17f + 0.09f * f + 0.07f * op) * wk;
+            const float rm = lerpf(r0, r1, 0.45f);
+            float px[4] = {cx + std::cos(a) * r0, cx + std::cos(a - ha) * rm, cx + std::cos(a) * r1, cx + std::cos(a + ha) * rm};
+            float py[4] = {cy + std::sin(a) * r0, cy + std::sin(a - ha) * rm, cy + std::sin(a) * r1, cy + std::sin(a + ha) * rm};
+            const float mx = (px[0] + px[1] + px[2] + px[3]) * 0.25f, my = (py[0] + py[1] + py[2] + py[3]) * 0.25f;
+            const float k = std::fmod(t, 1.8f) / 0.7f; // a wave every 1.8 s, gone in 0.7 s
+            if (k < 1.f) {
+                const float sc = 1.f + 0.7f * (1.f - (1.f - k) * (1.f - k));
+                const Col wc = withA(mixc(c, hex(0xffffff), 0.6f), 0.75f * std::pow(1.f - k, 2.5f) * f);
+                p.setAdditive(true);
+                for (int e = 0; e < 4; e++) {
+                    const int g = (e + 1) % 4;
+                    p.line(mx + (px[e] - mx) * sc, my + (py[e] - my) * sc, mx + (px[g] - mx) * sc, my + (py[g] - my) * sc, 2.f * u, wc, 1.5f * u);
+                }
+                p.setAdditive(false);
             }
         }
         if (cl) { // a cleared petal glows from within
