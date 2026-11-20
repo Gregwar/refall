@@ -273,6 +273,7 @@ uniform vec2 uViewC, uViewH;
 uniform float uPxP;          // board units per pixel of this target
 uniform float uD, uCamY;     // the camera: the world point at the screen's origin
 uniform float uTime, uBeat, uPeak, uDrop, uKick, uRain, uStars, uClouds, uOver, uWorldA, uSlow, uMid, uLamp, uDawn;
+uniform float uWorldSat; // the world's saturation (muted while lost, full in a drop and at the family)
 uniform vec3 uSkyTop, uSkyHor, uFog, uSunCol, uBridgeCol;
 uniform vec4 uSun;           // screen x, y, radius, strength
 uniform float uSubLight;     // the station's light (it comes on as the cub nears)
@@ -2137,6 +2138,7 @@ R"(        bandC = surfaceBand(w, p);
         vec3 tone = mix(vec3(0.62, 0.28, 0.72), vec3(1.0, 0.5, 0.62), smoothstep(0.02, 0.35, lum));
         c = mix(c, lum * tone * 1.95, uDrop * 0.6);
     }
+    c = max(mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, uWorldSat), 0.0);
     c = mix(c, c * vec3(0.3, 0.32, 0.4), uOver * 0.75);
     c = mix(uBridgeCol, c, uWorldA);
     frag = vec4(max(c, 0.0), 1.0);

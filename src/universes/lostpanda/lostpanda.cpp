@@ -1452,6 +1452,9 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         set1f(pw, "uPeak", wp);
         set1f(pw, "uMid", wm);
         set1f(pw, "uDrop", std::min(1.f, dropAmt_ + swell_ * 0.3f));
+        // the world's saturation: muted while the cub is lost (its sadness), full and a little more in a drop, full
+        // again as it nears its family
+        set1f(pw, "uWorldSat", std::max(0.58f + 0.42f * reunion_, 0.58f + 0.62f * std::min(1.f, dropAmt_ + swell_ * 0.3f)));
         set1f(pw, "uKick", kickS_);
         set1f(pw, "uRain", look.rain);
         set1f(pw, "uStars", look.stars);
