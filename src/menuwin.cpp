@@ -324,7 +324,7 @@ void Worlds::kalBackground(const std::string& cur) {
     satNow += (sat - satNow) * k;
     duoNow += (duo - duoNow) * k;
     p.kaleido(g_prev.empty() ? g_curSeed : g_prevSeed, g_curSeed, g_prev.empty() ? 1.f : sstep(g_mix), X(cxNow), Y(cyNow), t * 0.025f + (m.aStage_ + m.aStageTurns_) * (TAU / 12.f) * 0.5f + (menuSeed() >> 8) % 1000 * (TAU / 1000.f), 12,
-              mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow);
+              mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow, (menuSeed() % 997) / 997.f);
 }
 
 // A cut gem in the shape of a kite: four facets round a table at its waist, each lit by how it faces the light (from

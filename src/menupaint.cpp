@@ -326,11 +326,11 @@ void Painter::tri(float x0, float y0, float x1, float y1, float x2, float y2, Co
 }
 
 void Painter::kaleido(float seedA, float seedB, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time,
-                      float level, float saturation, float duo) {
+                      float level, float saturation, float duo, float launch) {
     static const char* KFS = R"(#version 330 core
 out vec4 o;
 uniform vec2 uRes, uC;
-uniform float uMix, uRot, uTime, uLevel, uScale, uSat, uDuo, uSeedA, uSeedB;
+uniform float uMix, uRot, uTime, uLevel, uScale, uSat, uDuo, uSeedA, uSeedB, uLaunch;
 uniform int uSeg;
 uniform vec3 uTint;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -413,16 +413,16 @@ void main() {
     // SPACE: no glass, deep space on the whole screen (unmirrored): a great nebula of wisps and filaments, cool on the
     // left in the stage's hue and its neighbours (magenta, blue, a little cyan), warm and golden on the right toward
     // the star in the corner, dark dust lanes through it; a dense field of stars, thicker in the clouds; asteroids
-    // drifting by, tumbling. The sky slides a little as the stages turn.
+    // drifting by, tumbling. The sky holds still as the stages turn (its shape is the launch's; its colours the stage's).
     vec3 tv = vivid(uTint, 1.6);
     // a space palette (deep violet blue, magenta pink, a touch of cyan, gold), the stage's hue blended into it
-    vec3 base = mix(vec3(0.45, 0.3, 1.0), tv, 0.25), n2 = mix(vec3(0.95, 0.32, 0.72), tv, 0.25);
+    vec3 base = mix(vec3(0.45, 0.3, 1.0), tv, 0.5), n2 = mix(vec3(0.95, 0.32, 0.72), tv, 0.4);
     vec3 n3 = vec3(0.3, 0.85, 1.0), warm = vec3(1.0, 0.7, 0.36);
     float asp = uRes.x / uRes.y;
     vec2 sp = fc / uRes.y;
-    vec2 drift = vec2(uRot * 0.03 + uTime * 0.003, uTime * 0.001);
+    vec2 drift = vec2(uTime * 0.003, uTime * 0.001);
     vec2 w = sp + drift;
-    float seedOff = mix(h21(vec2(uSeedA, 1.0)), h21(vec2(uSeedB, 1.0)), uMix) * 30.0;
+    float seedOff = uLaunch * 30.0;
     vec2 nw = w * 1.4 + vec2(seedOff, 0.0);
     // domain warping: the gas curls round itself
     vec2 q1 = vec2(vn(nw * 1.1 + uTime * 0.006), vn(nw * 1.1 + 5.2 - uTime * 0.005));
@@ -544,6 +544,7 @@ void main() {
     glUseProgram(kalProg_);
     ugl::set1f(kalProg_, "uSeedA", seedA);
     ugl::set1f(kalProg_, "uSeedB", seedB);
+    ugl::set1f(kalProg_, "uLaunch", launch);
     ugl::set2f(kalProg_, "uRes", (float)lw, (float)lh);
     ugl::set2f(kalProg_, "uC", cx * sx, cy * sy);
     ugl::set1f(kalProg_, "uScale", (float)h_ / lh);
