@@ -342,6 +342,7 @@ void Progress::load(const std::string& path, const Campaign* camp) {
 }
 
 bool Progress::save() const {
+    if (path_.empty()) return false; // (an in-memory progress, never loaded: the made-up one of shots)
     std::error_code ec;
     fs::create_directories(fs::path(path_).parent_path(), ec);
     const std::string tmp = path_ + ".tmp";

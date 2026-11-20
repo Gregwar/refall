@@ -112,9 +112,24 @@ bool Menu::selectVoyage(const std::string& id) {
     row_ = 1;
     petal_ = false;
     celebrate_ = -1;
+    unlock_ = -1;
+    unlocks_.clear(); // (they were the other voyage's)
     aStage_ = (float)stage_;
     aOpen_ = 0;
     return true;
+}
+
+void Menu::celebrateUnlock(int stage, int diff) {
+    for (const Unlock& x : unlocks_)
+        if (x.stage == stage && x.diff == diff) return;
+    unlocks_.push_back({stage, diff});
+}
+
+bool Menu::unlockToPlay(int stage, int diff) const {
+    if (unlock_ == stage && unlockDiff_ == diff && unlockT_ < UNLOCK_OPEN) return true;
+    for (const Unlock& x : unlocks_)
+        if (x.stage == stage && x.diff == diff) return true;
+    return false;
 }
 
 void Menu::enterVoyage(std::string id) {
@@ -282,12 +297,33 @@ Menu::Choice Menu::update(const Input& in, float dt) {
     if (Choice r; updateDebrief(in, dt, r)) return r;
     if (celebrate_ >= 0 && screen_ == CAMPAIGN) {
         celebrateT_ += dt;
-        if (stage_ != celebrate_ || row_ != 1 || petal_) celebrate_ = -1; // the player moved: it ends (cleared)
-        else if (celebrateT_ >= CELEBRATE_MOVE) {
+        if (stage_ != celebrate_ || row_ != 1 || petal_) { // the player moved: it ends (cleared), and the unlocks it led to
+            celebrate_ = -1;
+            unlocks_.erase(std::remove_if(unlocks_.begin(), unlocks_.end(), [&](const Unlock& x) { return x.diff == diff_; }), unlocks_.end());
+        } else if (celebrateT_ >= CELEBRATE_MOVE) {
             if (celebrateNext_ >= 0) stage_ = celebrateNext_;
             celebrate_ = -1;
         }
     }
+    if (screen_ == CAMPAIGN && unlock_ >= 0) {
+        unlockT_ += dt;
+        // (the player moved: it ends, the petal open)
+        if (stage_ != unlock_ || row_ != unlockRow_ || petal_ || diff_ != unlockDiff_ || unlockT_ >= UNLOCK_END) unlock_ = -1;
+    }
+    if (screen_ == CAMPAIGN && celebrate_ < 0 && unlock_ < 0) // the next unlock to play on this difficulty
+        for (size_t i = 0; i < unlocks_.size(); i++) {
+            if (unlocks_[i].diff != diff_) continue;
+            unlock_ = unlocks_[i].stage;
+            unlockDiff_ = diff_;
+            unlocks_.erase(unlocks_.begin() + i);
+            // (the wheel turns to it first, unless it stands there)
+            unlockT_ = std::fabs(std::remainder(aStage_ - (float)unlock_, (float)std::max(1, camp_ ? camp_->size() : 1))) > 0.2f ? -UNLOCK_LEAD : 0.f;
+            stage_ = unlock_;
+            song_ = 0;
+            petal_ = false;
+            unlockRow_ = row_;
+            break;
+        }
     // a playlist being read: its result
     if (fetch_.valid() && fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         const Fetched r = fetch_.get();

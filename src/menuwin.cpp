@@ -66,7 +66,8 @@ struct Worlds {
         const std::string& sp = m.camp_->stages()[s].songs[k].universe;
         return sp.empty() ? "VECTOR" : sp;
     }
-    bool open(int s) const { return !m.progress_ || m.progress_->unlocked(s, m.diff_); }
+    // (a stage whose unlock is still to play is drawn locked: see Menu::celebrateUnlock)
+    bool open(int s) const { return (!m.progress_ || m.progress_->unlocked(s, m.diff_)) && !m.unlockToPlay(s, m.diff_); }
     bool beaten(int s, int k) const { return m.progress_ && m.progress_->beaten(s, k, m.diff_); }
     bool cleared(int s) const { return m.progress_ && m.progress_->cleared(s, m.diff_); }
     // a song's colour: its stage's hue, in a gradient across the stage's songs (song 1 lighter and a touch warmer,
@@ -132,7 +133,9 @@ struct Worlds {
     void tabs(F f, Col ink, Col accent, float track);
     void menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track, float alpha = 1.f);
     void kalBackground(const std::string& cur);
-    void kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC);
+    // (`clip` > 0: only the kite's part within that distance of (cx, cy) along its axis, cut straight across)
+    void kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC, float clip = 0.f);
+    void padlock(float x, float y, float s, float rot, float open, Col c);
     void wheel(float cx, float cy, float R, float rot, float alpha = 1.f);
     void medallion(float cx, float cy, float R, Col hue, float alpha = 1.f, float ring = 1.f);
     void kalTitle();
@@ -348,7 +351,35 @@ void Worlds::kalBackground(const std::string& cur) {
 
 // A cut gem in the shape of a kite: four facets round a table at its waist, each lit by how it faces the light (from
 // the top left), the table brightest; `lead` rims it in `leadC`, with fine lines between its facets.
-void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC) {
+void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC, float clip) {
+    // the cut: what lies past `clip` along the axis is dropped (a triangle's cut edges take the colours between)
+    const float ax = std::cos(a), ay = std::sin(a);
+    auto past = [&](float x, float y) { return clip > 0.f ? (x - cx) * ax + (y - cy) * ay - clip : -1.f; };
+    auto tri = [&](float x0, float y0, float x1, float y1, float x2, float y2, Col c0, Col c1, Col c2) {
+        if (clip <= 0.f) { p.tri(x0, y0, x1, y1, x2, y2, c0, c1, c2); return; }
+        const float V[3][2] = {{x0, y0}, {x1, y1}, {x2, y2}};
+        const Col C[3] = {c0, c1, c2};
+        float ox[4], oy[4];
+        Col oc[4];
+        int n = 0;
+        for (int i = 0; i < 3; i++) {
+            const int j = (i + 1) % 3;
+            const float di = past(V[i][0], V[i][1]), dj = past(V[j][0], V[j][1]);
+            if (di <= 0.f) { ox[n] = V[i][0]; oy[n] = V[i][1]; oc[n++] = C[i]; }
+            if ((di <= 0.f) != (dj <= 0.f)) {
+                const float k = di / (di - dj);
+                ox[n] = lerpf(V[i][0], V[j][0], k); oy[n] = lerpf(V[i][1], V[j][1], k); oc[n++] = mixc(C[i], C[j], k);
+            }
+        }
+        for (int i = 2; i < n; i++) p.tri(ox[0], oy[0], ox[i - 1], oy[i - 1], ox[i], oy[i], oc[0], oc[i - 1], oc[i]);
+    };
+    auto line = [&](float x0, float y0, float x1, float y1, float w, Col lc) {
+        const float d0 = past(x0, y0), d1 = past(x1, y1);
+        if (d0 > 0.f && d1 > 0.f) return;
+        if (d0 > 0.f) { const float k = d0 / (d0 - d1); x0 = lerpf(x0, x1, k); y0 = lerpf(y0, y1, k); }
+        else if (d1 > 0.f) { const float k = d1 / (d1 - d0); x1 = lerpf(x1, x0, k); y1 = lerpf(y1, y0, k); }
+        p.line(x0, y0, x1, y1, w, lc);
+    };
     const float rm = lerpf(r0, r1, 0.45f), rt = lerpf(r0, r1, 0.52f);
     const float P[4][2] = {{cx + std::cos(a) * r0, cy + std::sin(a) * r0},
                            {cx + std::cos(a - halfAng) * rm, cy + std::sin(a - halfAng) * rm},
@@ -363,13 +394,48 @@ void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng
         const float lit = 0.5f + 0.5f * (dx * -0.55f + dy * -0.83f) / len; // 1: facing the light
         const Col edge = withA(mixc(c, hex(0x04040a), 0.62f - 0.5f * lit), alpha);
         const Col mid = withA(mixc(c, lit > 0.5f ? hex(0xffffff) : hex(0x04040a), std::fabs(lit - 0.5f) * 0.5f), alpha);
-        p.tri(tx, ty, P[e][0], P[e][1], P[g][0], P[g][1], table, e % 2 ? mid : edge, e % 2 ? edge : mid);
+        tri(tx, ty, P[e][0], P[e][1], P[g][0], P[g][1], table, e % 2 ? mid : edge, e % 2 ? edge : mid);
     }
     if (lead) {
         const float w = 2.4f * u;
-        for (int e = 0; e < 4; e++) p.line(P[e][0], P[e][1], P[(e + 1) % 4][0], P[(e + 1) % 4][1], w, leadC);
+        for (int e = 0; e < 4; e++) line(P[e][0], P[e][1], P[(e + 1) % 4][0], P[(e + 1) % 4][1], w, leadC);
         const Col fine = hex(0xffffff, 0.22f * alpha);
-        for (int e = 0; e < 4; e++) p.line(tx, ty, P[e][0], P[e][1], 0.9f * u, fine);
+        for (int e = 0; e < 4; e++) line(tx, ty, P[e][0], P[e][1], 0.9f * u, fine);
+    }
+}
+
+// A padlock (as Painter::lock: size s, centred on its body's top) turned by `rot`; `open` 0..1 springs its shackle:
+// it rises out of the body and swings out round its right leg.
+void Worlds::padlock(float x, float y, float s, float rot, float open, Col c) {
+    const float cr = std::cos(rot), sr = std::sin(rot);
+    auto P = [&](float lx, float ly, float& ox, float& oy) { ox = x + lx * cr - ly * sr; oy = y + lx * sr + ly * cr; };
+    // the body: two triangles (a turned square), a rounded rect when straight
+    if (std::fabs(rot) < 1e-3f) p.rrect(x - s * 0.45f, y - s * 0.15f, s * 0.9f, s * 0.7f, s * 0.12f, c);
+    else {
+        float q[4][2];
+        P(-s * 0.45f, -s * 0.15f, q[0][0], q[0][1]); P(s * 0.45f, -s * 0.15f, q[1][0], q[1][1]);
+        P(s * 0.45f, s * 0.55f, q[2][0], q[2][1]); P(-s * 0.45f, s * 0.55f, q[3][0], q[3][1]);
+        p.tri(q[0][0], q[0][1], q[1][0], q[1][1], q[2][0], q[2][1], c, c, c);
+        p.tri(q[0][0], q[0][1], q[2][0], q[2][1], q[3][0], q[3][1], c, c, c);
+    }
+    // the shackle: an arch of two legs, lifted by `open` and swung round its right leg's foot
+    const float lift = s * 0.24f * std::min(1.f, open * 1.5f), swing = 0.6f * sstep((open - 0.25f) / 0.75f);
+    const float hx = s * 0.3f, hy = -s * 0.12f; // the right leg's foot (the pivot)
+    const float cs = std::cos(swing), sn = std::sin(swing), w = s * 0.13f;
+    auto S = [&](float lx, float ly, float& ox, float& oy) { // a point of the shackle, swung, lifted, turned with the lock
+        const float dx = lx - hx, dy = ly - hy;
+        P(hx + dx * cs - dy * sn, hy + dx * sn + dy * cs - lift, ox, oy);
+    };
+    const float R = s * 0.3f, top = -s * 0.32f; // the arch's centre (its legs hang from there to the body's top)
+    float ax, ay, bx, by;
+    for (int side = -1; side <= 1; side += 2) { // the legs
+        S(side * R, top, ax, ay); S(side * R, -s * 0.12f, bx, by);
+        p.line(ax, ay, bx, by, w, c, 0.8f * u);
+    }
+    for (int i = 0; i < 8; i++) { // the arch
+        const float t0 = PI + PI * i / 8.f, t1 = PI + PI * (i + 1) / 8.f;
+        S(R * std::cos(t0), top + R * std::sin(t0), ax, ay); S(R * std::cos(t1), top + R * std::sin(t1), bx, by);
+        p.line(ax, ay, bx, by, w, c, 0.8f * u);
     }
 }
 
@@ -437,18 +503,33 @@ void Worlds::kalCampaign() {
     const int celS = m.celebrate_ >= 0 && m.celebrate_ < n && open(m.celebrate_) && cleared(m.celebrate_) ? m.celebrate_ : -1;
     const float celT = m.celebrateT_;
     constexpr float TURN = 2.3f; // when it turns
+    // A stage just opened (see Menu::celebrateUnlock), drawn last as well, over a lighter shade: drawn locked up to
+    // then, its padlock grows and shakes, springs open and flies off; the petal fills with its hue from its base to its
+    // tip under a line of light, its number disc flashes, a copy of its contour spreads out and its songs light up.
+    const int unS = celS < 0 && m.unlock_ >= 0 && m.unlock_ < n && m.unlockDiff_ == m.diff_ ? m.unlock_ : -1;
+    const float uT = m.unlockT_;
+    constexpr float OPEN = Menu::UNLOCK_OPEN; // when its lock springs open
+    const int top = celS >= 0 ? celS : unS;
     for (int ii = 0; ii < n; ii++) {
-        const int s = celS < 0 ? ii : ii < celS ? ii : ii < n - 1 ? ii + 1 : celS;
-        const bool cel = s == celS;
+        const int s = top < 0 ? ii : ii < top ? ii : ii < n - 1 ? ii + 1 : top;
+        const bool cel = s == celS, unl = s == unS;
         if (cel) {
             const float shade = 0.62f * sstep(std::clamp(celT / 0.5f, 0.f, 1.f)) * (1.f - sstep(std::clamp((celT - TURN - 0.6f) / 0.9f, 0.f, 1.f)));
             if (shade > 0.f) p.rrect(-10.f, -10.f, m.fw_ + 20.f, m.fh_ + 20.f, 0.f, hex(0x000000, shade));
         }
-        const float cT = cel ? celT : 99.f;
+        const float cT = cel ? celT : 99.f, uK = unl ? uT : 99.f;
+        if (unl) {
+            const float shade = 0.5f * sstep((uK + 0.3f) / 0.6f) * (1.f - sstep((uK - OPEN - 0.8f) / 0.8f));
+            if (shade > 0.f) p.rrect(-10.f, -10.f, m.fw_ + 20.f, m.fh_ + 20.f, 0.f, hex(0x000000, shade));
+        }
         float a = ang((float)s);
         if (cel && cT > 0.35f && cT < TURN) { // the shake: wider and faster up to the turn
             const float tau = cT - 0.35f, q = tau / (TURN - 0.35f);
             a += 0.04f * q * std::sqrt(q) * std::sin(TAU * (5.f * tau + 4.6f * tau * tau));
+        }
+        if (unl && uK > 0.3f && uK < OPEN) { // a tremor, with its lock's shake
+            const float tau = uK - 0.3f, q = tau / (OPEN - 0.3f);
+            a += 0.012f * q * std::sin(TAU * (6.f * tau + 6.f * tau * tau));
         }
         const bool o = open(s), cl = o && cleared(s);
         const float ck = cl ? (cel ? sstep(std::clamp((cT - TURN) / 0.12f, 0.f, 1.f)) : 1.f) : 0.f;
@@ -468,10 +549,37 @@ void Worlds::kalCampaign() {
         // (the focused one lit up, standing out of the wheel)
         const Col pc = mixc(!o ? c : mixc(pcOpen, pcClear, ck), hex(0xffffff), 0.18f * f * (1.f - op));
         const Col edgeCl = mixc(hex(0x08080c, 0.9f), hex(0xe8c06a, 0.95f), ck);
+        const float pr0 = (140 - 5 * f + 10 * op) * u, pr1 = (246 + 52 * f + 12 * op) * u, pha = (0.17f + 0.09f * f + 0.07f * op) * wk;
+        // an opening petal fills from its base to its tip: its locked look under it, its open one cut at `fill`
+        const float fillK = unl && o ? sstep((uK - OPEN - 0.05f) / 0.75f) : 1.f, fill = lerpf(pr0, pr1 + 2 * u, fillK);
+        if (fillK < 1.f)
+            kite(cx, cy, a, pr0, pr1, pha, mixc(hex(0x1c1e26), hex(0xffffff), 0.18f * f * (1.f - op)), 0.95f, true, hex(0x8a90a0, 0.6f));
         // (the others smaller: the focused one grows out of them)
-        kite(cx, cy, a, (140 - 5 * f + 10 * op) * u, (246 + 52 * f + 12 * op) * u, (0.17f + 0.09f * f + 0.07f * op) * wk, pc,
-             !o ? 0.95f : lerpf(0.85f, 0.97f, ck), true,
-             focusClosed && (!cel || cT > TURN + 1.f) ? hex(0xffffff, 0.95f * pulse) : o ? edgeCl : hex(0x8a90a0, 0.6f));
+        kite(cx, cy, a, pr0, pr1, pha, pc, !o ? 0.95f : lerpf(0.85f, 0.97f, ck), true,
+             focusClosed && (!cel || cT > TURN + 1.f) && (!unl || uK > OPEN + 1.f) ? hex(0xffffff, 0.95f * pulse) : o ? edgeCl : hex(0x8a90a0, 0.6f),
+             fillK < 1.f ? std::max(1.f, fill) : 0.f);
+        if (fillK > 0.f && fillK < 1.f) { // the line of light across the petal, where its hue has reached
+            const float rm = lerpf(pr0, pr1, 0.45f);
+            const float px[4] = {cx + std::cos(a) * pr0, cx + std::cos(a - pha) * rm, cx + std::cos(a) * pr1, cx + std::cos(a + pha) * rm};
+            const float py[4] = {cy + std::sin(a) * pr0, cy + std::sin(a - pha) * rm, cy + std::sin(a) * pr1, cy + std::sin(a + pha) * rm};
+            float hx[2], hy[2];
+            int nh = 0;
+            for (int e = 0; e < 4 && nh < 2; e++) {
+                const int g = (e + 1) % 4;
+                const float de = (px[e] - cx) * std::cos(a) + (py[e] - cy) * std::sin(a) - fill;
+                const float dg = (px[g] - cx) * std::cos(a) + (py[g] - cy) * std::sin(a) - fill;
+                if ((de <= 0.f) == (dg <= 0.f)) continue;
+                const float k = de / (de - dg);
+                hx[nh] = lerpf(px[e], px[g], k); hy[nh++] = lerpf(py[e], py[g], k);
+            }
+            if (nh == 2) {
+                const float la = std::sin(fillK * PI) * 0.7f + 0.3f * (1.f - fillK);
+                p.setAdditive(true);
+                p.line(hx[0], hy[0], hx[1], hy[1], 5 * u, hex(0xffffff, la), 5 * u);
+                p.line(hx[0], hy[0], hx[1], hy[1], 18 * u, withA(mixc(c, hex(0xffffff), 0.4f), 0.5f * la), 16 * u);
+                p.setAdditive(false);
+            }
+        }
         if (focusClosed && f > 0.5f) { // the focused petal calls: now and then a copy of its contour swells out, fading fast
             const float r0 = (140 - 5 * f + 10 * op) * u, r1 = (246 + 52 * f + 12 * op) * u, ha = (0.17f + 0.09f * f + 0.07f * op) * wk;
             const float rm = lerpf(r0, r1, 0.45f);
@@ -518,6 +626,34 @@ void Worlds::kalCampaign() {
             }
             p.setAdditive(false);
         }
+        if (unl && uK > 0.f && uK < OPEN + 0.1f) { // a light gathering in the locked petal up to its opening
+            const float q = std::clamp(uK / OPEN, 0.f, 1.f);
+            p.setAdditive(true);
+            p.glow(cx + std::cos(a) * 215 * u, cy + std::sin(a) * 215 * u, (90 + 40 * q) * u, hex(0xfff0c8, 0.28f * q * q));
+            p.setAdditive(false);
+        }
+        if (unl && uK >= OPEN && uK < OPEN + 2.5f) {
+            // the petal open: a swell of its hue as it fills, then copies of its contour, tinted, spreading out a little
+            p.setAdditive(true);
+            const float sw = std::exp(-std::pow((uK - OPEN - 0.55f) / 0.4f, 2.f));
+            p.glow(cx + std::cos(a) * 215 * u, cy + std::sin(a) * 215 * u, (120 + 60 * sw) * u, withA(c, 0.5f * sw));
+            const float rm = lerpf(pr0, pr1, 0.45f);
+            float px[4] = {cx + std::cos(a) * pr0, cx + std::cos(a - pha) * rm, cx + std::cos(a) * pr1, cx + std::cos(a + pha) * rm};
+            float py[4] = {cy + std::sin(a) * pr0, cy + std::sin(a - pha) * rm, cy + std::sin(a) * pr1, cy + std::sin(a + pha) * rm};
+            const float mx = (px[0] + px[1] + px[2] + px[3]) * 0.25f, my = (py[0] + py[1] + py[2] + py[3]) * 0.25f;
+            for (int w = 0; w < 2; w++) {
+                const float age = uK - OPEN - 0.6f - 0.2f * w, life = 1.2f;
+                if (age <= 0.f || age >= life) continue;
+                const float k = age / life, sc = 1.f + 2.6f * (1.f - (1.f - k) * (1.f - k));
+                const Col wc = withA(mixc(c, hex(0xffffff), 0.55f), 0.8f * std::pow(1.f - k, 1.6f) * (1.f - 0.3f * w));
+                for (int e = 0; e < 4; e++) {
+                    const int g = (e + 1) % 4;
+                    p.line(mx + (px[e] - mx) * sc, my + (py[e] - my) * sc, mx + (px[g] - mx) * sc, my + (py[g] - my) * sc,
+                           (2.5f + 2.f * k) * u, wc, (1.5f + 4.f * k) * u);
+                }
+            }
+            p.setAdditive(false);
+        }
         if (cl && ck > 0.99f) { // a shine sweeping slowly across a cleared shard
             const float k = std::fmod(t * 0.18f + s * 0.29f, 1.f), r = lerpf(150.f, 255.f, k) * u, hw = 0.16f * wk * (1.f - std::fabs(k - 0.45f));
             p.setAdditive(true);
@@ -534,6 +670,14 @@ void Worlds::kalCampaign() {
             if (op < 0.98f) {
                 const float da = 0.07f * wk * (k - mid), r = (268 + 44 * f) * u;
                 p.circle(cx + std::cos(a + da) * r, cy + std::sin(a + da) * r, 4.2f * u, withA(sc, (1.f - op) * (b ? 1.f : 0.35f)));
+                const float lt = uK - OPEN - 0.75f - 0.12f * k; // a stage opening: its songs light up, one after the other
+                if (lt > 0.f && lt < 0.7f) {
+                    const float la = std::sin(lt / 0.7f * PI) * (1.f - op);
+                    p.setAdditive(true);
+                    p.glow(cx + std::cos(a + da) * r, cy + std::sin(a + da) * r, 22 * u, withA(songCol(s, k), 0.8f * la));
+                    p.circle(cx + std::cos(a + da) * r, cy + std::sin(a + da) * r, 4.2f * u, withA(mixc(songCol(s, k), hex(0xffffff), 0.5f), la));
+                    p.setAdditive(false);
+                }
             }
             if (op > 0.02f) {
                 const float da = fanStep(ns) * (k - mid) * op;
@@ -567,7 +711,46 @@ void Worlds::kalCampaign() {
             const float ts = (22 + 17 * f) * u;
             const Col numOpen = o ? hex(0xffffff, 0.85f + 0.15f * f) : hex(0xa0a2ac, 0.75f);
             p.text(F::JOSEFIN, std::to_string(s + 1), nx, ny + ts * 0.36f, ts, mixc(numOpen, hex(0x1a1408), dk), 0, 0.02f);
-            if (!o) p.lock(nx + rad * 0.95f, ny - rad * 0.95f, 13 * u, hex(0xd0d0d8, 0.8f));
+            if (unl && uK >= OPEN) { // the disc flashes as the lock opens, a ring of light leaving it
+                const float k = (uK - OPEN) / 0.6f, fl = std::exp(-std::pow((uK - OPEN - 0.04f) / 0.16f, 2.f));
+                p.setAdditive(true);
+                p.glow(nx, ny, rad * 3.2f, hex(0xffffff, 0.4f * fl));
+                p.circle(nx, ny, rad, hex(0xffffff, 0.25f * fl));
+                if (k < 1.f) p.ring(nx, ny, rad * (1.f + 1.6f * (1.f - (1.f - k) * (1.f - k))), 2.5f * u, hex(0xfff0c8, 0.8f * (1.f - k)), 2 * u);
+                p.setAdditive(false);
+            }
+            if (unl && uK < OPEN + 0.75f) {
+                // the padlock: it grows, shakes faster and faster, springs open (a burst of gold) and flies off
+                const float g = sstep((uK + 0.2f) / 0.5f), ls = 13 * u * (1.f + 1.3f * g);
+                float lx = nx + rad * 0.95f + 6 * u * g, ly = ny - rad * 0.95f - 10 * u * g, rot = 0.f;
+                if (uK > 0.3f && uK < OPEN) {
+                    const float tau = uK - 0.3f, q = tau / (OPEN - 0.3f), w = std::sin(TAU * (5.f * tau + 7.f * tau * tau));
+                    rot = 0.42f * q * w;
+                    lx += 2.5f * u * q * w;
+                }
+                // (it opens, stays open a moment, then flies off out of the wheel, falling, turning)
+                const float ok = std::clamp((uK - OPEN + 0.04f) / 0.12f, 0.f, 1.f), ft = std::max(0.f, uK - OPEN - 0.22f);
+                lx += std::cos(a) * 260 * u * ft;
+                ly += std::sin(a) * 260 * u * ft - 320 * u * ft + 800 * u * ft * ft;
+                rot += 3.f * ft;
+                const float la = 1.f - sstep(ft / 0.55f);
+                if (la > 0.f) {
+                    p.setAdditive(true);
+                    p.glow(lx, ly, ls * 1.6f, hex(0xffd27a, (0.25f * g + 0.4f * ok) * la));
+                    p.setAdditive(false);
+                    padlock(lx, ly, ls * (1.f + 0.3f * sstep(ft / 0.6f)), rot, ok, withA(mixc(hex(0xd0d0d8), hex(0xffe2a0), ok), (0.8f + 0.2f * g) * la));
+                }
+                const float bt = (uK - OPEN) / 0.45f; // the burst, where it opened
+                if (bt > 0.f && bt < 1.f) {
+                    const float bx = nx + rad * 0.95f + 4 * u, by = ny - rad * 0.95f - 6 * u;
+                    p.setAdditive(true);
+                    for (int i = 0; i < 9; i++) {
+                        const float d = i * TAU / 9 + 0.3f, r0 = (10 + 34 * bt) * u, r1 = r0 + 12 * u * (1.f - bt);
+                        p.line(bx + std::cos(d) * r0, by + std::sin(d) * r0, bx + std::cos(d) * r1, by + std::sin(d) * r1, 2.2f * u, hex(0xffd27a, 0.9f * (1.f - bt)), 1.5f * u);
+                    }
+                    p.setAdditive(false);
+                }
+            } else if (!o) p.lock(nx + rad * 0.95f, ny - rad * 0.95f, 13 * u, hex(0xd0d0d8, 0.8f));
         }
     }
     // the focused song, when a petal is open
