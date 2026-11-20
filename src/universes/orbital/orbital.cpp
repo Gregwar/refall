@@ -210,6 +210,7 @@ constexpr int MAX_SPARKS = 600;
 // =====================================================================================================
 
 bool OrbitalUniverse::init(int width, int height) {
+    if (const char* b = std::getenv("REFALL_ORBITAL_BLOCK")) blockStyle_ = std::clamp(std::atoi(b), 0, 4);
     progSky_ = compile(ugl::FULLSCREEN_VS, shaders::SKY_FS, "orbital sky");
     progBg_ = compile(ugl::FULLSCREEN_VS, shaders::BG_FS, "orbital bg");
     progBox_ = compilePart(shaders::BOX_VS, shaders::PART_FS, "orbital box");
@@ -1591,6 +1592,23 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progCell_, "uTime", time_);
         set1f(progCell_, "uBridge", smoothstepf(0.2f, 0.9f, bridge));
         set3f(progCell_, "uBridgeInk", bridge_.ink);
+        set1i(progCell_, "uLook", blockStyle_);
+        if (blockStyle_) {
+            // the blocks lit as the station is: its key light seen from the camera (kept over the blocks' faces), at
+            // the key's hue but a block's strength (the moon's a little less), the planet's light filling from below
+            vec3 k{dot(pal_.keyDir, camR_), dot(pal_.keyDir, camU_), -dot(pal_.keyDir, look_)};
+            k.z = std::max(k.z, 0.f) * 0.5f + 0.7f;
+            k.y = std::max(k.y, -0.2f);
+            k = normalize(k);
+            const vec3 kc = pal_.keyC / std::max(pal_.keyC.x, std::max(pal_.keyC.y, pal_.keyC.z));
+            set3f(progCell_, "uKeyDir", k);
+            set3f(progCell_, "uKeyC", kc * (pal_.keyMoon > 0.5f ? 1.f : 1.05f));
+            set3f(progCell_, "uFill", pal_.envDown * 0.35f + pal_.amb * 2.f + vec3(0.05f, 0.055f, 0.07f));
+            set3f(progCell_, "uHull", pal_.hull);
+            set3f(progCell_, "uGold", pal_.gold);
+            set3f(progCell_, "uWin", pal_.window);
+            set3f(progCell_, "uSolar", pal_.solar);
+        }
         glBindVertexArray(cellVao_);
         glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
         glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);

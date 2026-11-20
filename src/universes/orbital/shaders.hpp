@@ -1317,6 +1317,201 @@ Circuit circuit(vec2 p, int mk, int type) {
     C.line = max(C.line, -C.pad); // (the traces stop at the hub's edge)
     return C;
 }
+// ---- The other looks (REFALL_ORBITAL_BLOCK 1..3), lit as the station is: its key light seen from the camera, the
+// planet's light filling from below.
+uniform int uLook;
+uniform vec3 uKeyDir, uKeyC, uFill, uHull, uGold, uWin, uSolar;
+float fillA(float d, float aa) { return 1.0 - smoothstep(-aa * 0.5, aa * 0.5, d); }
+vec3 shade(vec3 alb, vec3 n, float spec, float shin) {
+    float d = max(dot(n, uKeyDir), 0.0);
+    vec3 h = normalize(uKeyDir + vec3(0.0, 0.0, 1.0));
+    float s = pow(max(dot(n, h), 0.0), shin) * spec;
+    return alb * (uKeyC * d + uFill * (0.8 - 0.6 * n.y)) + uKeyC * s;
+}
+// the piece's surface: a rounded bevel of width w (height k) along its outline, its normal from the outline's distance
+vec3 bevelN(vec2 p, int mk, float g, float e, float w, float k) {
+    const float h = 0.004;
+    vec2 gr = vec2(shapeSdf(p + vec2(h, 0.0), mk, g) - shapeSdf(p - vec2(h, 0.0), mk, g),
+                   shapeSdf(p + vec2(0.0, h), mk, g) - shapeSdf(p - vec2(0.0, h), mk, g)) / (2.0 * h);
+    float t = clamp(e / w, 0.0, 1.0);
+    return normalize(vec3(gr * (2.0 * k * (1.0 - t) / w), 1.0));
+}
+// the distance to the nearest side this cell shares with its piece (where two cells' panels meet)
+float seamD(vec2 p, int mk) {
+    float s = 9.0;
+    for (int sd = 0; sd < 4; sd++)
+        if (has(mk, sd)) s = min(s, 0.5 - toSide(p, sd).x);
+    return s;
+}
+int degOf(int mk) { return int(has(mk, 0)) + int(has(mk, 1)) + int(has(mk, 2)) + int(has(mk, 3)); }
+bool straightOf(int mk) { return degOf(mk) == 2 && ((has(mk, 0) && has(mk, 1)) || (has(mk, 2) && has(mk, 3))); }
+// the O's four cells: the distance to the corner they share (9 if this cell has none: a cleared line cut it)
+float oCorner(vec2 p, int mk, out vec2 k) {
+    float d = 9.0;
+    k = vec2(0.0);
+    for (int q = 0; q < 4; q++) {
+        vec2 c = vec2(q == 1 || q == 3 ? 0.5 : -0.5, q >= 2 ? 0.5 : -0.5);
+        bool hx = c.x < 0.0 ? has(mk, 0) : has(mk, 1), vy = c.y < 0.0 ? has(mk, 2) : has(mk, 3);
+        if (hx && vy && has(mk, 4 + q) && length(p - c) < d) { d = length(p - c); k = c; }
+    }
+    return d;
+}
+
+// 1. HULL MODULES: the station's own white panelled hull, the piece's livery painted round its outline, a lit porthole
+// at each module's end, gold foil, hatches and radiator grilles in between, the O a docking port.
+vec3 lookHull(vec2 p, int mk, int type, float e, float g, float aa, vec3 tn, float seed, float lift) {
+    vec3 n = bevelN(p, mk, g, e, 0.1, 0.12);
+    float hv = hash(vec2(seed * 57.0 + float(type), float(mk)));
+    vec3 alb = uHull * (0.74 + 0.08 * hv);
+    // the panels' seams (a groove where two cells meet, its shadow below the light)
+    float sm = seamD(p, mk);
+    alb *= 1.0 - 0.45 * fillA(sm - 0.008, aa) - 0.12 * fillA(sm - 0.03, aa);
+    // the livery: a band of the piece's paint along its outline, a thin pinstripe inside it
+    float band = fillA(abs(e - 0.17) - 0.06, aa);
+    float pin = fillA(abs(e - 0.265) - 0.009, aa);
+    vec3 paint = tn * 0.72;
+    alb = mix(alb, paint, max(band, pin * 0.8));
+    vec3 emit = vec3(0.0);
+    float spec = 0.12, shin = 20.0;
+    int deg = degOf(mk);
+    vec2 k;
+    float od = type == 1 ? oCorner(p, mk, k) : 9.0;
+    if (od < 8.0) {
+        // the O: a docking port at its middle, a ring of dark metal, a hatch with its bolts
+        float ring = fillA(abs(od - 0.29) - 0.05, aa);
+        float hatch = fillA(od - 0.24, aa);
+        vec2 r = p - k;
+        alb = mix(alb, uHull * 0.55, hatch);
+        alb *= 1.0 - 0.5 * fillA(abs(od - 0.17) - 0.006, aa) * hatch;
+        float bolts = fillA(length(vec2(abs(abs(r.x) - abs(r.y)) * 0.7071, abs(od - 0.29))) - 0.022, aa);
+        alb = mix(alb, vec3(0.16, 0.17, 0.19), ring);
+        alb = mix(alb, vec3(0.7), bolts * ring);
+        n = normalize(n + vec3(normalize(r + 1e-5) * (od - 0.29) * 4.0, 0.0) * ring);
+        spec = mix(spec, 0.6, ring);
+    } else if (deg <= 1 || type == 1) {
+        // a module's end: a porthole lit warm from inside, its thick dark frame
+        float r = length(p);
+        float glass = fillA(r - 0.11, aa);
+        float frame = fillA(r - 0.165, aa) * (1.0 - glass);
+        alb = mix(alb, vec3(0.13, 0.135, 0.15), frame);
+        n = normalize(n + vec3(p / max(r, 1e-4) * (0.14 - r) * 6.0, 0.0) * frame);
+        spec = mix(spec, 0.5, frame);
+        vec3 win = uWin * (1.1 + 0.5 * (1.0 - smoothstep(0.0, 0.11, length(p + vec2(0.0, 0.05)))));
+        float hl = fillA(length(p - vec2(-0.04, 0.045)) - 0.025, aa);
+        emit = mix(emit, win * 0.9 + vec3(hl * 0.8), glass);
+        alb *= 1.0 - glass;
+    } else if (straightOf(mk) && hv < 0.55) {
+        // gold foil (multi-layer insulation), crinkled, catching the light
+        vec2 q = has(mk, 0) ? p : p.yx;
+        float foil = fillA(abs(q.y) - 0.17, aa);
+        vec2 np = p * 9.0 + seed * 31.0 + float(mk) * 3.7;
+        vec2 gn = vec2(vnoise(np + vec2(0.3, 0.0)) - vnoise(np - vec2(0.3, 0.0)), vnoise(np + vec2(0.0, 0.3)) - vnoise(np - vec2(0.0, 0.3)));
+        alb = mix(alb, uGold * (0.55 + 0.3 * vnoise(np * 0.7)), foil);
+        n = normalize(mix(n, normalize(vec3(gn * 1.6, 1.0)), foil));
+        spec = mix(spec, 1.1, foil); shin = mix(shin, 14.0, foil);
+    } else if (straightOf(mk)) {
+        // two small windows along the module
+        vec2 q = has(mk, 0) ? p : p.yx;
+        vec2 c = vec2(abs(q.x) - 0.2, q.y);
+        float r = length(c);
+        float glass = fillA(r - 0.065, aa);
+        float frame = fillA(r - 0.1, aa) * (1.0 - glass);
+        alb = mix(alb, vec3(0.13, 0.135, 0.15), frame);
+        emit = mix(emit, uWin * 1.2, glass);
+        alb *= 1.0 - glass;
+    } else if (hv < 0.5) {
+        // a hatch: a recessed square, its outline in shadow, four bolts
+        float d = boxSdf(p, vec2(0.15), 0.04);
+        alb *= 1.0 - 0.55 * fillA(abs(d) - 0.01, aa) - 0.12 * fillA(d, aa);
+        vec2 b = abs(p) - 0.1;
+        alb = mix(alb, vec3(0.62), fillA(length(b) - 0.02, aa));
+    } else {
+        // a radiator grille: dark slots across
+        vec2 q = has(mk, 2) || has(mk, 3) ? p : p.yx;
+        float slots = fillA(abs(fract(q.y * 12.5 + 0.5) - 0.5) / 12.5 - 0.016, aa) * fillA(boxSdf(p, vec2(0.15), 0.02), aa);
+        alb *= 1.0 - 0.6 * slots;
+    }
+    vec3 c = shade(alb, n, spec, shin);
+    // a soft rim of the key light along the lit edges
+    c += uKeyC * 0.12 * smoothstep(0.3, 0.9, dot(n.xy, uKeyDir.xy) / max(length(uKeyDir.xy), 1e-3)) * (1.0 - n.z) * 4.0;
+    return c * lift + emit;
+}
+
+// 2. SOLAR ARRAYS: photovoltaic panels, blue-violet wafers on a pale backsheet, silver busbars, a glint sweeping the
+// board with the sun; the piece's own anodised frame round it, silver hinges where its panels meet.
+vec3 lookSolar(vec2 p, int mk, int type, float e, float g, float aa, vec3 tn, float seed, float lift) {
+    const float FR = 0.11;
+    vec3 n = bevelN(p, mk, g, e, FR, 0.06);
+    float frame = 1.0 - smoothstep(FR - aa * 0.5, FR + aa * 0.5, e);
+    float sm = seamD(p, mk);
+    float hinge = fillA(sm - 0.018, aa) * (1.0 - frame);
+    // the wafers: 2 x 2 to a cell, their corners cut (the backsheet shows through), two busbars each
+    vec2 w = fract(p * 2.0 + 0.5) - 0.5;
+    vec2 aw = abs(w);
+    float aw2 = aa * 2.0;
+    float wafer = fillA(max(aw.x, aw.y) - 0.44, aw2) * fillA(aw.x + aw.y - 0.76, aw2);
+    float bus = fillA(abs(aw.x - 0.2) - 0.016, aw2) * wafer;
+    vec3 pv = mix(mix(uSolar, vec3(0.12, 0.17, 0.7), 0.65), tn * 0.55, 0.3) * (1.0 - 0.25 * smoothstep(-0.5, 0.5, w.y));
+    vec3 back = vec3(0.34, 0.37, 0.48);
+    vec3 alb = mix(back, pv, wafer);
+    alb = mix(alb, vec3(0.62, 0.65, 0.72), bus * 0.6);
+    // the glass: the sky's reflection, a little brighter toward the light, and a glint sweeping the board
+    float gx = dot(vWorld, vec2(0.83, -0.56)) * 0.16 - uTime * 0.09;
+    float sweep = exp(-sq((fract(gx) - 0.5) * 9.0));
+    float sheen = clamp(0.5 + 0.9 * dot(p, uKeyDir.xy), 0.0, 1.0);
+    vec3 refl = (vec3(0.03, 0.05, 0.14) * (0.5 + sheen) + uKeyC * vec3(0.75, 0.8, 1.0) * 0.3 * sweep * (0.4 + 0.6 * wafer)) * (1.0 - frame);
+    vec3 c = shade(alb, vec3(0.0, 0.0, 1.0), 0.0, 1.0) + refl;
+    // the hinges between panels: brushed silver
+    c = mix(c, shade(vec3(0.7, 0.72, 0.76), vec3(0.0, 0.0, 1.0), 0.3, 20.0), hinge);
+    // the frame: the piece's colour, anodised, bevelled
+    vec3 fc = shade(tn * 0.8 + 0.06, n, 0.55, 26.0);
+    c = mix(c, fc, frame);
+    // its inner lip in shadow
+    c *= 1.0 - 0.35 * fillA(abs(e - FR - 0.012) - 0.01, aa);
+    return c * lift;
+}
+
+// 3. ENERGY CORES: reactor cells docked into a steel cage, the piece's colour burning in each cell's glass, a slow
+// pulse (its own phase), conduits of the same light running to the cells it joins.
+vec3 lookCore(vec2 p, int mk, int type, float e, float g, float aa, vec3 tn, float seed, float lift) {
+    vec3 n = bevelN(p, mk, g, e, 0.09, 0.06);
+    const vec2 WB = vec2(0.3);
+    float cb = boxSdf(p, WB, 0.14);
+    float win = fillA(cb, aa);
+    // the cage: steel, the window's own bevelled lip, four bolts
+    vec3 metal = vec3(0.32, 0.335, 0.37);
+    vec3 nl = n;
+    if (cb > 0.0 && cb < 0.06) {
+        const float h = 0.004;
+        vec2 gr = vec2(boxSdf(p + vec2(h, 0.0), WB, 0.14) - boxSdf(p - vec2(h, 0.0), WB, 0.14),
+                       boxSdf(p + vec2(0.0, h), WB, 0.14) - boxSdf(p - vec2(0.0, h), WB, 0.14)) / (2.0 * h);
+        nl = normalize(n + vec3(-gr * 0.9 * (1.0 - cb / 0.06), 0.0));
+    }
+    vec2 bq = abs(p) - 0.41;
+    float bolt = fillA(length(bq) - 0.025, aa);
+    vec3 cage = shade(metal, nl, 0.5, 30.0);
+    cage = mix(cage, shade(vec3(0.6, 0.62, 0.66), normalize(vec3(-bq * 12.0, 1.0)), 0.8, 30.0), bolt);
+    // the energy: a slow pulse, the core white hot, swirls of plasma round it
+    float pulse = 0.85 + 0.15 * sin(uTime * 1.7 + seed * TAU);
+    float r = length(p);
+    float sw = vnoise(vec2(atan(p.y, p.x) * 1.6 + uTime * 0.6 + seed * 9.0, r * 7.0 - uTime * 0.8));
+    float glow = exp(-r * r * 9.0) * (0.75 + 0.5 * sw);
+    vec3 core = tn * (0.4 + 1.3 * glow * pulse) + vec3(1.0) * pow(exp(-r * r * 30.0), 2.0) * 1.1 * pulse;
+    // the glass: a streak of the key light across it
+    float streak = fillA(abs(dot(p, normalize(vec2(1.0, 1.0))) + 0.12) - 0.035, aa) * 0.22;
+    core += uKeyC * streak * (0.3 + 0.7 * uKeyDir.z);
+    // the conduits: a thin beam from the core to each side it shares with its piece
+    float beam = 9.0;
+    for (int sd = 0; sd < 4; sd++)
+        if (has(mk, sd)) { vec2 q = toSide(p, sd); beam = min(beam, q.x > 0.0 ? abs(q.y) : 9.0); }
+    float bl = (1.0 - win) * fillA(beam - 0.022, aa);
+    vec3 c = mix(cage, core, win);
+    c = mix(c, tn * 1.3 * pulse, bl);
+    c += (1.0 - win) * tn * 0.15 * exp(-max(cb, 0.0) * 22.0) * pulse;
+    // the cage's lip in front of the glass
+    c = mix(c, shade(vec3(0.5, 0.52, 0.56), nl, 0.7, 30.0), fillA(abs(cb + 0.008) - 0.012, aa));
+    return c * lift;
+}
 void main() {
     int mode = int(vC.x + 0.5);
     float aa = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
@@ -1337,10 +1532,16 @@ void main() {
     // lights its circuit, its hub's marker and the frame's outer hairline
     vec3 tint = vB.rgb;
     vec3 tn = tint / max(max(tint.r, max(tint.g, tint.b)), 1e-3);
-    const vec3 METAL = vec3(0.1, 0.118, 0.145), EDGE = vec3(0.19, 0.215, 0.255), NAVY = vec3(0.008, 0.013, 0.03);
-    const vec3 SHADE = vec3(0.003, 0.005, 0.012);
+    vec3 METAL = vec3(0.1, 0.118, 0.145), EDGE = vec3(0.19, 0.215, 0.255), NAVY = vec3(0.008, 0.013, 0.03);
+    vec3 SHADE = vec3(0.003, 0.005, 0.012);
     vec3 inkC = tn * 0.95;
     vec3 markC = mix(tn, vec3(1.0), 0.35);
+    if (uLook == 4) {
+        // (the brighter take: a lighter steel frame, the inset lit with the piece's own colour, the neon hotter)
+        METAL = vec3(0.26, 0.285, 0.33); EDGE = vec3(0.55, 0.6, 0.66);
+        NAVY = tn * 0.05 + vec3(0.03, 0.04, 0.075); SHADE = tn * 0.02 + vec3(0.01, 0.014, 0.03);
+        inkC = mix(tn, vec3(1.0), 0.12) * 1.35; markC = mix(tn, vec3(1.0), 0.5) * 1.5;
+    }
     const float FRAME = 0.15; // the frame's width (cell units); inside it the inset
     Circuit C = circuit(p, mk, type);
     float inset = smoothstep(FRAME - aa * 0.5, FRAME + aa * 0.5, e);
@@ -1359,8 +1560,14 @@ void main() {
         frag = vec4(c * a, a);
         return;
     }
+    vec3 col;
+    float lift = 1.0 + 0.15 * vC.z;
+    if (uLook == 1) col = lookHull(p, mk, type, e, g, aa, tn, vD.x, lift);
+    else if (uLook == 2) col = lookSolar(p, mk, type, e, g, aa, tn, vD.x, lift);
+    else if (uLook == 3) col = lookCore(p, mk, type, e, g, aa, tn, vD.x, lift);
+    else {
     // the frame: one flat gunmetal, a hairline lighter along its outer edge
-    vec3 col = mix(METAL, mix(EDGE, tn * 0.75, 0.7), 1.0 - smoothstep(0.022 - aa * 0.5, 0.022 + aa * 0.5, e));
+    col = mix(METAL, mix(EDGE, tn * 0.75, 0.7), 1.0 - smoothstep(0.022 - aa * 0.5, 0.022 + aa * 0.5, e));
     // the O's corners: small flat plates of the circuit's tone where the outline turns
     bool corner = (p.x < 0.0 ? !has(mk, 0) : !has(mk, 1)) && (p.y < 0.0 ? !has(mk, 2) : !has(mk, 3));
     if (type == 1 && corner) {
@@ -1371,12 +1578,12 @@ void main() {
     float eL = -shapeSdf(p + vec2(-0.035, 0.035), mk, g);
     vec3 deep = mix(NAVY, SHADE, 1.0 - smoothstep(FRAME - aa * 0.5, FRAME + aa * 0.5, eL));
     // the circuit: flat traces, the hub's outline in the circuit's tone round its marker (the piece's touch)
-    float lift = 1.0 + 0.15 * vC.z;
     float hubIn = 1.0 - smoothstep(-aa * 0.5, aa * 0.5, C.pad);
     deep = mix(deep, SHADE, hubIn);
     deep = mix(deep, inkC * lift, max(line, ring));
     deep = mix(deep, markC * lift, core);
     col = mix(col, deep, inset);
+    }
     // game over drains the color; a cleared cell flashes to the circuit's tone as it shrinks
     col = mix(col, vec3(dot(col, vec3(0.3, 0.5, 0.2))) * 0.3, vC.w);
     if (erase > 0.0) col = mix(col, mix(inkC, vec3(0.75, 0.9, 1.0), 0.4) * 1.3, smoothstep(0.0, 0.5, erase));
