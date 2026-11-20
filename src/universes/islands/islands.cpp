@@ -1422,15 +1422,20 @@ void IslandsUniverse::syncCells(const Game& g) {
 void IslandsUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
+    case GameEvent::Spawn: // the new piece's glass, one seed a cell
+        for (int i = 0; i < 4; i++) pieceSeeds_[i] = 0.001f + isl::hashf((uint32_t)(i * 7919 + (int)(time_ * 1000.f) * 31 + 17));
+        break;
     case GameEvent::Lock: {
         int maxY = -1;
         for (auto& c : ev.cells) maxY = std::max(maxY, c.y);
         float x0 = 99.f, x1 = -99.f;
         for (auto& c : ev.cells)
             if (c.y == maxY) { x0 = std::min(x0, (float)c.x); x1 = std::max(x1, (float)c.x); }
-        for (auto& c : ev.cells) {
+        // each cell keeps the glass it fell with (its own seed: a new one here changed its look as it settled)
+        for (size_t i = 0; i < ev.cells.size(); i++) {
+            const auto& c = ev.cells[i];
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
-            seeds_[c.y][c.x] = 0.001f + isl::hashf((uint32_t)(c.x * 31 + c.y * 131 + (int)(time_ * 100.f)));
+            seeds_[c.y][c.x] = i < 4 ? pieceSeeds_[i] : 0.001f + isl::hashf((uint32_t)(c.x * 31 + c.y * 131 + (int)(time_ * 100.f)));
         }
         if (maxY >= Game::HIDDEN && hardPending_) {
             // a puff of fine sand pushed out from under the piece
@@ -1568,7 +1573,7 @@ void IslandsUniverse::buildBoard(const Game& g) {
         for (int i = 0; i < 4; i++) {
             const auto& c = cells[i];
             if (c[1] < Game::HIDDEN - 1) continue;
-            tile(layout::cellPos(c[0] + dx, c[1] + dy), 1.f, pc.type, 0.17f + 0.13f * i, 0.f, 0.f, 1.f, true);
+            tile(layout::cellPos(c[0] + dx, c[1] + dy), 1.f, pc.type, pieceSeeds_[i], 0.f, 0.f, 1.f, true);
         }
         Piece gp = pc;
         gp.y = g.ghostY();

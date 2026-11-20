@@ -125,6 +125,7 @@ private:
 
     // ---- The well.
     float seeds_[22][10] = {};
+    float pieceSeeds_[4] = {0.17f, 0.3f, 0.43f, 0.56f}; // the falling piece's cells' glass, kept when it locks
     void syncCells(const Game& g);
     void buildBoard(const Game& g);
     struct GlassInst { float a[4], b[4], c[4]; };
