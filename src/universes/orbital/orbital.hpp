@@ -59,13 +59,13 @@ public:
 
     // A variant (linear RGB; floats only: palettes blend float by float).
     struct Palette {
-        vec3 space, milky, sunC, sunGlow, keyC, earthC, amb, envUp, envDown, sunDir, moonDir, keyDir, pole;
+        vec3 space, milky, sunC, sunGlow, keyC, earthC, amb, envUp, envDown, sunDir, moonDir, keyDir, pole, litDir;
         vec3 ocean, shallow, land, land2, desert, ice, cloud, city, atmoDay, atmoTwi, airglow, aurora1, aurora2;
         vec3 hull, hull2, gold, solar, radiator, dark, window, trim, navR, navG, lamp, chase, thrust;
         vec3 landA, landB, lake, rock, town, ringCloud;
         vec3 ink, accent, veil, rail;
         vec3 piece[7];
-        float keyMoon, planetType, clouds, cityK, auroraK, milkyK, moonSize, sunVis, sunSize, bloom, nightLift, stars, keyK, ringDay, haze;
+        float keyMoon, planetType, clouds, cityK, auroraK, milkyK, moonSize, sunVis, sunSize, bloom, nightLift, stars, keyK, ringDay, haze, wrap;
     };
 
     // The station's plan: one module per cleared line (station.cpp).

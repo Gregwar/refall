@@ -54,13 +54,15 @@ uniform float uPix;            // radians per pixel of this target
 uniform vec3 uEyeP;            // the camera relative to the planet's center (meters)
 uniform float uAlt, uR;
 uniform vec3 uSunDir, uSunC, uSunGlow;
+uniform vec3 uLitDir;          // the light on the planet (at dawn a little farther round than the sun seen: the lit
+                               // crescent along the limb on the sun's side, the night across the rest)
 uniform float uSunSize, uSunVis;
 uniform vec3 uSpaceC, uMilkyC;
 uniform float uMilky;
 uniform mat3 uPlanetRot, uCloudRot;
 uniform float uType;           // 0 an earth, 1 a desert world
 uniform vec3 uOcean, uShallow, uLand, uLand2, uDesert, uIce, uCloudC, uCityC, uAtmoDay, uAtmoTwi, uAirglow;
-uniform float uClouds, uCity, uAurora, uGlow, uNightLift, uHaze;
+uniform float uClouds, uCity, uAurora, uGlow, uNightLift, uHaze, uWrap;
 uniform vec3 uAurora1, uAurora2;
 uniform vec3 uMoonDir;
 uniform float uMoonSize;
@@ -146,7 +148,8 @@ void main() {
         vec3 n = normalize(p);
         float foot = tHit * uPix;
         vec3 s = uPlanetRot * n;
-        float ndl = dot(n, uSunDir);
+        // (the terminator drawn a little past its true place, uWrap: more of the dawn's crescent lit)
+        float ndl = dot(n, uLitDir) + uWrap;
         float day = smoothstep(-0.06, 0.16, ndl);
         float tw = exp(-sq((ndl - 0.02) / 0.11));
         float night = 1.0 - smoothstep(-0.12, 0.04, ndl);
@@ -192,41 +195,76 @@ void main() {
         float ce = max(0.018, foot / 2.0e5);
         float cl = smoothstep(0.53 - ce, 0.53 + ce * 1.5, cv) * uClouds;
         float cthick = smoothstep(0.53, 0.8, cv);
-        float clS = smoothstep(0.5, 0.6, clouds(uCloudRot * normalize(n - uSunDir * 0.006), foot, false)) * uClouds;
-        vec3 lightC = uSunC * (max(ndl, 0.0) * 1.15 + 0.03 * day);
+        // their shadows on the ground: cast along the light, longer as it grazes; their own relief: brighter where
+        // they rise toward the light, shaded on their far side
+        float graze = 0.006 / clamp(ndl * 3.0 + 0.15, 0.25, 1.0);
+        float cvS = clouds(uCloudRot * normalize(n - uLitDir * graze), foot, false);
+        float clS = smoothstep(0.5, 0.6, cvS) * uClouds;
+        float relief = clamp((cv - cvS) * 6.0, -1.0, 1.0);
+        vec3 lightC = uSunC * (pow(max(ndl, 0.0), 0.75) * 1.05 + 0.03 * day); // (a grazing light keeps some strength)
         lightC = mix(lightC, lightC * vec3(1.15, 0.75, 0.55), tw * 0.6);
         col = alb * lightC * (1.0 - 0.55 * clS);
-        // the sea's glint
+        // the sea's glint: a hot point under the sun and a broad sheen around it, strongest at grazing angles (the
+        // dawn's sun just over the limb lays a long road of light on the sea toward it)
         vec3 rf = reflect(d, n);
-        float gl = pow(max(dot(rf, uSunDir), 0.0), 90.0) * 1.6 + pow(max(dot(rf, uSunDir), 0.0), 9.0) * 0.12;
-        col += uSunGlow * gl * water * (1.0 - cl) * day;
-        // the cities by night, under the clouds
+        float rs = max(dot(rf, uSunDir), 0.0);
+        float fres = 0.3 + 0.7 * pow(1.0 - max(dot(n, -d), 0.0), 4.0);
+        float gl = pow(rs, 240.0) * 3.0 + pow(rs, 40.0) * 0.45 + pow(rs, 8.0) * 0.08;
+        col += uSunGlow * gl * fres * water * (1.0 - cl) * smoothstep(-0.04, 0.08, ndl);
+        // the cities by night, under the clouds: populated regions (coasts, belts) with dark land between, each
+        // a scatter of cities (bright cores, a soft glow round the big ones) and towns, points of light drawn at
+        // least a pixel wide (their light kept: a point under a pixel shrinks in brightness, not in size)
         if (uCity > 0.0) {
-            float region = smoothstep(0.5, 0.78, fbm3(s * 7.0 + 4.0));
             float coast = uType < 0.5 ? exp(-abs(h - 0.5) * 30.0) : 0.3;
             float belt = fbm3(s * 5.0 + 4.0);
-            float pop = clamp(smoothstep(0.6, 0.75, belt) + coast * 0.7 * smoothstep(0.42, 0.6, belt), 0.0, 1.0) * (1.0 - water) * (1.0 - ice);
-            // cities (some fifty km across) in the populated regions, each a cluster of lights, a soft glow
-            float cn = vnoise3(s * 1500.0);
-            float cities = smoothstep(0.7, 0.93, cn) * (0.6 + 0.4 * vnoise3(s * 4000.0));
-            float core = smoothstep(0.86, 0.97, cn);
-            float kd = smoothstep(3.0 * foot, 8.0 * foot, 2500.0);
-            float dots = mix(0.25, smoothstep(0.6, 0.85, vnoise3(s * 16000.0)), kd);
-            float spread = smoothstep(0.75, 0.95, vnoise3(s * 3000.0 + 7.0)) * mix(0.12, smoothstep(0.7, 0.9, vnoise3(s * 14000.0 + 3.0)), kd) * 0.4;
-            float big = 0.25 + 2.2 * pow(vnoise3(s * 420.0 + 9.0), 3.0);
-            float city = pop * (cities * (dots * 0.8 + 0.1) + core * 0.8 + spread) * big;
-            col += uCityC * city * night * uCity * (1.0 - 0.75 * cl) * 1.6;
+            float pop = clamp(smoothstep(0.44, 0.6, belt) + coast * 0.9 * smoothstep(0.32, 0.5, belt), 0.0, 1.0) * (1.0 - water) * (1.0 - ice);
+            pop *= smoothstep(0.28, 0.5, fbm3(s * 18.0 + 2.0));
+            float city = 0.0;
+            if (pop > 0.001) {
+                float clump = smoothstep(0.3, 0.75, vnoise3(s * 160.0 + 2.3)) * 1.4;
+                for (int L = 0; L < 3; L++) {
+                    // cells on the sphere's surface: one light per cell where there is one, set on the surface
+                    float N = L == 0 ? 350.0 : L == 1 ? 1100.0 : 3300.0;
+                    float dens = L == 0 ? 0.6 : L == 1 ? 0.55 : 0.5;
+                    vec3 q = s * N, cc = floor(q), f = q - cc;
+                    float hh = hash3(cc + 3.7);
+                    if (hh < 1.0 - dens) continue;
+                    vec3 o = vec3(hash3(cc), hash3(cc + 1.9), hash3(cc + 5.3)) * 0.5 + 0.25;
+                    o -= s * dot(o - f, s);
+                    vec3 dv = f - o;
+                    float d2 = dot(dv, dv);
+                    float fc = foot / uR * N;                     // the pixel's footprint in cells
+                    float rad = L == 0 ? 0.05 : L == 1 ? 0.07 : 0.1;
+                    float r = max(rad, fc * 0.7);
+                    float bri = (0.35 + 0.65 * pow(hash3(cc + 8.1), 3.0)) * (L == 0 ? 5.0 : L == 1 ? 2.0 : 1.0);
+                    // the towns gather round the cities (dark country between the clusters)
+                    if (L > 0) bri *= clump;
+                    city += exp(-d2 / (r * r)) * sq(rad / r) * bri;
+                    // the big ones' glow (their suburbs)
+                    if (L == 0) city += (exp(-d2 / 0.012) * 0.25 + exp(-d2 / 0.05) * 0.06) * bri;
+                }
+                // the unresolved rest (the finest towns, roads) as a faint glow
+                city += 0.04 * smoothstep(0.4, 0.8, vnoise3(s * 3000.0));
+            }
+            col += uCityC * mix(vec3(1.0), vec3(1.3, 1.15, 1.0), clamp(city - 1.0, 0.0, 1.0)) * city * pop * night * uCity * (1.0 - 0.65 * cl) * 2.0;
         }
         // the clouds over it all, lit by the sun, pink at the terminator, faintly by the moon at night
-        vec3 cloudLit = uCloudC * (max(ndl, 0.0) * 1.2 + 0.04 * day) + uCloudC * vec3(1.0, 0.5, 0.35) * tw * 0.35 + vec3(0.55, 0.62, 0.8) * uNightLift * 0.09 * night;
+        vec3 cloudLit = uCloudC * (max(ndl, 0.0) * 1.2 + 0.04 * day) + uCloudC * vec3(1.0, 0.5, 0.35) * tw * smoothstep(-0.1, 0.0, ndl) * 0.35 + vec3(0.55, 0.62, 0.8) * uNightLift * 0.09 * night;
         cloudLit *= (0.66 + 0.34 * cthick) * (0.8 + 0.4 * (fbmD(sc * 80.0 + 5.0, foot, 5.e5, 8) + 0.5));
+        // grazing light: the faces turned to it flare, the far sides fall into shade (strongest near the terminator)
+        float grz = 1.0 - smoothstep(0.05, 0.5, ndl);
+        cloudLit *= 1.0 + relief * grz * day * 0.9;
         col = mix(col, cloudLit, cl * (0.75 + 0.2 * cthick));
         col += (alb * 0.4 + vec3(0.25, 0.3, 0.45)) * uNightLift * 0.03 * night * (1.0 - cl);
         // the air over the surface: blue on the day side, thicker toward the limb
         float mu = max(dot(n, -d), 0.0);
         float rim = pow(1.0 - mu, 3.0);
-        vec3 airC = mix(uAtmoTwi, uAtmoDay, smoothstep(-0.02, 0.35, ndl)) * smoothstep(-0.22, 0.06, ndl);
-        col = col * (1.0 - 0.35 * rim * day * uHaze) + airC * (0.07 + 0.6 * rim * rim) * uHaze;
+        vec3 airC = mix(uAtmoTwi, uAtmoDay, smoothstep(-0.02, 0.35, ndl)) * smoothstep(-0.12, 0.08, ndl);
+        col = col * (1.0 - 0.35 * rim * day * uHaze) + airC * (0.06 + 0.6 * rim * rim) * uHaze;
+        // toward the sun the air lights up over the ground (forward scattering): a warm haze over the lit crescent,
+        // hottest under the sun, brightest at the limb
+        float fwd = pow(max(sd, 0.0), 6.0);
+        col += mix(uAtmoTwi, uSunGlow, 0.6) * fwd * (0.01 + 0.35 * rim) * smoothstep(-0.15, 0.1, ndl) * uHaze * uSunVis;
     } else {
         // space: a deep sky, the Milky Way across it
         col = uSpaceC;
@@ -243,17 +281,23 @@ void main() {
             vec3 pt = E + d * tca;
             float hm = length(pt) - uR;
             vec3 nt = normalize(pt);
-            float ndl = dot(nt, uSunDir);
+            float ndl = dot(nt, mix(uLitDir, uSunDir, 0.6)); // (the band lit by the sun seen, as much as the ground's light)
             float dayT = smoothstep(-0.25, 0.25, ndl);
             float twT = exp(-sq((ndl + 0.02) / 0.16));
-            float k1 = exp(-max(hm, 0.0) / 9000.0), k2 = exp(-max(hm, 0.0) / 32000.0);
+            // three layers seen edge-on: a thin hot line along the ground, the lower air, the high haze
+            float hp = max(hm, 0.0);
+            float k0 = exp(-hp / 3500.0), k1 = exp(-hp / 9000.0), k2 = exp(-hp / 32000.0);
             vec3 airC = mix(uAtmoTwi * 1.2, uAtmoDay, smoothstep(-0.05, 0.3, ndl));
             float lit = dayT + twT * 0.8;
-            vec3 limb = airC * (k1 * 1.4 + k2 * 0.45) * lit;
+            // near the sun the line goes white-orange (its light straight through the air), red toward the terminator
+            float near = pow(max(sd, 0.0), 5.0);
+            vec3 lineC = mix(mix(uAtmoTwi, airC, 0.5) * 1.3, mix(uSunGlow, vec3(1.0), 0.45) * 2.2, near);
+            vec3 limb = lineC * k0 * (lit + near * 0.6) * 1.1;
+            limb += airC * (k1 * 1.1 + k2 * 0.4) * lit;
             // forward scattering toward the sun, across the terminator
-            limb += uSunGlow * k2 * twT * pow(max(sd, 0.0), 16.0) * 1.2;
-            // the airglow: a thin line on the night side
-            limb += uAirglow * exp(-sq((hm - 95000.0) / 7000.0)) * (1.0 - dayT) * 0.8;
+            limb += uSunGlow * (k2 * 1.2 + k1 * 1.5) * (twT + 0.3 * dayT) * pow(max(sd, 0.0), 16.0);
+            // the airglow: a thin green line high over the limb, all round (fainter by day)
+            limb += uAirglow * exp(-sq((hm - 95000.0) / 6000.0)) * (1.2 - 0.95 * dayT);
             col += limb * (1.0 + 0.3 * uGlow);
             stars *= 1.0 - clamp(k2 * lit * 2.0, 0.0, 1.0);
         }
@@ -284,7 +328,7 @@ void main() {
 )"
 R"(                    float rays = pow(vnoise(vec2(lon * 160.0, uTime * 0.2)), 2.0) * 0.8 + 0.2 * vnoise(vec2(lon * 40.0, uTime * 0.1));
                     float prof = smoothstep(90000.0, 110000.0, h) * exp(-(h - 110000.0) / 70000.0);
-                    float nightP = 1.0 - smoothstep(-0.1, 0.1, dot(P / r, uSunDir));
+                    float nightP = 1.0 - smoothstep(-0.1, 0.1, dot(P / r, uLitDir));
                     vec3 ac = mix(uAurora1, uAurora2, smoothstep(120000.0, 260000.0, h));
                     acc += ac * oval * rays * prof * nightP;
                 }
@@ -1061,6 +1105,11 @@ void main() {
     c += flare(vUv);
     float l = lum(c);
     c = max(mix(vec3(l), c, uSat), 0.0);
+    // the grade: warm highlights, the darks pressed down to a deep black (a toe), a mild vignette
+    c *= mix(vec3(1.0), vec3(1.06, 1.0, 0.9), smoothstep(0.15, 1.2, l));
+    c = c * c / (c + 0.004);
+    vec2 q = vUv - 0.5;
+    c *= 1.0 - 0.35 * dot(q * vec2(1.0, 0.8), q * vec2(1.0, 0.8));
     frag = vec4(c, 1.0);
 }
 )";

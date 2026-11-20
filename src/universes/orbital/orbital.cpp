@@ -111,6 +111,7 @@ Palette paletteOf(int v) {
     p.pole = normalize(vec3(0.3f, 0.45f, -0.84f));
     p.ringDay = 0.5f;
     p.haze = 1.f;
+    p.wrap = 0.f;
     p.moonSize = 0.f; p.sunVis = 1.f; p.sunSize = 0.011f; p.keyMoon = 0.f; p.planetType = 0.f; p.clouds = 1.f;
     p.cityK = 1.f; p.auroraK = 0.f; p.milkyK = 0.25f; p.bloom = 0.5f; p.nightLift = 0.f; p.stars = 0.7f; p.keyK = 1.f;
     p.airglow = L(0x40ff90) * 0.1f; p.aurora1 = L(0x30ff9a); p.aurora2 = L(0xd040ff);
@@ -136,6 +137,7 @@ Palette paletteOf(int v) {
         p.city = L(0xffc070); p.atmoDay = L(0x3a8aff); p.atmoTwi = L(0xff6a2a); p.cityK = 1.3f;
         p.hull = L(0xf4ece2); p.gold = L(0xf0b040); p.chase = L(0xffb060); p.lamp = L(0xffd8a0); p.window = L(0xffb870);
         p.space = L(0x03040e); p.milky = L(0x3a3a6a); p.milkyK = 0.35f; p.sunSize = 0.013f; p.bloom = 0.6f; p.ringDay = 0.38f;
+        p.wrap = 0.06f; p.litDir = normalize(vec3(-0.928f, -0.174f, 0.329f)); p.airglow = L(0x40ff90) * 0.14f;
         p.ink = L(0xfff4ea); p.accent = L(0xffb870); p.veil = L(0x0a0610); p.rail = L(0xffb060);
         const unsigned pc[7] = {0x40e0d0, 0xffc84a, 0xff6ad5, 0xa8e64a, 0xff6a5a, 0x7a84ff, 0xffa040};
         for (int i = 0; i < 7; i++) p.piece[i] = L(pc[i]);
@@ -176,6 +178,7 @@ Palette paletteOf(int v) {
     }
     }
     if (p.keyMoon < 0.5f) p.keyDir = p.sunDir;
+    if (dot(p.litDir, p.litDir) < 0.5f) p.litDir = p.sunDir; // the planet lit by the sun seen (but at dawn)
     return p;
 }
 void lerpPalette(Palette& a, const Palette& b, float k) {
@@ -989,6 +992,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         const vec3 r1(std::cos(a1), 0.f, -std::sin(a1)), f1(-std::sin(a1), 0.f, -std::cos(a1));
         auto turn = [&](vec3& v) { v = r1 * dot(v, r0) + f1 * dot(v, f0) + vec3(0.f, v.y, 0.f); };
         turn(pal_.sunDir);
+        turn(pal_.litDir);
         turn(pal_.keyDir);
         turn(pal_.moonDir);
         turn(pal_.pole);
@@ -1296,6 +1300,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progSky_, "uDyson", saturate((float)(built_ - stageFirst_[5]) / 3.f) * (stageFirst_[5] > 0 ? 1.f : 0.f));
         set1f(progSky_, "uR", R_PLANET);
         set3f(progSky_, "uSunDir", pal_.sunDir);
+        set3f(progSky_, "uLitDir", normalize(pal_.litDir));
         set3f(progSky_, "uSunC", pal_.sunC * (1.f / 2.6f) * (1.f - 0.5f * slow_));
         set3f(progSky_, "uSunGlow", pal_.sunGlow);
         set1f(progSky_, "uSunSize", pal_.sunSize);
@@ -1340,6 +1345,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progSky_, "uGlow", 0.3f * wp_ + 0.5f * life_ + 0.3f * swell_);
         set1f(progSky_, "uNightLift", pal_.nightLift);
         set1f(progSky_, "uHaze", pal_.haze);
+        set1f(progSky_, "uWrap", pal_.wrap);
         set3f(progSky_, "uMoonDir", pal_.moonDir);
         set1f(progSky_, "uMoonSize", pal_.moonSize);
         set1f(progSky_, "uTime", time_);
