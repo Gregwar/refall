@@ -518,7 +518,7 @@ void OrbitalUniverse::emitModule(Builder& b, const Module& m, int idx) {
         b.cyl(vec3(1.f, 0, 0), X, 1.42f, 0.18f, M_SILVER, vec3(0.75f));
         b.beam(vec3(2.f, 0, 0), vec3(10.f, 0, 0), 0.32f, M_TRUSS, p.hull * 0.8f, sd);
         // the sun in the module's frame -> the wings' angle
-        const vec3 sun = p.sunDir;
+        const vec3 sun = p.keyMoon < 0.5f ? p.keyDir : p.sunDir; // (the light the station is lit by)
         const Xf& f = b.xf;
         const float sy = dot(sun, f.y), sz = dot(sun, f.z);
         const float th = std::atan2(-sy, sz) + 0.02f * std::sin(time_ * 0.2f + sd * 6.f);

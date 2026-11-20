@@ -15,6 +15,9 @@
 // The planet below (ray-traced at a reduced resolution): continents, oceans with the sun's glint, clouds and their
 // shadows, the terminator, the cities' lights, the limb's glowing air, an aurora by night; the sun, the moon, the
 // Milky Way and stars (the stars measured in screen pixels through the sky projection's Jacobian, as GIANT TREE does).
+// The framing is a film's: the sky turns with the camera's heading, so each variant's sun keeps its place on screen
+// (at dawn just over the limb left of the well, the lit crescent under it, the night with its cities across), seen
+// through a lens (a starburst, a halo, ghosts, an anamorphic streak) and a light grade (warm highlights, deep blacks).
 // The station is instanced solids (boxes and parametric cylinders, spheres, tori and bands) with their own
 // materials (insulation blankets, gold foil, solar cells, radiators, lattice trusses, the ring's land), lit by the sun
 // with its shadow map, by the planet's light from below and its reflection; lamps, windows and thrusters glow (4x
@@ -113,13 +116,17 @@ Palette paletteOf(int v) {
     p.pole = normalize(vec3(0.3f, 0.45f, -0.84f));
     p.ringDay = 0.5f;
     p.haze = 1.f;
+    p.wrap = 0.f;
     p.moonSize = 0.f; p.sunVis = 1.f; p.sunSize = 0.011f; p.keyMoon = 0.f; p.planetType = 0.f; p.clouds = 1.f;
     p.cityK = 1.f; p.auroraK = 0.f; p.milkyK = 0.25f; p.bloom = 0.5f; p.nightLift = 0.f; p.stars = 0.7f; p.keyK = 1.f;
     p.airglow = L(0x40ff90) * 0.1f; p.aurora1 = L(0x30ff9a); p.aurora2 = L(0xd040ff);
     switch (v) {
     case 0: {
         // BLUE MARBLE: the day side under a high sun, blue oceans and white clouds, the terminator on the far horizon
-        p.sunDir = normalize(vec3(0.45f, 0.82f, 0.12f));
+        // (the sun seen low in the frame's upper left, its flare across; the planet lit by it high overhead)
+        p.litDir = normalize(vec3(0.45f, 0.82f, 0.12f));
+        p.sunDir = normalize(vec3(-0.878f, -0.053f, -0.474f));
+        p.keyDir = p.litDir;
         p.sunC = vec3(1.f, 0.98f, 0.94f) * 2.6f; p.sunGlow = L(0xfff0d0); p.keyC = p.sunC;
         p.earthC = L(0x3a64a8) * 0.32f; p.amb = L(0x0a0e18) * 0.6f; p.envUp = L(0x05070c); p.envDown = L(0x3a6ab0) * 0.7f;
         p.ocean = L(0x0a2c6e); p.shallow = L(0x1a8cb4); p.land = L(0x24582a); p.land2 = L(0x8c7448); p.desert = L(0xe0b880);
@@ -131,13 +138,14 @@ Palette paletteOf(int v) {
     }
     case 1: {
         // ORBITAL DAWN: the sun rising over the limb, a red and gold line of air, the night below with its cities
-        p.sunDir = normalize(vec3(-0.89f, -0.25f, -0.38f));
+        p.sunDir = normalize(vec3(-0.786f, -0.24f, -0.571f));
         p.sunC = vec3(1.f, 0.86f, 0.66f) * 2.8f; p.sunGlow = L(0xffa860); p.keyC = p.sunC;
         p.earthC = L(0x1a2846) * 0.3f; p.amb = L(0x0c0a16) * 0.7f; p.envUp = L(0x06050c); p.envDown = L(0x1a2a50) * 0.6f;
         p.ocean = L(0x061a48); p.shallow = L(0x14609a); p.land = L(0x24582a); p.land2 = L(0x8c7448); p.desert = L(0xe0b880);
         p.city = L(0xffc070); p.atmoDay = L(0x3a8aff); p.atmoTwi = L(0xff6a2a); p.cityK = 1.3f;
         p.hull = L(0xf4ece2); p.gold = L(0xf0b040); p.chase = L(0xffb060); p.lamp = L(0xffd8a0); p.window = L(0xffb870);
         p.space = L(0x03040e); p.milky = L(0x3a3a6a); p.milkyK = 0.35f; p.sunSize = 0.013f; p.bloom = 0.6f; p.ringDay = 0.38f;
+        p.wrap = 0.06f; p.litDir = normalize(vec3(-0.928f, -0.174f, 0.329f)); p.airglow = L(0x40ff90) * 0.14f;
         p.ink = L(0xfff4ea); p.accent = L(0xffb870); p.veil = L(0x0a0610); p.rail = L(0xffb060);
         const unsigned pc[7] = {0x40e0d0, 0xffc84a, 0xff6ad5, 0xa8e64a, 0xff6a5a, 0x7a84ff, 0xffa040};
         for (int i = 0; i < 7; i++) p.piece[i] = L(pc[i]);
@@ -162,7 +170,9 @@ Palette paletteOf(int v) {
     default: {
         // RED PLANET: a rust world, dust in the thin air (blue at its sunset), colonies' lights on its night side
         p.planetType = 1.f;
-        p.sunDir = normalize(vec3(0.55f, 0.7f, 0.45f));
+        p.litDir = normalize(vec3(0.55f, 0.7f, 0.45f));
+        p.sunDir = normalize(vec3(-0.878f, -0.053f, -0.474f));
+        p.keyDir = p.litDir;
         p.sunC = vec3(1.f, 0.93f, 0.85f) * 2.4f; p.sunGlow = L(0xffd0a0); p.keyC = p.sunC;
         p.earthC = L(0x8a4a28) * 0.3f; p.amb = L(0x100a0a) * 0.6f; p.envUp = L(0x06040a); p.envDown = L(0x8a4a2a) * 0.6f;
         p.land = L(0xb05430); p.land2 = L(0xcc7c48); p.ocean = L(0x4a2a24); p.desert = L(0xe2a878); p.ice = L(0xfff4ec);
@@ -177,7 +187,8 @@ Palette paletteOf(int v) {
         break;
     }
     }
-    if (p.keyMoon < 0.5f) p.keyDir = p.sunDir;
+    if (p.keyMoon < 0.5f && dot(p.keyDir, p.keyDir) < 0.5f) p.keyDir = p.sunDir; // (the station lit by the sun seen, but where set)
+    if (dot(p.litDir, p.litDir) < 0.5f) p.litDir = p.sunDir; // the planet lit by the sun seen (but at dawn)
     return p;
 }
 void lerpPalette(Palette& a, const Palette& b, float k) {
@@ -186,6 +197,7 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
     for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
 }
 
+constexpr float AZ_REF = 0.55f;     // the camera's reference heading (the variants' skies are set for it)
 constexpr float CLEAR_T = 0.36f;    // a cleared row flares and shrinks into light in this long (real time)
 constexpr float FLOW_T = 1.1f;      // its light flies out to the seat in this long
 constexpr int MAX_MOTES = 1200;
@@ -881,6 +893,7 @@ void OrbitalUniverse::updateCamera(float dt) {
     }
     const float F = camF_;
     orient(F);
+    camAz_ = az;
     const vec3 dirA = normalize(fwd + right * (sx * tanH_ * aspect_) + upv * (sy * tanH_));
     const float D = F / tanH_ * (1.f + 0.7f * away_ * away_);
     eye_ = camA_ - dirA * D;
@@ -983,6 +996,18 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         if (!palSet_) { basePal_ = target; palSet_ = true; }
         else lerpPalette(basePal_, target, 1.f - std::exp(-dt * 1.0f));
         pal_ = basePal_;
+        // the sky turns with the camera's heading: each variant's sun (moon, pole) is set for the reference heading
+        // (AZ_REF), so the composition holds as the camera swings round the growing station (the sun just over the
+        // limb left of the well at dawn); the solar wings, the shadows and the planet's light all follow
+        const float a0 = AZ_REF, a1 = camAz_;
+        const vec3 r0(std::cos(a0), 0.f, -std::sin(a0)), f0(-std::sin(a0), 0.f, -std::cos(a0));
+        const vec3 r1(std::cos(a1), 0.f, -std::sin(a1)), f1(-std::sin(a1), 0.f, -std::cos(a1));
+        auto turn = [&](vec3& v) { v = r1 * dot(v, r0) + f1 * dot(v, f0) + vec3(0.f, v.y, 0.f); };
+        turn(pal_.sunDir);
+        turn(pal_.litDir);
+        turn(pal_.keyDir);
+        turn(pal_.moonDir);
+        turn(pal_.pole);
     }
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     const float world = 1.f - smoothstepf(0.f, 0.7f, bridge);
@@ -1287,6 +1312,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progSky_, "uDyson", saturate((float)(built_ - stageFirst_[5]) / 3.f) * (stageFirst_[5] > 0 ? 1.f : 0.f));
         set1f(progSky_, "uR", R_PLANET);
         set3f(progSky_, "uSunDir", pal_.sunDir);
+        set3f(progSky_, "uLitDir", normalize(pal_.litDir));
         set3f(progSky_, "uSunC", pal_.sunC * (1.f / 2.6f) * (1.f - 0.5f * slow_));
         set3f(progSky_, "uSunGlow", pal_.sunGlow);
         set1f(progSky_, "uSunSize", pal_.sunSize);
@@ -1331,12 +1357,33 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progSky_, "uGlow", 0.3f * wp_ + 0.5f * life_ + 0.3f * swell_);
         set1f(progSky_, "uNightLift", pal_.nightLift);
         set1f(progSky_, "uHaze", pal_.haze);
+        set1f(progSky_, "uWrap", pal_.wrap);
         set3f(progSky_, "uMoonDir", pal_.moonDir);
         set1f(progSky_, "uMoonSize", pal_.moonSize);
         set1f(progSky_, "uTime", time_);
         set1f(progSky_, "uBridge", bridge);
         set3f(progSky_, "uBridgeCol", bridge_.color);
         ugl::drawFullscreen();
+    }
+
+    // ---- The sun's place on screen for the lens flare: in front of the camera, not behind the planet (eased out as
+    // it sinks under the limb's air), faded at the frame's edges; what the station hides of it COMP_FS measures.
+    {
+        const vec3 sd = normalize(pal_.sunDir), E = eye_ - EARTH_C;
+        const float z = dot(sd, look_);
+        float k = 0.f;
+        if (z > 0.05f) {
+            const vec2 ndc{dot(sd, camR_) / z / (tanH_ * aspect_), dot(sd, camU_) / z / tanH_};
+            sunUv_ = vec2{ndc.x * 0.5f + 0.5f, ndc.y * 0.5f + 0.5f};
+            k = (1.f - smoothstepf(0.95f, 1.3f, std::fabs(ndc.x))) * (1.f - smoothstepf(0.95f, 1.3f, std::fabs(ndc.y)));
+            const float b = dot(E, sd);
+            if (b < 0.f) {
+                // the sun's height over the limb (its ray's closest pass over the ground, less the bright air) as an angle
+                const float hm = std::sqrt(std::max(dot(E, E) - b * b, 0.f)) - R_PLANET - 15000.f;
+                k *= smoothstepf(-pal_.sunSize, pal_.sunSize * 1.5f, hm / -b);
+            }
+        }
+        flare_ = k * sunVis * world;
     }
 
     // =========================================================== the sun's shadow map
@@ -1514,6 +1561,10 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     set1f(progComp_, "uBloomK", pal_.bloom * (1.f + 0.25f * wp_ + 0.3f * life_ + 0.2f * swell_) * world);
     set1f(progComp_, "uSat", 1.08f);
+    set2f(progComp_, "uSunUv", sunUv_.x, sunUv_.y);
+    set1f(progComp_, "uFlare", flare_ * (1.f + 0.15f * wp_ + 0.25f * life_));
+    set3f(progComp_, "uFlareC", lerp(pal_.sunGlow, vec3(1.f), 0.35f));
+    set1f(progComp_, "uAspect", aspect_);
     ugl::drawFullscreen();
 
     glEnable(GL_BLEND);

@@ -59,13 +59,13 @@ public:
 
     // A variant (linear RGB; floats only: palettes blend float by float).
     struct Palette {
-        vec3 space, milky, sunC, sunGlow, keyC, earthC, amb, envUp, envDown, sunDir, moonDir, keyDir, pole;
+        vec3 space, milky, sunC, sunGlow, keyC, earthC, amb, envUp, envDown, sunDir, moonDir, keyDir, pole, litDir;
         vec3 ocean, shallow, land, land2, desert, ice, cloud, city, atmoDay, atmoTwi, airglow, aurora1, aurora2;
         vec3 hull, hull2, gold, solar, radiator, dark, window, trim, navR, navG, lamp, chase, thrust;
         vec3 landA, landB, lake, rock, town, ringCloud;
         vec3 ink, accent, veil, rail;
         vec3 piece[7];
-        float keyMoon, planetType, clouds, cityK, auroraK, milkyK, moonSize, sunVis, sunSize, bloom, nightLift, stars, keyK, ringDay, haze;
+        float keyMoon, planetType, clouds, cityK, auroraK, milkyK, moonSize, sunVis, sunSize, bloom, nightLift, stars, keyK, ringDay, haze, wrap;
     };
 
     // The station's plan: one module per cleared line (station.cpp).
@@ -157,6 +157,10 @@ private:
     float camF_ = -1.f, camFv_ = 0.f;  // framing radius (log space, a spring)
     vec3 camA_{0.f}, camAv_{0.f};
     float camAlt_ = orbital::ALT;
+    float camAz_ = 0.55f;              // the camera's heading (the sky turns with it: the sun keeps its place on screen)
+    // The lens flare: the sun's place on screen (uv), its strength (0: off screen, behind the planet or eclipsed).
+    vec2 sunUv_{0.f, 0.f};
+    float flare_ = 0.f;
     void updateCamera(float dt);
     vec2 toBoard(const vec3& w) const;
     float minPx_ = 0.001f;
