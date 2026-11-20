@@ -154,7 +154,7 @@ private:
     // the game's logo, the ringed planet (menuwin.cpp): its opening `k` seconds in (99: open), its colours from silver
     // (0, a game over) to full (1)
     void drawOrbitLogo(float cx, float cy, float k, float color);
-    int debSel_ = 0;                               // the game over's choice: 0 RETRY SONG, 1 RETRY STAGE, 2 MENU
+    int debSel_ = 0;                               // the game over's choice: 0 RETRY SONG, 1 RETRY STAGE (the default), 2 MENU
     bool debRetry_ = false;                        // a RETRY chosen: the debrief fades out, then the run starts again
     bool updateDebrief(const Input& in, float dt, Choice& out); // true while it shows
     void drawDebrief(int w, int h);

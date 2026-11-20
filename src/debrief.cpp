@@ -26,7 +26,7 @@ void Menu::openDebrief(const Debrief& d) {
     debrief_ = d;
     debT_ = 0;
     leaveT_ = -1;
-    debSel_ = 0;
+    debSel_ = d.retryStage.kind != Choice::NONE ? 1 : 0; // (RETRY STAGE the default)
     debRetry_ = false;
     msgT_ = 0;
     msg_.clear();
