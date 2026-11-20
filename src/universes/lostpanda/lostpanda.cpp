@@ -42,7 +42,9 @@
 // The music: the scene's light holds steady per section (brighter at a peak); in a peak the cub nods along every two
 // beats and the fireflies wink on the beat grid. The drop lifts its spirits: a warm glow from the ground, lights
 // rising around it, a few happy hops (it never walks further: a drop never skips a stage).
-// The pieces are clean bamboo-segment cells, one solid color each; a cleared row shrinks away. Before a song the camera
+// The pieces are real cubes of bamboo wood (after the owner's mockup: chamfered, their corners rounded, seen a little
+// from above, lit from the front; a colour per piece, each block its own grain), ray cast in the cells' quads (see
+// the cells in shaders.hpp); a cleared row shrinks away. Before a song the camera
 // comes down out of the sky to the cub; after it the camera rises back into the sky.
 #include "universes/lostpanda/lostpanda.hpp"
 

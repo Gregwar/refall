@@ -2778,7 +2778,7 @@ vec3 longGrain(vec3 t, float u, float v, float h0, float aa) {
     // dark strands: thin, broken along their length
     float df = 30.0 + 10.0 * h4;
     float dk = smoothstep(0.7, 0.9, n1s(g * df + 11.0, h0 + 5.0)) * smoothstep(0.3, 0.55, n1(v * 2.6 + floor(g * df) * 1.37, h0 + 7.0));
-    c = mix(c, t * 0.42, dk * 0.75 * sk * lod(df, aa));
+    c = mix(c, t * 0.48, dk * 0.55 * sk * lod(df, aa));
     // bright strands, longer
     float bk = smoothstep(0.8, 0.96, n1(g * 31.0 + 23.0, h0 + 9.0)) * smoothstep(0.25, 0.5, n1(v * 3.0 + floor(g * 31.0) * 2.1, h0 + 4.0));
     c = mix(c, mix(t, vec3(1.0), 0.3) * 1.08, bk * 0.45 * lod(31.0, aa));
