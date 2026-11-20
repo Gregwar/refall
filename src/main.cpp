@@ -773,7 +773,19 @@ void App::toggleFullscreen() {
     } else {
         glfwGetWindowPos(win_, &winX_, &winY_);
         glfwGetWindowSize(win_, &winW_, &winH_);
+        // the monitor the window is on: the one it overlaps most (the primary one if it overlaps none)
         GLFWmonitor* m = glfwGetPrimaryMonitor();
+        int count = 0, best = 0;
+        GLFWmonitor** mons = glfwGetMonitors(&count);
+        for (int i = 0; i < count; i++) {
+            const GLFWvidmode* mode = glfwGetVideoMode(mons[i]);
+            if (!mode) continue;
+            int mx = 0, my = 0;
+            glfwGetMonitorPos(mons[i], &mx, &my);
+            const int ox = std::min(winX_ + winW_, mx + mode->width) - std::max(winX_, mx);
+            const int oy = std::min(winY_ + winH_, my + mode->height) - std::max(winY_, my);
+            if (ox > 0 && oy > 0 && ox * oy > best) { best = ox * oy; m = mons[i]; }
+        }
         const GLFWvidmode* vm = glfwGetVideoMode(m);
         glfwSetWindowMonitor(win_, m, 0, 0, vm->width, vm->height, vm->refreshRate);
     }
