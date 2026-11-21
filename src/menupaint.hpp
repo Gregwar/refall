@@ -41,6 +41,8 @@ public:
     void end();
     // Shapes (pixels, top-left origin). `soft` is the edge's blur width (1: anti-aliased, larger: a glow).
     void rrect(float x, float y, float w, float h, float r, Col c, float soft = 1.f);
+    // the part of a rounded box (x, y, w, h, r) from `fromY` down: square where it is cut, round below
+    void rrectBelow(float x, float y, float w, float h, float r, float fromY, Col c, float soft = 1.f);
     void rrectLine(float x, float y, float w, float h, float r, float width, Col c, float soft = 1.f);
     void circle(float cx, float cy, float r, Col c, float soft = 1.f) { rrect(cx - r, cy - r, 2 * r, 2 * r, r, c, soft); }
     void ring(float cx, float cy, float r, float width, Col c, float soft = 1.f) {

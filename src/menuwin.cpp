@@ -982,18 +982,16 @@ void Worlds::kalSlots() {
     constexpr float INSET = 24, STEP = 62, SIZE = 26, TRACK = 0.3f;
     const int n = SaveSlots::COUNT;
     const float x0 = 960 - (n * CW + (n - 1) * GAP) / 2;
-    const float by0 = TOP + CH + 18, bh = Menu::SLOT_ACTIONS * STEP + 44;
-    // portrait: the title, then the three cards one under the other, the focused card's box right under it
-    const bool pt = m.portrait_;
+    // the chosen slot's choices: its card grows down to hold them, under a hairline (one card, not a box beside it)
+    const float by0 = TOP + CH, bh = Menu::SLOT_ACTIONS * STEP + 30;
     const int psel = std::clamp(m.slotSel_, 0, n - 1);
-    auto cardBlock = [&](int i) { return PBlock{x0 + i * (CW + GAP), TOP, CW, CH, 1.7f}; };
-    auto pCard = [&](int i) { return i <= psel || !m.slotOpen_ ? 1 + i : 2 + i; }; // (its place in the column)
+    const float open = std::clamp(m.aSlotOpen_, 0.f, 1.f);
+    auto extOf = [&](int i) { return i == psel ? bh * sstep(open) : 0.f; }; // (the card's growth)
+    // portrait: the title, then the three cards one under the other
+    const bool pt = m.portrait_;
+    auto cardBlock = [&](int i) { return PBlock{x0 + i * (CW + GAP), TOP, CW, CH + extOf(i), 1.7f}; };
     if (pt) {
-        const PBlock title{610, 90, 700, 130, 1.4f}, box{x0 + psel * (CW + GAP) + INSET, by0, CW - 2 * INSET, bh, 1.7f};
-        if (!m.slotOpen_) pLayout({title, cardBlock(0), cardBlock(1), cardBlock(2)}, 22);
-        else if (psel == 0) pLayout({title, cardBlock(0), box, cardBlock(1), cardBlock(2)}, 22);
-        else if (psel == 1) pLayout({title, cardBlock(0), cardBlock(1), box, cardBlock(2)}, 22);
-        else pLayout({title, cardBlock(0), cardBlock(1), cardBlock(2), box}, 22);
+        pLayout({{610, 90, 700, 130, 1.4f}, cardBlock(0), cardBlock(1), cardBlock(2)}, 22);
         pAt(0);
     }
     const char* title = "SAVE SLOTS";
@@ -1011,8 +1009,8 @@ void Worlds::kalSlots() {
         const SaveSlots::Summary sm = i < (int)m.slotSum_.size() ? m.slotSum_[i] : SaveSlots::Summary{};
         const bool sel = i == m.slotSel_, inUse = i == active;
         const float g = sel ? 1.f : 0.f;
-        if (pt) pAt(pCard(i));
-        const float w = CW * u, h = CH * u;
+        if (pt) pAt(1 + i);
+        const float w = CW * u, h = (CH + extOf(i)) * u, hc = CH * u; // (h: with its choices; hc: the card's own)
         const float x = X(x0 + i * (CW + GAP)), y = Y(TOP);
         if (sel) {
             p.setAdditive(true);
@@ -1060,7 +1058,7 @@ void Worlds::kalSlots() {
             p.text(F::JOSEFIN, "UNLOCKED", gx + 44 * u, gy + th * 0.5f + 7 * u, ts, hex(0xffe0a0), -1, 0.25f);
         }
         // along the bottom: its scores, when it was last played
-        const float by = y + h - 30 * u, half = w / 2 - 44 * u;
+        const float by = y + hc - 30 * u, half = w / 2 - 44 * u;
         fit(F::JOSEFIN, text::thousands((int)std::min<int64_t>(sm.score, 2000000000)) + " POINTS", x + 34 * u, by, 22 * u, half,
             hex(0xffffff, 0.9f), -1, 0.15f);
         if (sm.played > 0) {
@@ -1074,15 +1072,18 @@ void Worlds::kalSlots() {
         p.setFade(1.f);
     }
     // what to do with the focused slot: a box under its card, gliding along with the focus
-    // the box: once a slot is chosen (OK on it), fading in under it
-    if (m.aSlotOpen_ < 0.02f || (pt && !m.slotOpen_)) return;
-    if (pt) pAt(2 + psel);
-    p.setFade(std::min(1.f, m.aSlotOpen_));
+    // the choices, once a slot is chosen (OK on it), in the lower part its card grew, under a hairline
+    if (open < 0.02f) return;
+    if (pt) pAt(1 + psel);
+    p.setFade(sstep(open));
     struct FadeBack { Painter& pp; ~FadeBack() { pp.setFade(1.f); } } fadeBack{p}; // (whichever way it returns)
-    const float bx = X(x0 + (pt ? (float)psel : m.aSlot_) * (CW + GAP) + INSET), bw = (CW - 2 * INSET) * u;
+    const float bx = X(x0 + psel * (CW + GAP) + INSET), bw = (CW - 2 * INSET) * u;
     const float cx = bx + bw / 2, mid = by0 + bh / 2;
-    p.glass(bx, Y(by0), bw, bh * u, 20 * u, u, 0.f, 0.55f);
-    p.rrectLine(bx, Y(by0), bw, bh * u, 20 * u, 1.4f * u, hex(0xffffff, 0.35f));
+    { // (the card's lower part a shade darker: its extension, square under the card, round at its foot)
+        const float kx = X(x0 + psel * (CW + GAP)), kw = CW * u;
+        p.rrectBelow(kx + 1.5f * u, Y(TOP), kw - 3 * u, (CH + extOf(psel)) * u - 1.5f * u, 19 * u, Y(by0), hex(0x02040c, 0.32f * sstep(open)));
+    }
+    p.line(bx, Y(by0), bx + bw, Y(by0), 1.2f * u, hex(0xffffff, 0.3f));
     const float maxw = bw - 40 * u;
     if (m.noteT_ > 0.f) { // a choice's "done", for a moment
         const float a = std::min(1.f, m.noteT_ / 0.3f) * std::min(1.f, (Menu::NOTE_TIME - m.noteT_) / 0.2f + 0.2f);

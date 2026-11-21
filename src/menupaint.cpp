@@ -636,6 +636,15 @@ void Painter::rrect(float x, float y, float w, float h, float r, Col c, float so
     quad(px, lc, hx, hy, c, r, soft, 0.f, 0.f);
 }
 
+void Painter::rrectBelow(float x, float y, float w, float h, float r, float fromY, Col c, float soft) {
+    if (c.a <= 0.f || w <= 0 || h <= 0 || fromY >= y + h) return;
+    const float e = soft + 1.f, hx = w * 0.5f, hy = h * 0.5f, cx = x + hx, cy = y + hy;
+    const float top = std::max(fromY, y - e), ly = top - cy;
+    const float px[4][2] = {{cx - hx - e, top}, {cx + hx + e, top}, {cx + hx + e, cy + hy + e}, {cx - hx - e, cy + hy + e}};
+    const float lc[4][2] = {{-hx - e, ly}, {hx + e, ly}, {hx + e, hy + e}, {-hx - e, hy + e}};
+    quad(px, lc, hx, hy, c, r, soft, 0.f, 0.f);
+}
+
 void Painter::rrectLine(float x, float y, float w, float h, float r, float width, Col c, float soft) {
     if (c.a <= 0.f || w <= 0 || h <= 0) return;
     const float e = soft + 1.f, hx = w * 0.5f, hy = h * 0.5f, cx = x + hx, cy = y + hy;
