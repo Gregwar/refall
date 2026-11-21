@@ -340,6 +340,18 @@ private:
     void gameOverDebrief();
     void toDebrief(const Menu::Debrief& d);
     int runMenuShot();
+    // The game's loop, a frame at a time (frame(), finish() once it is over), and what lives across its frames
+    struct Loop {
+        bool clipMode = false, shotMode = false, reviewMode = false, fixedStep = false;
+        double last = 0;
+        float fade = 0.f;
+        int shotsTaken = 0;
+        float shotSettle = 0;
+        FILE* clipPipe = nullptr;
+        std::vector<unsigned char> clipPx;
+    } loop_;
+    bool frame();
+    int finish();
     const CampaignStage* runStage() const {
         return mode_ == MODE_CAMPAIGN && run_.stage < campaign_.size() ? &campaign_.stages()[run_.stage] : nullptr;
     }
@@ -405,7 +417,7 @@ private:
         if (streamVideo_ >= 0) streamFrame();
         if (headless_) return;
 #ifdef REFALL_WEB
-        web::waitFrame(); // (the browser shows the canvas and comes back at its next frame; a held frame too)
+        web::endFrame(); // (the browser shows the canvas once frame() returns, and calls it again at its next frame)
         return;
 #endif
         if (held_) { glfwWaitEventsTimeout(1.0 / 30.0); return; }
@@ -1397,8 +1409,6 @@ int App::run() {
         opt_.autoplay = true;
         if (!opt_.viewShot.empty()) offline_ = opt_.mute = true;
     }
-    FILE* clipPipe = nullptr;
-    std::vector<unsigned char> clipPx;
 
     // Offline renders (clips, shots, reviews) run headless on the GPU when they can (REFALL_HEADLESS=0: a window)
     if (testPlay()) { offline_ = true; opt_.mute = true; }
@@ -1581,12 +1591,37 @@ int App::run() {
     }
     if (menuEnabled_ && opt_.menuMusic && menu_.music()) startMenuMusic();
 
-    const bool fixedStep = headless_ && !opt_.stream;
-    double last = fixedStep ? 0.0 : clock();
-    float fade = 0.f;
-    int shotsTaken = 0;
-    float shotSettle = 0;
-    while (!(win_ && glfwWindowShouldClose(win_)) && !quit_) {
+    loop_.clipMode = clipMode;
+    loop_.shotMode = shotMode;
+    loop_.reviewMode = reviewMode;
+    loop_.fixedStep = headless_ && !opt_.stream;
+    loop_.last = loop_.fixedStep ? 0.0 : clock();
+#ifdef REFALL_WEB
+    // the browser calls the frames (the page's main thread never waits): run() returns, the game goes on
+    web::runFrames([this] {
+        if (frame()) return true;
+        finish();
+        return false;
+    });
+    return 0;
+#endif
+    while (frame()) {}
+    return finish();
+}
+
+// One frame of the game's loop (false: the loop is over). On the desktop run() calls it again and again, its swap()
+// waiting for the screen; on the web the browser calls it at each of its frames (web::runFrames).
+bool App::frame() {
+    const bool clipMode = loop_.clipMode, shotMode = loop_.shotMode, reviewMode = loop_.reviewMode, fixedStep = loop_.fixedStep;
+    double& last = loop_.last;
+    float& fade = loop_.fade;
+    int& shotsTaken = loop_.shotsTaken;
+    float& shotSettle = loop_.shotSettle;
+    FILE*& clipPipe = loop_.clipPipe;
+    std::vector<unsigned char>& clipPx = loop_.clipPx;
+    int fbw = 0, fbh = 0;
+    if ((win_ && glfwWindowShouldClose(win_)) || quit_) return false;
+    {
         double now = fixedStep ? last + 1.0 / 60.0 : clock();
         const auto frameStart = std::chrono::steady_clock::now();
         float dt = shotMode ? 1.f / 60.f : (float)std::min(0.1, now - last);
@@ -1643,7 +1678,7 @@ int App::run() {
                     std::printf("[cheat] stage %d cleared\n", pl.stage + 1);
                     campaignEnd();
                     swap();
-                    continue;
+                    return true;
                 }
             }
             const bool remapped = remapKeys(); // (a remap takes the keys)
@@ -1675,7 +1710,7 @@ int App::run() {
                 quit_ = true;
 #endif
             } else if (plays) beginSession(c);
-            continue;
+            return true;
         }
 
         // ---- Songs.
@@ -1692,7 +1727,7 @@ int App::run() {
                 if (mode_ == MODE_CAMPAIGN) { // the run needs its songs in order
                     toMenu(Menu::CAMPAIGN, "NO SONG", "COULD NOT LOAD " + asciiFold(tried), true);
                     swap();
-                    continue;
+                    return true;
                 }
             }
             if (!nextTrack_ && !lib_.loading() && !lib_.empty()) lib_.prefetch(runSeed_ + (uint64_t)(runTime_ * 1000));
@@ -1727,7 +1762,7 @@ int App::run() {
             if (break_ == BREAK_OUT && outroDone && mode_ == MODE_CAMPAIGN && run_.finishing) {
                 campaignEnd();
                 swap();
-                continue;
+                return true;
             }
             if (break_ == BREAK_OUT && outroDone && nextTrack_) {
                 break_ = BREAK_IN;
@@ -1737,7 +1772,7 @@ int App::run() {
             }
         } else if (mode_ == MODE_CAMPAIGN && track_ && songFinished() && !game_.over()) { // no breaks (REFALL_NO_BREAK)
             campaignSongSurvived();
-            if (run_.finishing) { campaignEnd(); swap(); continue; }
+            if (run_.finishing) { campaignEnd(); swap(); return true; }
             if (nextTrack_) startTrack(std::move(nextTrack_));
         } else if (track_ && nextTrack_ && (songFinished() || wantSkip_)) {
             wantSkip_ = false;
@@ -1840,12 +1875,12 @@ int App::run() {
                 if (runStage()) campaignOutcome(run_.survived ? game_.score() : run_.songStartScore, run_.survived ? game_.lines() : run_.songStartLines);
                 toMenu(mode_ == MODE_CAMPAIGN ? Menu::CAMPAIGN : Menu::FREE);
                 swap();
-                continue;
+                return true;
             }
             quit_ = true;
         }
         // still loading the first song: Esc goes back to the menu
-        if (waiting && menuEnabled_ && input_.pressed(A_UI_BACK)) { toMenu(mode_ == MODE_CAMPAIGN ? Menu::CAMPAIGN : Menu::FREE); swap(); continue; }
+        if (waiting && menuEnabled_ && input_.pressed(A_UI_BACK)) { toMenu(mode_ == MODE_CAMPAIGN ? Menu::CAMPAIGN : Menu::FREE); swap(); return true; }
         if (input_.pressed(A_FULLSCREEN)) toggleFullscreen();
         if (viewer_) viewerFrame(dt); // (its own keys: the game's shortcuts below are off)
         // Test hook: REFALL_TEST_SKIP=<seconds> presses "next song" periodically.
@@ -1925,7 +1960,7 @@ int App::run() {
                 // Game over: the board dissolves; from the menu it holds until the player presses a key, then back to
                 // the menu; without the menu (songs on the command line) a key starts a new game.
                 overTime_ += dt;
-                if (menuEnabled_ && overTime_ > 2.5f && anyKeyPressed()) { toMenu(Menu::FREE); swap(); continue; }
+                if (menuEnabled_ && overTime_ > 2.5f && anyKeyPressed()) { toMenu(Menu::FREE); swap(); return true; }
                 const bool any = anyKeyPressed() || input_.pressed(A_NEXT_SONG); // (Enter too)
                 if ((any && overTime_ > 2.5f) || ((opt_.autoplay || shotMode) && overTime_ > 4.f)) {
                     game_.restart();
@@ -2151,7 +2186,7 @@ int App::run() {
             if (viewShotT_ >= opt_.viewShotAfter || runTime_ > 300.f) {
                 const bool ok = R_.screenshot(opt_.viewShot);
                 std::printf("[shot] %s %s\n", ok ? "wrote" : "FAILED", opt_.viewShot.c_str());
-                break;
+                return false;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(16)); // in real time: the loads keep up
         }
@@ -2162,7 +2197,7 @@ int App::run() {
             if (fbw > 0 && fbh > 0) menu_.captureBackdrop(fbw, fbh);
             gameOverDebrief();
             swap();
-            continue;
+            return true;
         }
         static long clipFrames = -1; // frames recorded (the song time restarts with the next song)
         if (clipMode && track_ && clipStart_ >= 0 && (clipFrames >= 0 || songTime_ >= clipStart_)) {
@@ -2171,7 +2206,7 @@ int App::run() {
             R_.readFrame(clipPx, cw, ch);
             if (!clipPipe) {
                 std::string ff = std::getenv("REFALL_FFMPEG") ? std::getenv("REFALL_FFMPEG") : platform::findExecutable("ffmpeg");
-                if (ff.empty()) { std::fprintf(stderr, "[clip] ffmpeg not found\n"); break; }
+                if (ff.empty()) { std::fprintf(stderr, "[clip] ffmpeg not found\n"); return false; }
                 char spec[160];
                 std::snprintf(spec, sizeof(spec), " -y -loglevel error -f rawvideo -pix_fmt rgb24 -s %dx%d -r 60 -i - -ss %.3f -t %.3f -i ",
                               cw, ch, clipStart_, opt_.clipBefore + opt_.clipAfter);
@@ -2182,14 +2217,14 @@ int App::run() {
                                                                               : "-c:v libx264 -threads 2 -preset medium -crf 18") +
                                   " -pix_fmt yuv420p -c:a aac -b:a 192k -af apad -shortest " + platform::quoteArg(opt_.clipPath);
                 clipPipe = platform::openWrite(cmd);
-                if (!clipPipe) { std::fprintf(stderr, "[clip] could not start ffmpeg\n"); break; }
+                if (!clipPipe) { std::fprintf(stderr, "[clip] could not start ffmpeg\n"); return false; }
             }
             std::fwrite(clipPx.data(), 1, clipPx.size(), clipPipe);
             if (clipFrames >= (long)((opt_.clipBefore + opt_.clipAfter) * 60.f)) {
                 const int rc = platform::closeRead(clipPipe);
                 clipPipe = nullptr;
                 std::printf("[clip] %s %s (%s)\n", rc == 0 ? "wrote" : "FAILED", opt_.clipPath.c_str(), R_.label().c_str());
-                break;
+                return false;
             }
         }
         if (shotMode && !clipMode && track_) {
@@ -2226,7 +2261,7 @@ int App::run() {
                 if (tShots < 0 && shotSettle > 12.f) {
                     int variant = -1;
                     int to = opt_.toUniverse.empty() ? universes::next(R_.universe(), true) : universes::parse(opt_.toUniverse, &variant);
-                    if (to < 0) { std::fprintf(stderr, "[app] unknown universe '%s'\n", opt_.toUniverse.c_str()); break; }
+                    if (to < 0) { std::fprintf(stderr, "[app] unknown universe '%s'\n", opt_.toUniverse.c_str()); return false; }
                     SongLook l = look_;
                     l.variant = variant;
                     if (track_) l.remaining = (float)std::max(0.0, track_->duration() - songTime_);
@@ -2246,11 +2281,11 @@ int App::run() {
                         std::snprintf(name, sizeof(name), "%s%02d.png", opt_.transitionShots.c_str(), tShots);
                         R_.screenshot(name);
                         std::printf("[shot] %s  <- %s at %.2f (%s)\n", name, R_.transitionName(), p, R_.label().c_str());
-                        if (++tShots >= N || !R_.changing()) break;
+                        if (++tShots >= N || !R_.changing()) return false;
                     }
                 }
                 swap();
-                continue;
+                return true;
             }
             if (reviewMode && !reviewFilled_ && shotSettle > warmup() - 1.5) {
                 game_.debugFillBoard(runSeed_);
@@ -2266,11 +2301,11 @@ int App::run() {
                 std::printf("[shot] %s  <- %s\n", name, R_.label().c_str());
                 shotsTaken++;
                 shotSettle = 0;
-                if (shotsTaken >= opt_.shotCount) break;
+                if (shotsTaken >= opt_.shotCount) return false;
                 if (opt_.phaseShots) {
-                    if (shotsTaken >= (int)plan_.phases.size()) break;
+                    if (shotsTaken >= (int)plan_.phases.size()) return false;
                     swap();
-                    continue;
+                    return true;
                 }
                 newScene(true);
                 if (shotsTaken % 2 == 0 && nextTrack_) startTrack(std::move(nextTrack_));
@@ -2293,6 +2328,11 @@ int App::run() {
             (void)acc;
         }
     }
+    return true;
+}
+
+// The end of the run (the loop over): the frames' stats, the menu's place kept, the window closed.
+int App::finish() {
     if (statFrames_ > 0)
         std::printf("[stats] %s: %ld frames, update %.2f ms, drawing calls %.2f ms (max %.1f), GPU %.2f ms (max %.1f)\n",
                     R_.label().c_str(), statFrames_, statUpd_ / statFrames_, statCpu_ / statFrames_, statCpuMax_,
@@ -3102,13 +3142,8 @@ static int viewerMain(int argc, char** argv) {
     std::_Exit(rc); // (background downloads aren't waited for)
 }
 
-int main(int argc, char** argv) {
-    g_startTime = std::chrono::steady_clock::now();
-    platform::standaloneStart();
-    platform::lineBufferStdout();
-#ifdef REFALL_WEB
-    web::mountStorage();
-#endif
+// The game, its command line read (on the web: once the player's folders are there).
+static int start(int argc, char** argv) {
 #ifdef REFALL_VOYAGE_VIEWER
     return viewerMain(argc, argv);
 #endif
@@ -3220,9 +3255,31 @@ int main(int argc, char** argv) {
     if (!o.toUniverse.empty() && !universes::check(o.toUniverse)) return 1;
     // No songs given: the default playlist (free play: the electro one, thousands of songs)
     if (o.paths.empty()) o.paths.push_back(freePlay ? ELECTRO_PLAYLIST : DEFAULT_PLAYLIST);
+#ifdef REFALL_WEB
+    (new App(o))->run(); // (kept: the browser calls its frames once this returns)
+    return 0;
+#endif
     App app(o);
     int rc = app.run();
     // Exit now: don't wait for background downloads/analysis (an unfinished download resumes next time).
     std::fflush(stdout);
     std::_Exit(rc);
+}
+
+int main(int argc, char** argv) {
+    g_startTime = std::chrono::steady_clock::now();
+    platform::standaloneStart();
+    platform::lineBufferStdout();
+#ifdef REFALL_WEB
+    // the player's folders first, filled from IndexedDB in the background: the game starts once they are
+    static std::vector<std::string> args(argv, argv + argc);
+    web::mountStorage([] {
+        static std::vector<char*> av;
+        for (std::string& a : args) av.push_back(a.data());
+        av.push_back(nullptr);
+        start((int)args.size(), av.data());
+    });
+    return 0;
+#endif
+    return start(argc, argv);
 }

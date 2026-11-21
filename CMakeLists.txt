@@ -274,14 +274,13 @@ if(NOT EMSCRIPTEN)
 endif()
 
 # The web build's page: refall.js / .wasm / .data (the menu's music preloaded), run in the
-# browser's main thread (ASYNCIFY: the game's loop yields a frame at each swap), with threads (the song loads and
+# browser's main thread (the browser calls the game's loop a frame at a time), with threads (the song loads and
 # analysis) and the player's progress kept in the browser (IndexedDB). tools/web.sh makes the whole site.
 if(EMSCRIPTEN)
   target_link_options(refall PRIVATE
     -pthread -sPTHREAD_POOL_SIZE=12 -sSTACK_SIZE=8MB -sDEFAULT_PTHREAD_STACK_SIZE=2MB
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=256MB -sMAXIMUM_MEMORY=2GB
     -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2
-    -sASYNCIFY=1 -sASYNCIFY_IGNORE_INDIRECT=1 -sASYNCIFY_STACK_SIZE=1MB
     -sFETCH=1 -lidbfs.js -sEXIT_RUNTIME=0 -sENVIRONMENT=web,worker
     -sEXPORTED_RUNTIME_METHODS=FS,callMain
     --preload-file ${CMAKE_SOURCE_DIR}/data/menu_music.mp3@/refall/menu_music.mp3)
