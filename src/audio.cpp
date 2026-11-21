@@ -1,6 +1,7 @@
 #include "audio.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 
@@ -61,6 +62,7 @@ void AudioEngine::play(std::shared_ptr<Track> track, bool fadeIn) {
     pos_ = 0;
     frac_ = 0;
     atomicPos_ = 0;
+    gen_++;
     fade_ = fadeIn ? 0.f : 1.f;
 }
 
@@ -71,6 +73,7 @@ void AudioEngine::seek(double seconds) {
     pos_ = std::min<uint64_t>(f, current_->frames());
     frac_ = 0;
     atomicPos_ = pos_;
+    gen_++;
 }
 
 void AudioEngine::setBed(std::shared_ptr<const std::vector<int16_t>> pcm) {
@@ -165,6 +168,72 @@ double AudioEngine::position() const {
     return (double)atomicPos_.load() / sampleRate_;
 }
 
+static int64_t steadyNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+void AudioEngine::publishClock(double posSec, int64_t ns, float rate, float period, uint32_t gen) {
+    const uint32_t s = snapSeq_.load(std::memory_order_relaxed);
+    snapSeq_.store(s + 1, std::memory_order_relaxed);
+    std::atomic_thread_fence(std::memory_order_release);
+    snapPos_.store(posSec, std::memory_order_relaxed);
+    snapNs_.store(ns, std::memory_order_relaxed);
+    snapRate_.store(rate, std::memory_order_relaxed);
+    snapPeriod_.store(period, std::memory_order_relaxed);
+    snapGen_.store(gen, std::memory_order_relaxed);
+    snapSeq_.store(s + 2, std::memory_order_release);
+}
+
+// Between two blocks the song is taken to go on at the rate it went over the last one. The clock is anchored half a
+// block back (the old clock held each block's end position for one block: on average it read the middle), and goes
+// at most half a block past where the next block will end (a late block: it waits there). A phase lock keeps it on the blocks
+// (their timing jitters by a few ms; on the web they can come in bursts): it runs at the song's rate and drifts toward
+// where the blocks put it (time constant 0.15 s); further off than 0.1 s or 3 blocks (a stall), it jumps there.
+double AudioEngine::smoothPosition() {
+    if (!current_) { clockGen_ = ~0u; return 0; }
+    double pos = 0;
+    int64_t ns = 0;
+    float rate = 0, period = 0;
+    uint32_t gen = 0;
+    bool ok = false;
+    for (int tries = 0; tries < 64 && !ok; tries++) {
+        const uint32_t s0 = snapSeq_.load(std::memory_order_acquire);
+        if (s0 & 1u) continue;
+        pos = snapPos_.load(std::memory_order_relaxed);
+        ns = snapNs_.load(std::memory_order_relaxed);
+        rate = snapRate_.load(std::memory_order_relaxed);
+        period = snapPeriod_.load(std::memory_order_relaxed);
+        gen = snapGen_.load(std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_acquire);
+        ok = snapSeq_.load(std::memory_order_relaxed) == s0;
+    }
+    const int64_t now = steadyNs();
+    const uint32_t g = gen_.load();
+    const double raw = position(), end = current_->duration();
+    const double dt = clockGen_ == g ? std::max(0.0, (now - clockNs_) * 1e-9) : 0.0;
+    clockNs_ = now;
+    if (!ok && clockGen_ == g) return clock_; // (the audio thread kept writing: this frame keeps the last reading)
+    // No block since the last play / seek: the position they set, held.
+    if (!ok || gen != g) {
+        clock_ = raw;
+        clockGen_ = g;
+        return clock_;
+    }
+    const double since = std::max(0.0, (now - ns) * 1e-9);
+    if (paused_ || since > 0.25) rate = 0.f; // (no block for a while: the device has stalled)
+    const double target = std::min(end, pos + (std::min(since, 2.0 * period) - 0.5 * period) * rate);
+    const double ceiling = std::min(end, pos + 1.5 * period * rate);
+    if (clockGen_ != g || std::fabs(target - clock_) > std::max(0.1, 3.0 * period)) {
+        clock_ = std::max(0.0, target); // (a new song, a seek or a stall)
+        clockGen_ = g;
+        return clock_;
+    }
+    const double predicted = clock_ + dt * rate;
+    const double k = 1.0 - std::exp(-dt / 0.15);
+    clock_ = std::max(clock_, std::min(ceiling, predicted + (target - predicted) * k));
+    return clock_;
+}
+
 bool AudioEngine::finished() const {
     return current_ && atomicPos_.load() >= current_->frames();
 }
@@ -177,7 +246,10 @@ void AudioEngine::dataCallback(ma_device* dev, void* out, const void*, unsigned 
 
 void AudioEngine::render(float* out, unsigned int frames) {
     for (unsigned int i = 0; i < frames * 2; i++) out[i] = 0.f;
+    const int64_t blockNs = steadyNs(); // (before the mix: its cost varies, the block's request doesn't)
     std::lock_guard<std::mutex> lock(mutex_);
+    const double startPos = (double)pos_ + frac_;
+    const float period = (float)frames / sampleRate_;
     // One-shot sounds go on top of the song, after it is muffled.
     auto mixVoices = [&] {
         for (Voice& v : voices_)
@@ -186,6 +258,7 @@ void AudioEngine::render(float* out, unsigned int frames) {
                       voices_.end());
     };
     if (paused_) {
+        publishClock(startPos / sampleRate_, blockNs, 0.f, period, gen_.load());
         mixVoices();
         if (muted_)
             for (unsigned int i = 0; i < frames * 2; i++) out[i] = 0.f;
@@ -239,6 +312,10 @@ void AudioEngine::render(float* out, unsigned int frames) {
         if (prevFade_ <= 0.f || prevPos_ >= previous_->frames()) previous_.reset();
     }
     atomicPos_ = pos_;
+    {
+        const double endPos = (double)pos_ + frac_;
+        publishClock(endPos / sampleRate_, blockNs, current_ ? (float)((endPos - startPos) / frames) : 0.f, period, gen_.load());
+    }
     applyMuffle(out, frames);
     {
         const float target = gainTarget_, glide = gainGlide_;
