@@ -115,7 +115,7 @@ void main() {
         float fibre = smoothstep(0.62, 0.9, vnoise(vec2(px.x * 0.06, px.y * 0.5) + 3.0));
         c *= 1.0 - (0.09 * (fine - 0.5) + 0.03 * fibre + 0.05 * speck) * uWorld;
     } else {
-        c = mix(c, vec3(0.82, 0.85, 0.82), (0.022 * fine + 0.03 * speck) * uWorld);
+        c = mix(c, vec3(0.82, 0.85, 0.82), (0.008 * fine + 0.02 * speck) * uWorld);
     }
     // where the wipe went: a haze of chalk dust dragged across the slate, a faint grey smudge on the paper
     vec2 wq = vec2(vUv.x * uAspect, vUv.y);
