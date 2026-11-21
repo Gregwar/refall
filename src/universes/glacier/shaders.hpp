@@ -332,8 +332,8 @@ void main() {
         // the drop: a low sun's warm rays, wider and slower, across the ice they cross (the rest of the cave stays
         // cold): the ice in them turned orange-red, a warm haze along them
         if (uWarm > 0.002) {
-            // (the rays turn slowly round the opening, about 3 degrees a second)
-            float aw = ang + uTime * 0.05;
+            // (the rays turn round the opening, about 9 degrees a second)
+            float aw = ang + uTime * 0.16;
             float nw = vnoise(vec2(aw * 7.0, uTime * 0.03 + 11.0)) * 0.7 + vnoise(vec2(aw * 19.0, uTime * 0.05 + 3.0)) * 0.3;
             float ray = smoothstep(0.42, 0.85, nw) * exp(-rr * 0.03) * smoothstep(2.0, 7.0, rr) * uWarm;
             float lc = dot(col, vec3(0.2126, 0.7152, 0.0722));
