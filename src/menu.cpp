@@ -388,7 +388,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             else if (titleItem_ == TI_OPTIONS) open(OPTIONS);
             else ch.kind = Choice::QUIT;
         }
-        if (back) ch.kind = Choice::QUIT;
+        if (back && TI_QUIT >= 0) titleItem_ = TI_QUIT; // (never quits by itself: it goes to QUIT, to be confirmed)
         break;
     case OPTIONS:
         if (noteT_ > 0.f) { if (ok || back || dx || dy) noteT_ = 0.f; break; } // (a key: back to the rows)

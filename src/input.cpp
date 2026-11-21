@@ -4,6 +4,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -12,6 +13,15 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+
+#if defined(__linux__) && !defined(REFALL_WEB)
+#include <chrono>
+#include <fcntl.h>
+#include <linux/input.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+#define REFALL_EVDEV_KEYS 1
+#endif
 
 namespace {
 Input* g_input = nullptr;
@@ -34,6 +44,84 @@ const char* REMAP_NAME[Input::REMAP_COUNT] = {"D-PAD UP", "D-PAD DOWN", "D-PAD L
 const char* REMAP_USE[Input::REMAP_COUNT] = {"HARD DROP", "SOFT DROP", "MOVE LEFT", "MOVE RIGHT", "ROTATE / OK",
                                              "ROTATE LEFT / BACK", "ROTATE LEFT", "NEW SCENE", "HOLD", "HOLD",
                                              "SLOW MOTION", "SLOW MOTION", "NEXT SONG", "PAUSE"};
+
+// A controller's keys that are no joystick buttons (an Xbox pad over Bluetooth sends its View button as the keyboard's
+// "Back" key): GLFW does not list them, and worse, reads them as the controller's button 0 (it indexes its table of
+// buttons below its start). They are read here from the device itself, so that they can be remapped (the source 'k'),
+// and button 0 is not believed while one of them is down.
+#ifdef REFALL_EVDEV_KEYS
+struct PadKeys {
+    int fd = -1;
+    std::string guid; // as GLFW names the controller
+    std::vector<int> down;
+    std::chrono::steady_clock::time_point last{};
+};
+std::vector<PadKeys> g_padKeys;
+
+void scanPadKeys() {
+    for (PadKeys& d : g_padKeys) close(d.fd);
+    g_padKeys.clear();
+    std::error_code ec;
+    for (const auto& e : std::filesystem::directory_iterator("/dev/input", ec)) {
+        if (e.path().filename().string().rfind("event", 0) != 0) continue;
+        const int fd = open(e.path().c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd < 0) continue;
+        unsigned char keys[(KEY_CNT + 7) / 8] = {};
+        struct input_id id {};
+        bool low = false, joy = false;
+        if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keys)), keys) >= 0 && ioctl(fd, EVIOCGID, &id) >= 0) {
+            auto has = [&](int c) { return (keys[c / 8] >> (c % 8)) & 1; };
+            for (int c = 1; c < BTN_MISC; c++) low |= has(c);
+            for (int c = BTN_JOYSTICK; c < BTN_DIGI; c++) joy |= has(c); // (a controller only: never a keyboard)
+        }
+        if (!low || !joy || !id.vendor || !id.product || !id.version) { close(fd); continue; }
+        char g[40];
+        std::snprintf(g, sizeof(g), "%02x%02x0000%02x%02x0000%02x%02x0000%02x%02x0000", id.bustype & 0xff, id.bustype >> 8,
+                      id.vendor & 0xff, id.vendor >> 8, id.product & 0xff, id.product >> 8, id.version & 0xff, id.version >> 8);
+        PadKeys d;
+        d.fd = fd;
+        d.guid = g;
+        g_padKeys.push_back(d);
+    }
+}
+
+// The controller's keys now (read at each call: after GLFW read its buttons, nothing it saw is missed here).
+PadKeys* padKeys(const std::string& guid) {
+    PadKeys* found = nullptr;
+    for (PadKeys& d : g_padKeys) {
+        if (d.guid != guid) continue;
+        struct input_event ev[16];
+        for (ssize_t n; (n = read(d.fd, ev, sizeof(ev))) > 0;)
+            for (size_t i = 0; i < n / sizeof(ev[0]); i++) {
+                if (ev[i].type != EV_KEY || ev[i].code >= BTN_MISC) continue;
+                d.down.erase(std::remove(d.down.begin(), d.down.end(), (int)ev[i].code), d.down.end());
+                if (ev[i].value) d.down.push_back(ev[i].code);
+                d.last = std::chrono::steady_clock::now();
+            }
+        if (!found || !d.down.empty()) found = &d;
+    }
+    return found;
+}
+// one of them held (0: none)
+int padKeyDown(const std::string& guid) {
+    const PadKeys* d = padKeys(guid);
+    return d && !d->down.empty() ? d->down.front() : 0;
+}
+bool padKeyOn(const std::string& guid, int code) {
+    const PadKeys* d = padKeys(guid);
+    return d && std::find(d->down.begin(), d->down.end(), code) != d->down.end();
+}
+// whether the controller's button 0 is one of these keys' echo (while it is held, and a moment after)
+bool padKeyEcho(const std::string& guid) {
+    const PadKeys* d = padKeys(guid);
+    return d && (!d->down.empty() || std::chrono::steady_clock::now() - d->last < std::chrono::milliseconds(120));
+}
+#else
+void scanPadKeys() {}
+int padKeyDown(const std::string&) { return 0; }
+bool padKeyOn(const std::string&, int) { return false; }
+bool padKeyEcho(const std::string&) { return false; }
+#endif
 } // namespace
 
 const char* Input::remapName(int step) { return step >= 0 && step < REMAP_COUNT ? REMAP_NAME[step] : ""; }
@@ -47,7 +135,7 @@ std::string Input::guidOf(int jid) const {
 }
 
 // One line per controller: its GUID, then each control's source ("-" none, b<button>, h<hat>:<bits>,
-// a<axis>:<side>:<rest>).
+// a<axis>:<side>:<rest>, k<key>: a key of the controller that is no joystick button).
 void Input::setMappingFile(const std::string& path) {
     mapPath_ = path;
     maps_.clear();
@@ -60,7 +148,7 @@ void Input::setMappingFile(const std::string& path) {
         std::vector<Source> v;
         while (std::getline(ls, tok, '\t') && (int)v.size() < REMAP_COUNT) {
             Source s;
-            if (tok.size() > 1 && tok[0] == 'b') { s.kind = 'b'; s.index = std::atoi(tok.c_str() + 1); }
+            if (tok.size() > 1 && (tok[0] == 'b' || tok[0] == 'k')) { s.kind = tok[0]; s.index = std::atoi(tok.c_str() + 1); }
             else if (tok.size() > 1 && tok[0] == 'h') { s.kind = 'h'; std::sscanf(tok.c_str() + 1, "%d:%d", &s.index, &s.dir); }
             else if (tok.size() > 1 && tok[0] == 'a') { s.kind = 'a'; std::sscanf(tok.c_str() + 1, "%d:%d:%f", &s.index, &s.dir, &s.rest); }
             v.push_back(s);
@@ -81,7 +169,7 @@ void Input::saveMappings() const {
         f << guid;
         for (const Source& s : v) {
             char b[48] = "-";
-            if (s.kind == 'b') std::snprintf(b, sizeof(b), "b%d", s.index);
+            if (s.kind == 'b' || s.kind == 'k') std::snprintf(b, sizeof(b), "%c%d", s.kind, s.index);
             else if (s.kind == 'h') std::snprintf(b, sizeof(b), "h%d:%d", s.index, s.dir);
             else if (s.kind == 'a') std::snprintf(b, sizeof(b), "a%d:%d:%.2f", s.index, s.dir, s.rest);
             f << '\t' << b;
@@ -143,7 +231,11 @@ bool Input::customMapping() const {
 
 bool Input::sourceOn(int jid, const Source& s) const {
     int n = 0;
-    if (s.kind == 'b') { const unsigned char* b = glfwGetJoystickButtons(jid, &n); return b && s.index < n && b[s.index] == GLFW_PRESS; }
+    if (s.kind == 'b') {
+        const unsigned char* b = glfwGetJoystickButtons(jid, &n);
+        return b && s.index < n && b[s.index] == GLFW_PRESS && !(s.index == 0 && padKeyEcho(guidOf(jid)));
+    }
+    if (s.kind == 'k') return padKeyOn(guidOf(jid), s.index);
     if (s.kind == 'h') { const unsigned char* h = glfwGetJoystickHats(jid, &n); return h && s.index < n && (h[s.index] & s.dir); }
     if (s.kind == 'a') { const float* a = glfwGetJoystickAxes(jid, &n); return a && s.index < n && (a[s.index] - s.rest) * s.dir > 0.5f; }
     return false;
@@ -163,7 +255,11 @@ void Input::remapRead(float dt) {
         const unsigned char* ht = glfwGetJoystickHats(j, &nh);
         const float* ax = glfwGetJoystickAxes(j, &na);
         Source s;
-        for (int i = 0; bt && i < nb && !s.kind; i++)
+        const std::string guid = guidOf(j);
+        if (const int k = padKeyDown(guid)) { s.kind = 'k'; s.index = k; }
+        const bool echo = padKeyEcho(guid); // (button 0 is then that key's, not the player's)
+        if (echo) calm = false;
+        for (int i = echo ? 1 : 0; bt && i < nb && !s.kind; i++)
             if (bt[i] == GLFW_PRESS) { s.kind = 'b'; s.index = i; }
         for (int i = 0; ht && i < nh && !s.kind; i++)
             if (ht[i]) { s.kind = 'h'; s.index = i; s.dir = ht[i] & -ht[i]; }
@@ -175,6 +271,14 @@ void Input::remapRead(float dt) {
             calm = false;
             if (!hit.kind) { hit = s; hitJid = j; }
         }
+    }
+    // (a control already given to an earlier step is not taken twice: BACK on the button of A skipped the song at
+    // every rotation)
+    for (int k = 0; hit.kind && k < remapStep_; k++) {
+        const Source& o = remapNew_[k];
+        if (o.kind != hit.kind || o.index != hit.index || o.dir != hit.dir) continue;
+        if (remapCalm_ >= 0.15f) std::printf("[input] %s: %c%d is %s already, ignored\n", REMAP_NAME[remapStep_], hit.kind, hit.index, REMAP_NAME[k]);
+        hit = Source{};
     }
     if (hit.kind && remapCalm_ >= 0.15f) {
         remapJid_ = hitJid;
@@ -253,6 +357,7 @@ void Input::init(GLFWwindow* w) {
 
 void Input::detectGamepad() {
     int old = jid_;
+    scanPadKeys();
     jid_ = -1;
     padName_.clear();
     // Prefer a controller with a known mapping; otherwise use any joystick with a generic layout.
@@ -403,7 +508,8 @@ void Input::update(float dt) {
                 // Triggers are usually buttons 6/7 on such controllers.
                 st.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] = 6 < nb && bt[6] ? 1.f : -1.f;
                 st.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] = 7 < nb && bt[7] ? 1.f : -1.f;
-                auto B = [&](int i) { return (unsigned char)(i < nb ? bt[i] : 0); };
+                const bool echo = padKeyEcho(guidOf(jid)); // (button 0 is then a key's echo)
+                auto B = [&](int i) { return (unsigned char)(i < nb && !(i == 0 && echo) ? bt[i] : 0); };
                 st.buttons[GLFW_GAMEPAD_BUTTON_A] = B(1);
                 st.buttons[GLFW_GAMEPAD_BUTTON_B] = B(2);
                 st.buttons[GLFW_GAMEPAD_BUTTON_X] = B(0);

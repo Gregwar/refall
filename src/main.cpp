@@ -1598,7 +1598,8 @@ int App::run() {
         }
         if (!shotMode && (win_ || opt_.stream)) input_.update(dt); // offline renders ignore the keyboard and gamepads: they must be reproducible
         const bool still = win_ && !shotMode && !testPlay() && !viewer_ && (mode_ == MODE_MENU ? menu_.still() : paused_) &&
-                           !input_.changed() && cursorIdle_ > 0 && !g_refresh;
+                           !input_.changed() && cursorIdle_ > 0 && !g_refresh &&
+                           !input_.remapping() && ctrlNoteT_ <= 0; // (a remap's steps come without any action changing)
         g_refresh = false;
         stillT_ = still ? stillT_ + dt : 0;
         held_ = stillT_ > 2.5f; // (the world's dimming settled)
