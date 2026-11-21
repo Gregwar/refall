@@ -391,7 +391,8 @@ void main() {
             // the ink, its own: the cell's outline crisp (wider and darker where it meets another piece or the empty
             // well), the seams between its own books faint. (Front: left, right, foot, head; top: left, right, back,
             // front; in pixels from each edge.)
-            lineK = 0.0;
+)"
+R"(            lineK = 0.0;
             if ((face == 2 && vLN.z > 0.0) || (face == 1 && vLN.y > 0.0)) {
                 vec2 e0 = (q + sz) / pq, e1 = (sz - q) / pq;   // to the low and high edges, in pixels
                 float wc = uLineW * 1.0, wp = uLineW * 2.6, ws = uLineW * 0.7;

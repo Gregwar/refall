@@ -430,7 +430,8 @@ void main() {
                 // the corner castings, at the ends only
                 vec2 cc = vec2(endD, min(cb, ct));
                 float cast = (1.0 - smoothstep(0.1, 0.1 + pw, cc.x)) * (1.0 - smoothstep(0.095, 0.095 + pw, cc.y));
-                vec2 ho = (cc - vec2(0.05, 0.048)) / vec2(0.03, 0.02);
+)"
+R"(                vec2 ho = (cc - vec2(0.05, 0.048)) / vec2(0.03, 0.02);
                 alb = mix(alb, vec3(0.07, 0.07, 0.075) + base * 0.08, cast);
                 alb *= 1.0 - 0.85 * cast * (1.0 - smoothstep(0.8, 1.0, length(ho))) * rib;
                 // the lettering: the owner's name along a long one, the number near its right end
@@ -601,7 +602,8 @@ void main() {
             alb *= 1.0 - 0.12 * smoothstep(0.55, 0.8, vnoise(vec2(g.x * 0.08, g.y * 1.6)));
             // lines: vMat.y = 1 near quay, 2 far quay
             if (vMat.y > 0.5) {
-                float l = 1e3;
+)"
+R"(                float l = 1e3;
                 float zEdge = vMat.y < 1.5 ? -13.2 : -75.2;
                 l = min(l, abs(g.y - zEdge));
                 float dash = step(0.45, fract(g.x / 4.0));

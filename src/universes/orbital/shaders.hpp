@@ -263,7 +263,8 @@ void main() {
         vec3 airC = mix(uAtmoTwi, uAtmoDay, smoothstep(-0.02, 0.35, ndl)) * smoothstep(-0.12, 0.08, ndl);
         col = col * (1.0 - 0.35 * rim * day * uHaze) + airC * (0.06 + 0.6 * rim * rim) * uHaze;
         // toward the sun the air lights up over the ground (forward scattering): a warm haze over the lit crescent,
-        // hottest under the sun, brightest at the limb
+)"
+R"(        // hottest under the sun, brightest at the limb
         float fwd = pow(max(sd, 0.0), 6.0);
         col += mix(uAtmoTwi, uSunGlow, 0.6) * fwd * (0.01 + 0.35 * rim) * smoothstep(-0.15, 0.1, ndl) * uHaze * uSunVis;
     } else {
@@ -1451,7 +1452,8 @@ vec3 lookSolar(vec2 p, int mk, int type, float e, float g, float aa, vec3 tn, fl
     float aw2 = aa * 2.0;
     float wafer = fillA(max(aw.x, aw.y) - 0.44, aw2) * fillA(aw.x + aw.y - 0.76, aw2);
     float bus = fillA(abs(aw.x - 0.2) - 0.016, aw2) * wafer;
-    vec3 pv = mix(mix(uSolar, vec3(0.12, 0.17, 0.7), 0.65), tn * 0.55, 0.3) * (1.0 - 0.25 * smoothstep(-0.5, 0.5, w.y));
+)"
+R"(    vec3 pv = mix(mix(uSolar, vec3(0.12, 0.17, 0.7), 0.65), tn * 0.55, 0.3) * (1.0 - 0.25 * smoothstep(-0.5, 0.5, w.y));
     vec3 back = vec3(0.34, 0.37, 0.48);
     vec3 alb = mix(back, pv, wafer);
     alb = mix(alb, vec3(0.62, 0.65, 0.72), bus * 0.6);
