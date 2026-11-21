@@ -637,7 +637,8 @@ void ShadowUniverse::setCommon(GLuint prog) {
 ShadowUniverse::Setup ShadowUniverse::setupAt(float s) const {
     Setup u;
     const float t = s * 5.2f; // (seconds)
-    // a faint room light while the projector is off: the model on its table, its stack in the well
+    // a faint cool room light while the projector is off: the model on its table, dim, its stack in the well barely
+    // readable (it comes to life in the lamp's light)
     u.fill = smoothstepf(0.f, 0.22f, s) * (1.f - smoothstepf(0.42f, 0.62f, s));
     // the projector rolled in from the left on its stand, swung round toward the wall, settling with a small sway
     const float r = saturate((s - 0.08f) / 0.34f);
@@ -845,7 +846,9 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progModel_, "uWood", lin(V.wood));
     set3f(progModel_, "uTable", lin(V.table));
     set3f(progModel_, "uBody", lin(V.body));
-    set3f(progModel_, "uRoom", lin(V.room) + light1 * 0.006f + lin(V.light) * 0.14f * su.fill);
+    // (in the setup the room is darker until the lamp is up: the model comes to life in its light)
+    set3f(progModel_, "uRoom", lin(V.room) * (0.3f + 0.7f * su.lamp) + light1 * 0.006f);
+    set3f(progModel_, "uFill", vec3(0.55f, 0.66f, 0.9f) * 0.014f * su.fill);
     set1f(progModel_, "uTableKind", V.tableKind);
     const int flyN = (int)flyS.size();
     if (flyN) {

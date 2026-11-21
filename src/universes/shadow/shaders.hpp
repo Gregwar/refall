@@ -251,6 +251,7 @@ uniform int uFlyN;
 uniform vec4 uPile[7];             // the spent blocks' stacks: x, z, count, type
 uniform vec4 uBasket;              // the box of the oldest ones: x, z, count
 uniform float uLensGlow;
+uniform vec3 uFill;                // the setup's dim room light, before the lamp (cool, from above)
 
 const float TABLE_Y = -10.8, PILE_S = 0.44, TABLE_R = 9.4;
 const vec2 TABLE_C = vec2(-0.6, 2.2);
@@ -454,7 +455,7 @@ vec3 shadeSolid(vec3 p, vec3 n, vec3 rd, int mat, float type) {
     vec3 L = vec3(0.0, 1.0, 0.0);
     vec3 lit = mat == 5 ? vec3(0.0) : lampAt(p, n, L);
     float ao = ambientOcc(p, n);
-    vec3 bounce = uLight1 * 0.07 * (0.35 + 0.65 * max(-n.z, 0.0)) + uRoom;
+    vec3 bounce = uLight1 * 0.07 * (0.35 + 0.65 * max(-n.z, 0.0)) + uRoom + uFill * (0.3 + 0.7 * max(n.y, 0.0));
     vec3 L2 = normalize(uL2Pos - p);
     vec3 lit2 = uLight2 * uDrop * 0.9;
     float diff = max(dot(n, L), 0.0), diff2 = max(dot(n, L2), 0.0);
@@ -512,6 +513,8 @@ vec3 shadeGlass(vec3 p, vec3 n, vec3 rd, float type, float flash, float F) {
     vec3 rl = reflect(rd, n);
     col += F * (uRoom * 3.0 + uLight1 * 0.12 * smoothstep(0.2, 1.0, dot(rl, normalize(vec3(-0.2, 0.25, -1.0)))));
     col += g * flash * lit * 0.4;
+    // (the room light: a faint rim on the edges, hardly any color)
+    col += uFill * (edge * edge * 0.8 + F * 0.5 + 0.03 * g);
     return col;
 }
 
