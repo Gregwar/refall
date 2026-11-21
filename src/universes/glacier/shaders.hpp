@@ -716,8 +716,8 @@ in vec2 vUv;
 out vec4 frag;
 uniform sampler2D uScene;
 uniform vec2 uViewC, uViewH, uRes;
-uniform float uFade, uDim, uWaterA;
-uniform vec3 uTint, uLine;
+uniform float uFade, uDim, uWaterA, uSunK;
+uniform vec3 uTint, uLine, uSun;
 uniform vec4 uBox[24];
 uniform int uBoxN;
 void main() {
@@ -742,9 +742,13 @@ void main() {
     float line = exp(-sq(depth / (px * 1.0))) * 0.75 + exp(-abs(depth) / (px * 5.0)) * 0.12;
     line += step(0.0, depth) * exp(-depth / (px * 16.0)) * 0.06;
     c += uLine * line * (1.0 - 0.9 * hide) * uWaterA;
+    // the drop's light: an exposure lift, the shadows filled with the light's colour, the ice tinted toward it
+    vec3 sunN = uSun / max(max(uSun.r, max(uSun.g, uSun.b)), 1e-3);
+    c = c * (1.0 + 0.85 * uSunK) + sunN * 0.05 * uSunK;
+    c = mix(c, c * sunN * 1.15, 0.3 * min(uSunK, 1.0));
     c *= (1.0 - uDim * 0.5) * uFade;
     vec2 q = vUv - 0.5;
-    c *= 1.0 - 0.3 * dot(q, q) * 2.0;
+    c *= 1.0 - 0.3 * (1.0 - 0.6 * min(uSunK, 1.0)) * dot(q, q) * 2.0;
     // a soft shoulder on the luminance (the hues kept: lit ice stays blue), then a little on each channel
     float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
     float lt = lum / (1.0 + max(lum - 0.7, 0.0) * 0.8);

@@ -106,6 +106,8 @@ private:
     float energy_ = 0.5f, energyS_ = 0.5f;
     bool dropMode_ = false;
     float dropAmt_ = 0.f, swell_ = 0.f;
+    float dropFlash_ = 0.f; // the drop's first light, a burst fading over a second and a half
+    bool wasDrop_ = false;
     float kickIn_ = 0.f, kickPrev_ = 0.f, glint_ = 0.f;
     double ownBeat_ = 0.0;
 

@@ -637,7 +637,11 @@ void GlacierUniverse::render(const Frame& f, GLuint fbo) {
             sectionDrop = h.text == "DROP";
         }
     const bool isDrop = overT_ < 0.f && (sectionKnown ? sectionDrop : dropMode_ && (!music.hasSong || music.speed > 1.26f));
-    dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 0.9f : 0.35f, dt);
+    // (the light comes in at once with the drop, a burst first; it ebbs slowly after)
+    dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 3.f : 0.35f, dt);
+    if (isDrop && !wasDrop_) dropFlash_ = 1.f;
+    wasDrop_ = isDrop;
+    dropFlash_ = std::max(0.f, dropFlash_ - dt / 1.5f);
     swell_ = approach(swell_, 0.f, 0.4f, dt);
     energyS_ = approach(energyS_, music.hasSong ? music.energy : energy_, 0.6f, dt);
     {
@@ -953,6 +957,9 @@ void GlacierUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progPost_, "uFade", saturate(f.fade));
     set1f(progPost_, "uDim", dimT_);
     set1f(progPost_, "uWaterA", waterA);
+    // the drop: the whole cave brighter and warmer in the drop's light (the sun through the ice; the variant's own glow)
+    set1f(progPost_, "uSunK", (0.75f * dropAmt_ + 0.9f * dropFlash_ * dropFlash_) * (1.f - over_));
+    set3f(progPost_, "uSun", lerp(pal_.glowA, vec3(1.f), 0.35f));
     {
         const vec3 hi = pal_.waterHi;
         const float mx = std::max(1e-3f, std::max(hi.x, std::max(hi.y, hi.z)));
