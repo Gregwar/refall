@@ -1071,14 +1071,16 @@ void DioramaUniverse::onEvent(const GameEvent& ev, const Game& game) {
         break;
     }
     case GameEvent::Clear: {
-        // Cleared blocks pop off the tower toward the viewer and shrink away as they tumble (gone in ~0.5 s).
+        // Cleared blocks pop off the tower toward the viewer and tumble down: they bounce on the plinth or the island
+        // and splash into the sea, shrinking away only at the end of their fall (~2 s).
         const bool quadClear = ev.count >= 4;
         for (auto& c : ev.cells) {
             vec3 p = cellPos((float)c.x, (float)c.y);
             float side = (c.x - 4.5f) / 4.5f;
-            vec3 vel(side * rng_.range(2.0f, 3.6f) + rng_.range(-0.5f, 0.5f), rng_.range(4.5f, 7.5f) + (quadClear ? 1.5f : 0.f),
-                     rng_.range(4.f, 6.5f));
-            spawnBody(p, c.type, vel, std::fabs(c.x - 4.5f) * 0.012f + rng_.range(0.f, 0.03f), rng_.range(4.f, 10.f), 0.45f);
+            vec3 vel(side * rng_.range(2.4f, 4.2f) + rng_.range(-0.5f, 0.5f), rng_.range(4.5f, 7.5f) + (quadClear ? 1.5f : 0.f),
+                     rng_.range(2.f, 3.5f));
+            spawnBody(p, c.type, vel, std::fabs(c.x - 4.5f) * 0.012f + rng_.range(0.f, 0.03f), rng_.range(4.f, 10.f),
+                      rng_.range(1.9f, 2.5f));
         }
         rings_.push_back({0.f, 0.35f + 0.15f * ev.count});
         if (quadClear) {
