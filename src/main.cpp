@@ -2449,7 +2449,7 @@ void App::applyOption(const Menu::Choice& c) {
             std::printf("[slots] slot %d: every stage unlocked\n", c.slot + 1);
         } else slots_.unlockAll(c.slot); // (another slot, or a custom voyage open: the main one's file)
         menu_.slotsChanged();
-        menu_.note(Menu::SLOTS, slot + ": EVERY STAGE UNLOCKED");
+        menu_.note(Menu::SLOTS, "ALL STAGES UNLOCKED");
     } else if (c.kind == Menu::Choice::SLOT_ERASE) {
         if (c.slot == slots_.active()) { // (the main voyage open, its progress forgotten, the menu as on a first launch)
             menu_.selectVoyage("");

@@ -429,10 +429,9 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         slotRow_ = (slotRow_ + dy + SLOT_ACTIONS * 8) % SLOT_ACTIONS;
         if (!ok) break;
         const SaveSlots::Summary sm = slotSel_ < (int)slotSum_.size() ? slotSum_[slotSel_] : SaveSlots::Summary{};
-        const std::string name = "SLOT " + std::to_string(slotSel_ + 1);
         if (slotRow_ == 0) { ch.kind = Choice::SLOT_USE; ch.slot = slotSel_; }
-        else if (slotRow_ == 1 && sm.unlocked) note(SLOTS, name + " IS ALREADY UNLOCKED");
-        else if (slotRow_ == 2 && sm.empty) note(SLOTS, name + " IS EMPTY");
+        else if (slotRow_ == 1 && sm.unlocked) note(SLOTS, "ALREADY UNLOCKED");
+        else if (slotRow_ == 2 && sm.empty) note(SLOTS, "NOTHING TO ERASE");
         else { slotConfirm_ = true; optYes_ = 0; aYes_ = 0; }
         break;
     }

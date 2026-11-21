@@ -79,7 +79,7 @@ no song previews.
   former name, which files written before it still use and which is read as HARD.
 - **SAVE SLOTS** (`src/saveslots.cpp`): three slots, one in use. Each card shows its main voyage's progress (a small
   rosette, the songs beaten in %, the stages cleared, the best scores summed, when it was last played) and an
-  **UNLOCKED** tag once UNLOCK ALL was used on it. Left / right chooses a slot; under the cards, USE puts it in use (the
+  **UNLOCKED** tag once UNLOCK ALL was used on it. Left / right chooses a slot; in a box under its card, USE puts it in use (the
   main voyage opens with its progress, the menu where it was on that slot), UNLOCK ALL STAGES opens every stage of its
   main voyage (the tag stays: the file keeps `unlock all`) and ERASE forgets it; both ask "are you sure?" first. A slot
   holds the campaign progress, the menu's place and the custom voyages' progress; the menu's music and theme, the
