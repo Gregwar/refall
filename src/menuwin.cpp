@@ -1212,8 +1212,9 @@ void Worlds::kalFree() {
             const auto ch = m.plChoices();
             const int nc = (int)ch.size() + 1;
             const float addW = 122 * u + std::max(p.width(F::JOSEFIN, "ADD A", 17 * u, 0.3f), p.width(F::JOSEFIN, "PLAYLIST", 17 * u, 0.3f)) + 30 * u;
-            auto cardW = [&](int i) { return i == 0 ? 440.f * u : i == nc - 1 ? addW : 320.f * u; };
-            auto cardH = [&](int i) { return (i == 0 ? 176.f : 144.f) * u; };
+            // (the two built-in playlists featured: larger, a gold rim)
+            auto cardW = [&](int i) { return i < 2 ? 440.f * u : i == nc - 1 ? addW : 320.f * u; };
+            auto cardH = [&](int i) { return (i < 2 ? 176.f : 144.f) * u; };
             const float gap = 22 * u;
             float total = 0, selX = 0;
             for (int i = 0; i < nc; i++) { if (i == m.plSel_) selX = total + cardW(i) / 2; total += cardW(i) + gap; }
@@ -1228,11 +1229,11 @@ void Worlds::kalFree() {
             for (int i = 0; i < nc; i++) {
                 const float w = cardW(i), h = cardH(i);
                 const float g = sstep(near1(m.aPl_, i)) * onPl;
-                const float y = Y(i == 0 ? 728 : 744) - 10 * u * g;
+                const float y = Y(i < 2 ? 728 : 744) - 10 * u * g;
                 if (x + w < X(L) || x > X(L + W)) { x += w + gap; continue; }
                 // (portrait: a card past the panel's edge fades out, the panel showing one or two)
                 if (pt) p.setFade(std::clamp(1.f - std::max(X(L + 10) - x, x + w - X(L + W - 10)) / (0.4f * w), 0.f, 1.f));
-                const bool featured = i == 0, add = i == nc - 1;
+                const bool featured = i < 2 && i < nc - 1, add = i == nc - 1;
                 // the identity: a hue and a seed from the playlist's ID
                 uint32_t seed = 2166136261u;
                 const std::string key = add ? std::string("+") : playlistIdOf(ch[i].url).empty() ? ch[i].url : playlistIdOf(ch[i].url);
@@ -1272,8 +1273,10 @@ void Worlds::kalFree() {
                 // the name and the count
                 const float tx = mx + mr + 26 * u, tmax = x + w - tx - 18 * u;
                 std::string title = asciiFold(featured ? ch[i].title : ch[i].title.empty() ? ch[i].url : ch[i].title);
-                const float ts = (featured ? 40.f : 23.f) * u;
+                float ts = (featured ? 40.f : 23.f) * u;
                 const F tf = featured ? F::JOSEFIN_LIGHT : F::JOSEFIN;
+                // (a featured name smaller to fit, down to 55%, before it is cut)
+                if (featured) ts *= std::clamp(tmax / std::max(1.f, p.width(tf, title, ts, 0.04f)), 0.55f, 1.f);
                 while (title.size() > 3 && p.width(tf, title, ts, 0.04f) > tmax) title.pop_back();
                 float ty = my + ts * 0.25f;
                 if (featured) {

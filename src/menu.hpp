@@ -199,7 +199,7 @@ private:
     // free play's rows: 0 the difficulty, 1 the playlists (the remembered ones, the default, "add one"; a text field
     // to add one), 2 the starting level (an index in FREE_LEVELS)
     PlaylistStore* playlists_ = nullptr;
-    int freeRow_ = 0, plSel_ = 1, lvlSel_ = 0; // (plSel_ 1: the electro playlist, free play's default)
+    int freeRow_ = 0, plSel_ = 0, lvlSel_ = 0; // (plSel_ 0: the electro playlist, free play's default)
     float aFreeRow_ = 0, aPl_ = 0, aLvl_ = 0;
     bool editing_ = false, plMsgBad_ = false;
     std::string editText_, plMsg_;

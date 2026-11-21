@@ -156,7 +156,8 @@ void Menu::enterVoyage(std::string id) {
 }
 
 std::vector<PlaylistEntry> Menu::plChoices() const {
-    // the game's own playlist first (featured), the built-in electro one, then the player's, the most recent first
+    // the two built-in playlists first, both featured (the electro one, free play's default, then the game's own), then the
+    // player's, the most recent first
     std::vector<PlaylistEntry> v;
     PlaylistEntry featured{DEFAULT_PLAYLIST, GAME_TITLE, 0, 0}, electro{ELECTRO_PLAYLIST, ELECTRO_PLAYLIST_TITLE, 0, 0};
     if (playlists_)
@@ -165,7 +166,7 @@ std::vector<PlaylistEntry> Menu::plChoices() const {
             else if (e.url == ELECTRO_PLAYLIST) electro.count = e.count;
             else v.push_back(e);
         }
-    v.insert(v.begin(), {featured, electro});
+    v.insert(v.begin(), {electro, featured});
     return v;
 }
 
@@ -269,7 +270,7 @@ void Menu::resetPlace() {
     row_ = 1;
     petal_ = false;
     freeRow_ = lvlSel_ = 0;
-    plSel_ = 1; // (the electro playlist, free play's default)
+    plSel_ = 0; // (the electro playlist, free play's default)
     voyageStage_.clear();
     snap();
 }
