@@ -83,7 +83,7 @@ void Menu::open(Screen s, const std::string& message, const std::string& sub, bo
                 if (voyages_->list()[i].id == voyageId_) vSel_ = i + 1;
         }
         aV_ = (float)vSel_;
-        aVRow_ = (float)(vSel_ / VOYAGE_COLS);
+        aVRow_ = (float)(vSel_ / voyageCols());
     }
 }
 
@@ -291,7 +291,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aPl_ += (plSel_ - aPl_) * k;
         aLvl_ += (lvlSel_ - aLvl_) * k;
         aV_ += (vSel_ - aV_) * k;
-        aVRow_ += ((float)(vSel_ / VOYAGE_COLS) - aVRow_) * k;
+        aVRow_ += ((float)(vSel_ / voyageCols()) - aVRow_) * k;
         aOpen_ += ((petal_ ? 1.f : 0.f) - aOpen_) * (1.f - std::exp(-dt * 5.f)); // a petal opens a little slower
     }
     enterT_ += dt;
@@ -596,9 +596,9 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         // a grid: left / right one card, up / down one row
         if (dx) vSel_ = std::clamp(vSel_ + dx, 0, nCards - 1);
         if (dy) {
-            const int to = vSel_ + dy * VOYAGE_COLS;
+            const int to = vSel_ + dy * voyageCols();
             if (to >= 0 && to < nCards) vSel_ = to;
-            else if (dy > 0 && vSel_ / VOYAGE_COLS < (nCards - 1) / VOYAGE_COLS) vSel_ = nCards - 1; // a shorter last row
+            else if (dy > 0 && vSel_ / voyageCols() < (nCards - 1) / voyageCols()) vSel_ = nCards - 1; // a shorter last row
         }
         if (vSel_ != was) { vDelete_.clear(); plMsg_.clear(); }
         if (in.pressed(A_UI_DELETE) && vSel_ >= 1 && vSel_ <= (int)vs.size()) {
@@ -675,6 +675,14 @@ void Menu::render(int w, int h) {
     u_ = std::min(w / 1920.f, h / 1080.f);
     sx_ = (w - 1920.f * u_) * 0.5f;
     sy_ = (h - 1080.f * u_) * 0.5f;
+    portrait_ = h > w;
+    pk_ = w / 1080.f;
+    ph_ = h / pk_;
+#ifdef REFALL_WEB
+    pTop_ = 0.05f * ph_, pBottom_ = 0.78f * ph_; // (the page's buttons at the top, the touch pad at the bottom)
+#else
+    pTop_ = 0.02f * ph_, pBottom_ = 0.98f * ph_;
+#endif
     if (screen_ == DEBRIEF) {
         drawDebrief(w, h);
         paint_.end();
@@ -692,6 +700,7 @@ void Menu::drawMessage() {
     using F = Painter::Font;
     Painter& p = paint_;
     const float a = sstep(std::min(msgT_, 5.f - msgT_) * 3.f);
+    if (portrait_) place(960, 520, 540, 0.5f * (pTop_ + pBottom_), 1.f); // (across the column)
     const float cx = X(960), cy = Y(520);
     const Col ink = hex(0xffffff), sub = hex(0xd8dcf0), edge = msgBad_ ? hex(0xff8a9a) : hex(0xe8c06a);
     const float tw = std::max(p.width(F::JOSEFIN_LIGHT, msg_, 110 * u_, 0.05f), p.width(F::JOSEFIN, msgSub_, 26 * u_, 0.1f));

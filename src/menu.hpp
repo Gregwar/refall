@@ -168,6 +168,13 @@ private:
     float u_ = 1, sx_ = 0, sy_ = 0, fw_ = 1920, fh_ = 1080; // the 1920x1080 layout in the frame
     float X(float v) const { return sx_ + v * u_; }
     float Y(float v) const { return sy_ + v * u_; }
+    // Portrait (a window taller than wide): the 1920x1080 layout's pieces stacked down a column instead, each placed
+    // and scaled on its own (Worlds::pLayout). The column is 1080 units across (pk_ pixels each) and ph_ high; its
+    // pieces go between pTop_ and pBottom_ (on the web, above the touch pad, below its buttons).
+    bool portrait_ = false;
+    float pk_ = 1, ph_ = 1920, pTop_ = 0, pBottom_ = 1920;
+    // the layout's point (dx, dy) at the column's point (px, py), `s` column units per layout unit
+    void place(float dx, float dy, float px, float py, float s) { u_ = s * pk_; sx_ = (px - dx * s) * pk_; sy_ = (py - dy * s) * pk_; }
     struct SongView {
         bool has = false, locked = false, beaten = false;
         int stage = 0, song = 0, songs = 0, best = 0, lines = -1;
@@ -201,7 +208,7 @@ private:
     std::string voyageId_, voyageTitle_;       // the voyage the Voyage's screen shows ("" the main one)
     std::map<std::string, int> voyageStage_;   // the stage each voyage was on, this session
     int vSel_ = 0, vStep_ = 0;
-    static constexpr int VOYAGE_COLS = 2;      // the cards' grid
+    int voyageCols() const { return portrait_ ? 1 : 2; } // the cards' grid (one column in portrait)
     float aV_ = 0, aVRow_ = 0;                 // the focused card, its row (eased: the grid scrolls to it)
     std::vector<VoyageProgress> vProg_;        // how far each card's voyage went (read when the screen opens)
     std::string vUrl_, vLink_, vDelete_;       // the playlist read, the link typed, a voyage DEL was pressed on once
