@@ -180,7 +180,7 @@ private:
     struct CellInst { float a[4], b[4], c[4], d[4]; };
     std::vector<CellInst> cells_;
     int ids_[22][10] = {};
-    int blockStyle_ = 0; // REFALL_ORBITAL_BLOCK: 0 the circuit tiles, 1 hull modules, 2 solar arrays, 3 energy cores, 4 brighter tiles
+    int blockStyle_ = 2; // REFALL_ORBITAL_BLOCK (2, the solar arrays, the default): 0 the circuit tiles, 1 hull modules, 2 solar arrays, 3 energy cores, 4 brighter tiles
     int nextId_ = 1;
     void syncIds(const Game& g);
     void cell(float x, float y, float half, int mask, int type, float seed, float alpha, int mode, float erase, float glow);
