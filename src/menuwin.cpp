@@ -537,7 +537,8 @@ void Worlds::kalCampaign() {
     const int fs = focusedStage();
     const float ao = sstep(m.aOpen_); // the opened petal, 0 closed .. 1 open
     if (m.portrait_) { // the tabs, the wheel, the stage's panel and the info, one under the other
-        pLayout({{560, 30, 800, 145, 1.25f}, {450, 170, 670, 540, 0.9f}, {1178, 160, 654, 580, 1.3f}, {640, 838, 640, 250, 1.4f}}, 18);
+        // (the wheel first: as large as it can be; the panel without its SPACE SONGS line, the info last)
+        pLayout({{560, 30, 800, 145, 1.15f}, {450, 170, 670, 540, 1.35f}, {1178, 160, 654, 520, 1.2f}, {640, 838, 640, 250, 1.15f}}, 10);
         pAt(1);
     }
     kalBackground(spec(fs, m.petal_ ? m.song_ : 0));
@@ -872,7 +873,7 @@ void Worlds::kalCampaign() {
         }
         std::string prompt;
         if (!o) prompt = "LOCKED";
-        else if (!m.petal_) prompt = "SPACE  SONGS"; // the one key Enter doesn't explain: the petal's songs
+        else if (!m.petal_ && !m.portrait_) prompt = "SPACE  SONGS"; // the one key Enter doesn't explain: the petal's songs (not in portrait: room for the wheel)
         if (!prompt.empty()) // (on a soft shade, as the tabs)
             p.rrect(x - 30 * u, Y(690), p.width(F::JOSEFIN, prompt, 17 * T * u, 0.35f) + 60 * u, 44 * u, 22 * u, hex(0x02040c, 0.22f), 40 * u);
         p.text(F::JOSEFIN, prompt, x, Y(720), 17 * T * u, hex(0xffffff, 0.85f), -1, 0.35f);
