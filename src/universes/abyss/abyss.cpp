@@ -971,7 +971,9 @@ void AbyssUniverse::buildBoard(const Game& g) {
         }
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         for (int i = 0; i < 4; i++) {
-            if (cells[i][1] < Game::HIDDEN - 1) continue;
+            // (every cell, the rows above the well too: the screen shows two of them here, and a cell left out cut
+            // the piece flat on top as it came in)
+            if (cells[i][1] < 0) continue;
             vec3 w = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
             tile(w.x, w.y, 0.5f, 0.5f, col, 1.f, 3, -1.f, p.type, pieceMask(cells, i), 1.f, 1.2f);
         }
