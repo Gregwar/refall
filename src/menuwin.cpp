@@ -542,6 +542,10 @@ void Worlds::kalCampaign() {
         pAt(1);
     }
     kalBackground(spec(fs, m.petal_ ? m.song_ : 0));
+    // landscape: the wheel and the stage's panel together centred across the screen and between the tabs and the
+    // info (the layout's numbers place them a little high and to the right); put back for the tabs and the info
+    const float keepSx = m.sx_, keepSy = m.sy_;
+    if (!m.portrait_) { m.sx_ -= 150.f * u; m.sy_ += 36.f * u; }
     const int n = nStages();
     const float cx = X(720), cy = Y(440);
     // the rosette turns so that the focused stage sits at the reading position (the right)
@@ -879,6 +883,7 @@ void Worlds::kalCampaign() {
         p.text(F::JOSEFIN, prompt, x, Y(720), 17 * T * u, hex(0xffffff, 0.85f), -1, 0.35f);
     }
     if (m.portrait_) pAt(0);
+    else { m.sx_ = keepSx; m.sy_ = keepSy; }
     tabs(F::JOSEFIN, hex(0xffffff), hex(0xffffff), 0.35f);
     if (m.portrait_) pAt(3);
     info(F::JOSEFIN_LIGHT, F::JOSEFIN, hex(0xffffff), hex(0xe0e0f0, 0.65f), hex(0xffffff), 1);
