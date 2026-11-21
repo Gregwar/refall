@@ -16,3 +16,4 @@ audio/*
 dist/
 *.egg-info/
 /.worktrees/
+/.trailer-cache/
