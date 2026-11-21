@@ -74,8 +74,6 @@ void Menu::open(Screen s, const std::string& message, const std::string& sub, bo
         aSlot_ = (float)slotSel_;
         aSlotRow_ = 0;
         slotConfirm_ = false;
-        slotOpen_ = false;
-        aSlotOpen_ = 0;
         slotsChanged();
     }
     if (s == GAMEPAD && message.empty()) { padSel_ = 0; aPad_ = 0; }
@@ -299,7 +297,6 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aYes_ += (optYes_ - aYes_) * k;
         aSlot_ += (slotSel_ - aSlot_) * k;
         aSlotRow_ += (slotRow_ - aSlotRow_) * k;
-        aSlotOpen_ += ((slotOpen_ ? 1.f : 0.f) - aSlotOpen_) * k;
         noteT_ = std::max(0.f, noteT_ - dt);
         aFree_ += (freeDiff_ - aFree_) * k;
         aDiff_ += (diff_ - aDiff_) * k;
@@ -428,13 +425,14 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             break;
         }
         if (!slots_) { if (back) open(TITLE); break; }
-        if (!slotOpen_) { // choosing a slot: OK puts it in use and opens its box
-            if (back) { open(TITLE); break; }
-            slotSel_ = std::clamp(slotSel_ + dx, 0, SaveSlots::COUNT - 1);
-            if (ok) { ch.kind = Choice::SLOT_USE; ch.slot = slotSel_; slotOpen_ = true; slotRow_ = 0; aSlotRow_ = 0; }
+        if (back) { open(TITLE); break; }
+        // left / right: the focus from card to card (the slot in use keeps its choices open under it); OK on another
+        // slot puts it in use (its choices then open under it); on the slot in use, up / down and OK its choices
+        slotSel_ = std::clamp(slotSel_ + dx, 0, SaveSlots::COUNT - 1);
+        if (slotSel_ != slots_->active()) {
+            if (ok) { ch.kind = Choice::SLOT_USE; ch.slot = slotSel_; slotRow_ = 0; aSlotRow_ = 0; }
             break;
         }
-        if (back || dx) { slotOpen_ = false; if (dx) slotSel_ = std::clamp(slotSel_ + dx, 0, SaveSlots::COUNT - 1); break; }
         slotRow_ = (slotRow_ + dy + 2 * 8) % 2;
         if (!ok) break;
         const SaveSlots::Summary sm = slotSel_ < (int)slotSum_.size() ? slotSum_[slotSel_] : SaveSlots::Summary{};

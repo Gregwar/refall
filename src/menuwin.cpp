@@ -989,8 +989,9 @@ void Worlds::kalSlots() {
     const float x0 = 960 - (n * CW + (n - 1) * GAP) / 2;
     // the chosen slot's choices: its card grows down to hold them, under a hairline (one card, not a box beside it)
     const float by0 = TOP + CH, bh = Menu::SLOT_ACTIONS * STEP + 30;
-    const int psel = std::clamp(m.slotSel_, 0, n - 1);
-    const float open = std::clamp(m.aSlotOpen_, 0.f, 1.f);
+    // (the slot in use: its card holds its choices, wherever the focus is)
+    const int psel = std::clamp(m.slots_ ? m.slots_->active() : 0, 0, n - 1);
+    const float open = m.slots_ ? 1.f : 0.f;
     auto extOf = [&](int i) { return i == psel ? bh * sstep(open) : 0.f; }; // (the card's growth)
     // portrait: the title, then the three cards one under the other
     const bool pt = m.portrait_;
@@ -1095,7 +1096,8 @@ void Worlds::kalSlots() {
         fit(F::JOSEFIN, m.note_, cx, Y(mid + 10), SIZE * u, maxw, hex(0xffffff, a), 0, TRACK);
         return;
     }
-    const std::string name = "SLOT " + std::to_string(m.slotSel_ + 1);
+    const std::string name = "SLOT " + std::to_string(psel + 1);
+    const bool here = m.slotSel_ == psel; // (the focus on it: its choices lit; elsewhere they wait, dim)
     if (m.slotConfirm_) { // are you sure? YES / NO, the answer underlined (YES on the left)
         fit(F::JOSEFIN, m.slotRow_ == 0 ? "UNLOCK ALL OF " + name + "?" : "ERASE " + name + "?", cx, Y(mid - STEP * 0.5f + 10), SIZE * u,
             maxw, hex(0xffffff), 0, TRACK);
@@ -1118,14 +1120,14 @@ void Worlds::kalSlots() {
     const std::string label[2] = {"UNLOCK ALL STAGES", "ERASE " + name};
     float inkL = 0, inkR = 0;
     for (int i = 0; i < 2; i++) {
-        p.text(F::JOSEFIN, label[i], cx, Y(y0 + (i + 1) * STEP), SIZE * u, hex(0xffffff, 0.45f + 0.55f * near1(m.aSlotRow_, i)), 0, TRACK);
+        p.text(F::JOSEFIN, label[i], cx, Y(y0 + (i + 1) * STEP), SIZE * u, hex(0xffffff, here ? 0.45f + 0.55f * near1(m.aSlotRow_, i) : 0.4f), 0, TRACK);
         float l, r;
         p.inkExtent(F::JOSEFIN, label[i], SIZE * u, TRACK, l, r);
         const float start = cx - p.width(F::JOSEFIN, label[i], SIZE * u, TRACK) * 0.5f;
         inkL += near1(m.aSlotRow_, i) * (start + l);
         inkR += near1(m.aSlotRow_, i) * (start + r);
     }
-    p.line(inkL, Y(y0 + (m.aSlotRow_ + 1) * STEP) + 13 * u, inkR, Y(y0 + (m.aSlotRow_ + 1) * STEP) + 13 * u, 1.6f * u, hex(0xffffff, 0.9f));
+    if (here) p.line(inkL, Y(y0 + (m.aSlotRow_ + 1) * STEP) + 13 * u, inkR, Y(y0 + (m.aSlotRow_ + 1) * STEP) + 13 * u, 1.6f * u, hex(0xffffff, 0.9f));
 }
 
 // The gamepad: remapping it control by control, or its own mapping back; a remap asks for each control in the panel.
