@@ -482,13 +482,15 @@ void main() {
 // (a cap of rime along the top), a glossy translucent body that lets the eye in deep: the colour deepening toward the
 // centre, the cube's back faces refracted into four facets meeting near its middle, a few fracture planes, tiny
 // trapped bubbles, caustic filaments of focused light, a soft highlight at the top left. Under the water a cube goes a
-// deeper, more saturated teal. The ghost is a frosted outline. A cleared cube melts (mode 2, its progress 0..1 and the
-// height left free above it): it turns clear and glossy, rounds off, and shrinks down into a thin film that fades.
+// deeper, more saturated teal. The ghost is a frosted outline. A cleared cube melts (mode 2: its progress 0..1, the
+// height left free above it, where its drip hangs): wet at once (clear, glossy, a bright rim, water running down its
+// faces), it softens, rounds off and slumps from the top, its foot spreading into a puddle, its top wobbling; drips
+// swell at its foot and let go; down to a thin film that fades.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, seed
 layout(location = 2) in vec4 aB; // tint rgb, alpha
-layout(location = 3) in vec4 aC; // mode (0 cube, 1 ghost, 2 melting), melt progress, flash (melting: the room above), frost
+layout(location = 3) in vec4 aC; // mode (0 cube, 1 ghost, 2 melting), melt progress, flash (melting: the room above), frost (melting: its drip's x)
 uniform mat4 uVP;
 out vec2 vLocal;
 out vec2 vWorld;
@@ -496,7 +498,7 @@ flat out vec4 vA;
 flat out vec4 vB;
 flat out vec4 vC;
 void main() {
-    float ext = aA.z * 1.04;
+    float ext = aA.z * (int(aC.x + 0.5) == 2 ? 1.36 : 1.04); // (a melting cube's puddle and drips reach out of its cell)
     vec2 wp = aA.xy + aPos * ext;
     vLocal = aPos * ext / (2.0 * aA.z);
     vWorld = wp;
@@ -519,15 +521,37 @@ void main() {
     float aa = max(length(fwidth(p)) * 0.7071, 1e-4);
     float seed = vA.w;
     vec3 tint = vB.rgb;
-    // the melt: clear and glossy first, then down into a film, then gone (smooth eases, crisp shapes)
+    // the melt: wet and glossy first, then softening and slumping from the top into a puddle, then gone
     float u = mode == 2 ? vC.y : 0.0;
-    float gloss = smoothstep(0.0, 0.3, u);
-    float s = smoothstep(0.18, 0.75, u);
-    float hgt = mode == 2 ? min(mix(1.0, 0.11, s), max(vC.z, 0.11)) : 1.0;
-    vec2 hs = vec2(mix(0.47, 0.44, s), 0.47 * hgt);
-    vec2 q = p - vec2(0.0, -0.47 + hs.y);
-    float r = min(mix(0.15, 0.24, gloss), hs.y);
+    float gloss = smoothstep(0.0, 0.22, u);
+    float s = smoothstep(0.06, 0.92, u);
+    float hgt = mode == 2 ? min(mix(1.0, 0.09, s * s * (3.0 - 2.0 * s) * 0.4 + s * 0.6), max(vC.z, 0.09)) : 1.0;
+    vec2 hs = vec2(mix(0.47, 0.43, s), 0.47 * hgt);
+    vec2 pm = p;
+    if (mode == 2) {
+        // the foot spreads as it slumps (a puddle), the top narrows
+        float yl = sat((p.y + 0.47) / max(2.0 * hs.y, 1e-3));
+        pm.x /= 1.0 + 0.16 * s * (1.0 - yl) * (1.0 - yl);
+    }
+    vec2 q = pm - vec2(0.0, -0.47 + hs.y);
+    float r = min(min(mix(0.15, 0.26, gloss) + 0.14 * s, hs.y), hs.x);
     float sd = rbox(q, hs, r);
+    if (mode == 2) {
+        // the soft top wobbles; drips swell at the foot, let go and swell again
+        sd += 0.014 * gloss * sin(p.x * 17.0 + uTime * 6.0 + seed * 9.0) * sat(q.y / hs.y + 0.3);
+        for (int i = 0; i < 2; i++) {
+            float dx = i == 0 ? vC.w : -0.62 * vC.w;
+            float ph = u - 0.1 * float(i);
+            float g1 = smoothstep(0.1, 0.46, ph) * step(ph, 0.47), g2 = smoothstep(0.52, 0.86, ph) * step(ph, 0.87);
+            float len = (0.15 * g1 + 0.11 * g2) * (i == 0 ? 1.0 : 0.7);
+            float rad = 0.022 + 0.22 * len;
+            vec2 dc = vec2(dx * (1.0 + 0.16 * s), -0.47 - len + rad);
+            float dd = length((p - dc) * vec2(1.0, 0.85)) - rad;
+            float k = 0.06;
+            float hmix = sat(0.5 + 0.5 * (dd - sd) / k);
+            sd = mix(dd, sd, hmix) - k * hmix * (1.0 - hmix) * step(0.001, len);
+        }
+    }
     float inside = 1.0 - smoothstep(-aa, aa, sd);
     if (inside <= 0.0) discard;
     float e = -sd;
@@ -603,10 +627,16 @@ void main() {
     col += uGlow * uDrop * (0.05 + 0.12 * centre + 0.15 * ca);
     // a fresh lock frosts it white for a moment; game over: rime creeps over it
     col = mix(col, mix(tint, vec3(1.0), 0.75), (mode == 2 ? 0.0 : vC.z) * 0.4);
-    col = mix(col, vec3(0.86, 0.91, 0.95) * (0.78 + 0.22 * frost), vC.w * 0.8);
-    // melting: clear water, a bright meniscus along the film's top
+    col = mix(col, vec3(0.86, 0.91, 0.95) * (0.78 + 0.22 * frost), (mode == 2 ? 0.0 : vC.w) * 0.8);
+    // melting: clear water, a bright meniscus along the top, a wet specular rim, water running down the faces
     col = mix(col, mix(tint, vec3(1.0), 0.3) * 1.05, gloss * 0.45);
     col += vec3(1.0) * exp(-sq((n.y - 0.7) / 0.12)) * 0.22 * gloss * smoothstep(0.0, 0.03, e);
+    if (mode == 2) {
+        col += vec3(1.0) * exp(-e / 0.018) * 0.55 * gloss;
+        col += vec3(0.95, 0.99, 1.0) * exp(-sq((n.x + 0.55 - 0.1 * n.y) / 0.09)) * 0.3 * gloss * smoothstep(0.0, 0.04, e);
+        float run = vnoise(vec2(p.x * 26.0 + seed * 3.0, p.y * 3.0 + uTime * 2.5));
+        col += vec3(0.9, 0.97, 1.0) * smoothstep(0.68, 0.9, run) * 0.22 * gloss;
+    }
     // under the water: a deeper, more saturated teal
     float under = smoothstep(uLevel + 0.04, uLevel - 0.04, vWorld.y) * uWaterA;
     float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
@@ -614,7 +644,7 @@ void main() {
     col = mix(col, sat2, under * 0.75);
     col = mix(col, uBridgeInk, uBridge);
     // translucent: the well's grid shows faintly through the clear middle
-    float a = inside * vB.a * (0.86 + 0.12 * sat(rim + topFace) - 0.2 * gloss) * (1.0 - smoothstep(0.78, 1.0, u));
+    float a = inside * vB.a * (0.86 + 0.12 * sat(rim + topFace) - 0.32 * gloss + 0.3 * gloss * exp(-e / 0.03)) * (1.0 - smoothstep(0.8, 1.0, u));
     frag = vec4(col * a, a);
 }
 )";
@@ -662,6 +692,39 @@ void main() {
         float rim = exp(-abs(sd) / (px * 2.0)) * inside;
         v = inside;
         frag = vec4((c * 0.55 + rim * 0.35 + hi * 0.8) * v * vB.a, v * vB.a * 0.85);
+        return;
+    }
+    if (mode == 5) {
+        // the melt's water running down (a rivulet, or a sheet down the glass): a meandering thread, clear with bright
+        // refracting edges and a specular line, swellings running down it; a rounded head, a tapering top
+        float hw = vA.z * 0.5 * (vC.w > 0.5 ? 1.4 : 1.0), len = vC.z;
+        float wy = vA.y + q.y * len;
+        float xr = q.x * vA.z;
+        float px = 1.0 / uPxPerUnit;
+        float sheet = vC.w;
+        float wob = (sin(wy * 4.3 + vC.y * 20.0) * 0.22 + sin(wy * 11.0 - uTime * 5.0 + vC.y * 7.0) * 0.1) * vA.z * (1.0 - 0.6 * sheet);
+        float bead = smoothstep(0.55, 1.0, sin(wy * 5.0 + uTime * 16.0 + vC.y * 9.0));
+        float hy = (q.y + 1.0) * len, ty = (1.0 - q.y) * len;
+        float t = hw * (1.0 + 0.3 * bead) * (1.0 + 0.5 * exp(-hy / (hw * 2.5))) * sat(ty / (hw * 4.0) + 0.25);
+        float dx = xr - wob;
+        float sd = hy < t ? length(vec2(dx, t - hy)) - t : abs(dx) - t;
+        float inside = 1.0 - smoothstep(-px, px, sd);
+        if (inside <= 0.0) discard;
+        float d = sat(abs(dx) / max(t, 1e-4));
+        float edge = smoothstep(0.45, 1.0, d);
+        float spec = exp(-sq((dx + 0.35 * t) / (0.22 * t + px)));
+        float streak = sheet * smoothstep(0.55, 0.9, vnoise(vec2(xr * 40.0, wy * 1.2 + uTime * 9.0)));
+        vec3 col = c * (0.55 + 0.6 * edge) + vec3(1.0) * (spec * (0.55 + 0.5 * bead) + streak * 0.35 + edge * 0.15);
+        float a = inside * (0.45 + 0.45 * edge + 0.1 * spec) * vB.a;
+        frag = vec4(col * inside * vB.a, a);
+        return;
+    }
+    if (mode == 6) {
+        // a splash: a little crown of water thrown up where it lands
+        vec2 e = q * vec2(1.0, 1.0 / max(vC.x, 0.1));
+        float rr = length(e);
+        v = exp(-sq((rr - 0.65) / 0.16)) * (q.y > 0.0 ? 1.0 : 0.35) + exp(-rr * rr * 8.0) * 0.4;
+        frag = vec4((c * 0.6 + 0.5) * v * vB.a, v * vB.a * 0.6);
         return;
     }
     if (mode == 2) {
