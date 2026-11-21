@@ -241,9 +241,12 @@ private:
     int theme_ = 0;
     int optSel_ = 0, optYes_ = 0;
     float aOpt_ = 0, aYes_ = 0;
-    // the save slots: a card each (left / right), under them what to do with the focused one: 0 use it, 1 unlock
-    // every stage, 2 erase it (either asks "are you sure?" first: YES / NO, NO focused)
-    static constexpr int SLOT_ACTIONS = 3;
+    // the save slots: a card each (left / right); OK on one puts it in use and opens a box under it: "SELECTED" (said,
+    // not a choice), then what to do with it: 0 unlock every stage, 1 erase it (either asks "are you sure?" first:
+    // YES / NO, NO focused); Esc or left / right closes the box
+    static constexpr int SLOT_ACTIONS = 3; // (the box's lines: SELECTED and the two choices)
+    bool slotOpen_ = false;
+    float aSlotOpen_ = 0;
     const SaveSlots* slots_ = nullptr;
     std::vector<SaveSlots::Summary> slotSum_;
     int slotSel_ = 0, slotRow_ = 0;

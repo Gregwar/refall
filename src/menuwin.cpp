@@ -987,10 +987,11 @@ void Worlds::kalSlots() {
     const bool pt = m.portrait_;
     const int psel = std::clamp(m.slotSel_, 0, n - 1);
     auto cardBlock = [&](int i) { return PBlock{x0 + i * (CW + GAP), TOP, CW, CH, 1.7f}; };
-    auto pCard = [&](int i) { return i <= psel ? 1 + i : 2 + i; }; // (its place in the column)
+    auto pCard = [&](int i) { return i <= psel || !m.slotOpen_ ? 1 + i : 2 + i; }; // (its place in the column)
     if (pt) {
         const PBlock title{610, 90, 700, 130, 1.4f}, box{x0 + psel * (CW + GAP) + INSET, by0, CW - 2 * INSET, bh, 1.7f};
-        if (psel == 0) pLayout({title, cardBlock(0), box, cardBlock(1), cardBlock(2)}, 22);
+        if (!m.slotOpen_) pLayout({title, cardBlock(0), cardBlock(1), cardBlock(2)}, 22);
+        else if (psel == 0) pLayout({title, cardBlock(0), box, cardBlock(1), cardBlock(2)}, 22);
         else if (psel == 1) pLayout({title, cardBlock(0), cardBlock(1), box, cardBlock(2)}, 22);
         else pLayout({title, cardBlock(0), cardBlock(1), cardBlock(2), box}, 22);
         pAt(0);
@@ -1073,7 +1074,11 @@ void Worlds::kalSlots() {
         p.setFade(1.f);
     }
     // what to do with the focused slot: a box under its card, gliding along with the focus
+    // the box: once a slot is chosen (OK on it), fading in under it
+    if (m.aSlotOpen_ < 0.02f || (pt && !m.slotOpen_)) return;
     if (pt) pAt(2 + psel);
+    p.setFade(std::min(1.f, m.aSlotOpen_));
+    struct FadeBack { Painter& pp; ~FadeBack() { pp.setFade(1.f); } } fadeBack{p}; // (whichever way it returns)
     const float bx = X(x0 + (pt ? (float)psel : m.aSlot_) * (CW + GAP) + INSET), bw = (CW - 2 * INSET) * u;
     const float cx = bx + bw / 2, mid = by0 + bh / 2;
     p.glass(bx, Y(by0), bw, bh * u, 20 * u, u, 0.f, 0.55f);
@@ -1086,7 +1091,7 @@ void Worlds::kalSlots() {
     }
     const std::string name = "SLOT " + std::to_string(m.slotSel_ + 1);
     if (m.slotConfirm_) { // are you sure? YES / NO, the answer underlined (YES on the left)
-        fit(F::JOSEFIN, m.slotRow_ == 1 ? "UNLOCK ALL OF " + name + "?" : "ERASE " + name + "?", cx, Y(mid - STEP * 0.5f + 10), SIZE * u,
+        fit(F::JOSEFIN, m.slotRow_ == 0 ? "UNLOCK ALL OF " + name + "?" : "ERASE " + name + "?", cx, Y(mid - STEP * 0.5f + 10), SIZE * u,
             maxw, hex(0xffffff), 0, TRACK);
         const char* ANS[2] = {"NO", "YES"};
         const float ax[2] = {cx + 90 * u, cx - 90 * u}, y = Y(mid + STEP * 0.5f + 10);
@@ -1101,18 +1106,20 @@ void Worlds::kalSlots() {
                1.6f * u, hex(0xffffff, 0.9f));
         return;
     }
-    const std::string label[Menu::SLOT_ACTIONS] = {"USE " + name, "UNLOCK ALL STAGES", "ERASE " + name};
+    // SELECTED in gold (said, not a choice), then the two choices, the focused one underlined
     const float y0 = mid - (Menu::SLOT_ACTIONS - 1) * STEP * 0.5f + 10;
+    p.text(F::JOSEFIN, "SELECTED", cx, Y(y0), SIZE * u, hex(0xe8c06a), 0, TRACK);
+    const std::string label[2] = {"UNLOCK ALL STAGES", "ERASE " + name};
     float inkL = 0, inkR = 0;
-    for (int i = 0; i < Menu::SLOT_ACTIONS; i++) {
-        p.text(F::JOSEFIN, label[i], cx, Y(y0 + i * STEP), SIZE * u, hex(0xffffff, 0.45f + 0.55f * near1(m.aSlotRow_, i)), 0, TRACK);
+    for (int i = 0; i < 2; i++) {
+        p.text(F::JOSEFIN, label[i], cx, Y(y0 + (i + 1) * STEP), SIZE * u, hex(0xffffff, 0.45f + 0.55f * near1(m.aSlotRow_, i)), 0, TRACK);
         float l, r;
         p.inkExtent(F::JOSEFIN, label[i], SIZE * u, TRACK, l, r);
         const float start = cx - p.width(F::JOSEFIN, label[i], SIZE * u, TRACK) * 0.5f;
         inkL += near1(m.aSlotRow_, i) * (start + l);
         inkR += near1(m.aSlotRow_, i) * (start + r);
     }
-    p.line(inkL, Y(y0 + m.aSlotRow_ * STEP) + 13 * u, inkR, Y(y0 + m.aSlotRow_ * STEP) + 13 * u, 1.6f * u, hex(0xffffff, 0.9f));
+    p.line(inkL, Y(y0 + (m.aSlotRow_ + 1) * STEP) + 13 * u, inkR, Y(y0 + (m.aSlotRow_ + 1) * STEP) + 13 * u, 1.6f * u, hex(0xffffff, 0.9f));
 }
 
 // The gamepad: remapping it control by control, or its own mapping back; a remap asks for each control in the panel.

@@ -2480,8 +2480,7 @@ void App::applyOption(const Menu::Choice& c) {
     const std::string slot = "SLOT " + std::to_string(c.slot + 1);
     if (c.kind == Menu::Choice::SLOT_USE) {
         if (c.slot != slots_.active()) useSlot(c.slot);
-        menu_.slotsChanged();
-        menu_.note(Menu::SLOTS, slot + " IN USE");
+        menu_.slotsChanged(); // (the box under it says SELECTED)
     } else if (c.kind == Menu::Choice::SLOT_UNLOCK) {
         if (c.slot == slots_.active() && voyage_.empty()) {
             progress_.unlockAll();

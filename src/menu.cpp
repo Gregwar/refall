@@ -74,6 +74,8 @@ void Menu::open(Screen s, const std::string& message, const std::string& sub, bo
         aSlot_ = (float)slotSel_;
         aSlotRow_ = 0;
         slotConfirm_ = false;
+        slotOpen_ = false;
+        aSlotOpen_ = 0;
         slotsChanged();
     }
     if (s == GAMEPAD && message.empty()) { padSel_ = 0; aPad_ = 0; }
@@ -297,6 +299,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aYes_ += (optYes_ - aYes_) * k;
         aSlot_ += (slotSel_ - aSlot_) * k;
         aSlotRow_ += (slotRow_ - aSlotRow_) * k;
+        aSlotOpen_ += ((slotOpen_ ? 1.f : 0.f) - aSlotOpen_) * k;
         noteT_ = std::max(0.f, noteT_ - dt);
         aFree_ += (freeDiff_ - aFree_) * k;
         aDiff_ += (diff_ - aDiff_) * k;
@@ -420,19 +423,23 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         if (noteT_ > 0.f) { if (ok || back || dx || dy) noteT_ = 0.f; break; }
         if (slotConfirm_) { // are you sure? YES / NO
             if (dx || dy) optYes_ = 1 - optYes_;
-            if (ok && optYes_) { ch.kind = slotRow_ == 1 ? Choice::SLOT_UNLOCK : Choice::SLOT_ERASE; ch.slot = slotSel_; }
+            if (ok && optYes_) { ch.kind = slotRow_ == 0 ? Choice::SLOT_UNLOCK : Choice::SLOT_ERASE; ch.slot = slotSel_; }
             if (ok || back) slotConfirm_ = false;
             break;
         }
-        if (back) { open(TITLE); break; }
-        if (!slots_) break;
-        slotSel_ = std::clamp(slotSel_ + dx, 0, SaveSlots::COUNT - 1);
-        slotRow_ = (slotRow_ + dy + SLOT_ACTIONS * 8) % SLOT_ACTIONS;
+        if (!slots_) { if (back) open(TITLE); break; }
+        if (!slotOpen_) { // choosing a slot: OK puts it in use and opens its box
+            if (back) { open(TITLE); break; }
+            slotSel_ = std::clamp(slotSel_ + dx, 0, SaveSlots::COUNT - 1);
+            if (ok) { ch.kind = Choice::SLOT_USE; ch.slot = slotSel_; slotOpen_ = true; slotRow_ = 0; aSlotRow_ = 0; }
+            break;
+        }
+        if (back || dx) { slotOpen_ = false; if (dx) slotSel_ = std::clamp(slotSel_ + dx, 0, SaveSlots::COUNT - 1); break; }
+        slotRow_ = (slotRow_ + dy + 2 * 8) % 2;
         if (!ok) break;
         const SaveSlots::Summary sm = slotSel_ < (int)slotSum_.size() ? slotSum_[slotSel_] : SaveSlots::Summary{};
-        if (slotRow_ == 0) { ch.kind = Choice::SLOT_USE; ch.slot = slotSel_; }
-        else if (slotRow_ == 1 && sm.unlocked) note(SLOTS, "ALREADY UNLOCKED");
-        else if (slotRow_ == 2 && sm.empty) note(SLOTS, "NOTHING TO ERASE");
+        if (slotRow_ == 0 && sm.unlocked) note(SLOTS, "ALREADY UNLOCKED");
+        else if (slotRow_ == 1 && sm.empty) note(SLOTS, "NOTHING TO ERASE");
         else { slotConfirm_ = true; optYes_ = 0; aYes_ = 0; }
         break;
     }
