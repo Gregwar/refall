@@ -61,6 +61,7 @@ if (PHP_SAPI === 'cli-server') {
   #dpad .u { left: 56px; top: 0; } #dpad .d { left: 56px; bottom: 0; } #dpad .l { left: 0; top: 56px; } #dpad .r { right: 0; top: 56px; }
   #pad .a { right: max(18px, env(safe-area-inset-right)); bottom: 70px; width: 72px; height: 72px; }
   #pad .bb { right: calc(max(18px, env(safe-area-inset-right)) + 84px); bottom: 22px; width: 72px; height: 72px; }
+  #pad .x { right: calc(max(18px, env(safe-area-inset-right)) + 96px); bottom: 110px; width: 56px; height: 56px; font-size: 12px; }
   #pad .hold { right: calc(max(18px, env(safe-area-inset-right)) + 8px); bottom: 168px; width: 64px; height: 40px; border-radius: 20px; }
   #pad .start { left: 50%; transform: translateX(-50%); top: 10px; width: 64px; height: 30px; border-radius: 15px; font-size: 11px; }
   #pad .full { right: max(10px, env(safe-area-inset-right)); top: 10px; width: 38px; height: 38px; border-radius: 10px; font-size: 18px; }
@@ -78,6 +79,7 @@ if (PHP_SAPI === 'cli-server') {
   <div id="dpad"><div class="u">&#9650;</div><div class="l">&#9664;</div><div class="r">&#9654;</div><div class="d">&#9660;</div></div>
   <div class="b a" data-b="0">A</div>
   <div class="b bb" data-b="1">B</div>
+  <div class="b x" data-b="2">X</div>
   <div class="b hold" data-b="4">HOLD</div>
   <div class="b start" data-b="9">PAUSE</div>
   <div class="b full" data-full>&#x26F6;</div>
@@ -98,7 +100,8 @@ if (PHP_SAPI === 'cli-server') {
     showPad();
   }
 
-  // ---- The touch pad: a standard gamepad the page makes up (A rotates, B rotates back, the cross moves and drops,
+  // ---- The touch pad: a standard gamepad the page makes up (A rotates, B rotates back, X opens a Voyage stage on its
+  // songs (and rotates back in play), the cross moves and drops,
   // HOLD, PAUSE), added to the browser's own gamepads, so the game reads it as any other.
   const touch = matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
   const vpad = { id: "Touch pad (STANDARD GAMEPAD)", index: 3, connected: true, mapping: "standard", timestamp: 0,
