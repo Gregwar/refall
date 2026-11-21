@@ -132,7 +132,7 @@ void Game::spawn(int type) {
     events_.push_back({GameEvent::Spawn});
     if (heldShift_) move(heldShift_); // the initial shift (see setHeldShift)
     visX_ = (float)cur_.x;
-    visY_ = (float)cur_.y;
+    visY_ = seenY_ = (float)cur_.y;
 }
 
 void Game::respawn() {
@@ -186,7 +186,7 @@ bool Game::rotate(int dir) {
         p.y -= kicks[from][d][k][1]; // table is y-up
         if (tryPlace(p)) {
             visX_ = (float)cur_.x;
-            visY_ = (float)cur_.y;
+            visY_ = seenY_ = (float)cur_.y;
             onMoved();
             GameEvent ev{GameEvent::Rotate};
             ev.x = (float)cur_.x;
@@ -230,7 +230,7 @@ void Game::hardDrop() {
     pieceCells(cur_, c);
     for (auto& q : c) ev.cells.push_back({q[0], q[1], cur_.type});
     events_.push_back(ev);
-    visY_ = (float)cur_.y;
+    visY_ = seenY_ = (float)cur_.y;
     lockPiece(true);
 }
 
@@ -411,15 +411,28 @@ void Game::update(float dt) {
         return;
     }
     visX_ = (float)cur_.x; // sideways moves are instant (smoothing them reads as input lag)
-    visY_ = approach(visY_, (float)cur_.y, 22.f, dt);
-
     Piece below = cur_;
     below.y++;
     grounded_ = collides(below);
+    // The drawn row. A slow fall: it slides after each step (an easing at 22/s). A fast fall (from ~8 rows/s, all of it
+    // from 20): it glides at the fall's speed, a row behind where the gravity has got to (y - 1 + the share of the next
+    // row: steady between the steps and across them), so the uneven steps a frame takes don't show and it trails by
+    // half a row on average, not by speed / 22 rows (2.7 at 60 rows/s). It never goes back (after a spawn or a turn it
+    // waits for the glide to come by) nor past the real row; on the stack it comes down at that speed (no easing tail).
+    const float glide = smoothstepf(8.f, 20.f, fallSpeed_), y = (float)cur_.y, was = visY_;
+    if (glide <= 0.f) visY_ = approach(visY_, y, 22.f, dt);
+    else if (grounded_) visY_ = std::min(y, std::max(approach(visY_, y, 22.f, dt), visY_ + glide * fallSpeed_ * dt));
+    else {
+        const float target = y - glide * (1.f - std::clamp(fallFrac_, 0.f, 1.f));
+        visY_ = std::clamp(approach(visY_ + glide * fallSpeed_ * dt, target, 22.f, dt), was, std::max(was, y));
+    }
+    // (the lock's clock waits for the piece as it used to be drawn: an easing at 22/s behind the row, which trails the
+    // real one a little in a fast fall; kept so the time on the stack stays what it was, the drawn piece arriving earlier)
+    seenY_ = approach(seenY_, y, 22.f, dt);
     if (grounded_) {
-        // (the bonus: a resting piece waits for a hard drop; and the clock waits until the piece drawn on screen,
-        // which trails the real one a little in a fast fall, has come to rest too)
-        const bool seen = visY_ > (float)cur_.y - 0.2f;
+        // (the bonus: a resting piece waits for a hard drop; and the clock waits until the piece, as above, has come to
+        // rest too)
+        const bool seen = seenY_ > (float)cur_.y - 0.2f;
         if (!bonusActive_ && seen) lockTimer_ += dt;
         if (lockTimer_ >= lockDelay()) lockPiece();
     } else {

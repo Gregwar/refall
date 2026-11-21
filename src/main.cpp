@@ -468,6 +468,7 @@ private:
     std::string ctrlNote_; // what the controls page just did ("GAMEPAD REMAPPED"), for a few seconds
     float ctrlNoteT_ = 0;
     double songTime_ = 0, simSongTime_ = 0;
+    int fallSteps_ = 0; // gravity steps taken this frame (the REFALL_DEBUG_FALL log)
     bool offline_ = false; // shots and clips: the song runs on simSongTime_, not on the audio's clock
     // The song reached its end: by the audio's clock when playing, by the simulated song time offline (a slow
     // offline render must not run past the song's real length and start the next one).
@@ -844,6 +845,7 @@ void App::handleEvents() {
 // GRAVITY_BPM whatever the song's tempo, and the velocity scales it up gradually: x10 at 20, x19.5 at 40 (capped
 // at 60 rows/s).
 void App::updateGravity(double songTime, float dt) {
+    game_.setFallGlide(0.f, 0.f); // (set below when the song's gravity runs)
     // A Voyage song's velocity climbs to its own over its first seconds (see Run).
     if (mode_ == MODE_CAMPAIGN && game_.fixedLevel() > 0.f && run_.velRamp > 0.f) {
         const float k = smoothstepf(0.f, run_.velRamp, (float)songTime);
@@ -919,7 +921,10 @@ void App::updateGravity(double songTime, float dt) {
     rowAcc_ += (float)(dBeat * rowsPerBeat) * (1.f - bonusFall_);
     const int steps = (int)std::min(4.0, std::floor(rowAcc_));
     for (int i = 0; i < steps; i++) game_.gravityStep();
+    fallSteps_ = steps;
     rowAcc_ = std::min(rowAcc_ - steps, 1.0); // a long frame doesn't pile up steps
+    // (the drawn piece glides at this speed: rows per second of real time)
+    game_.setFallGlide((float)rowAcc_, rowsPerBeat * beatsPerSec * std::min(audio_.currentSpeed(), gameRate_) * (1.f - bonusFall_));
 }
 
 void App::autoplay(float dt) {
@@ -974,6 +979,9 @@ void App::autoplay(float dt) {
         const float hard = 1.f - smoothstepf(10.f, 20.f, gravityV_);
         if (hard <= 0.f || std::fmod((float)game_.lines() * 0.37f + game_.piece().x * 0.61f + game_.piece().rot * 0.29f, 1.f) >= hard) return;
     }
+    // (REFALL_DEBUG_FALL: the pieces fall all the way at the gravity's speed, to watch the fall)
+    static const bool watchFall = std::getenv("REFALL_DEBUG_FALL") != nullptr;
+    if (watchFall) return;
     game_.hardDrop();
     planned_ = false;
 }
@@ -1416,7 +1424,9 @@ int App::run() {
     if (testPlay()) { offline_ = true; opt_.mute = true; }
     const bool wantHeadless = (testPlay() || shotMode || reviewMode || !opt_.transitionShots.empty() || !opt_.analysisPath.empty() || !opt_.menuShot.empty() || !opt_.menuClip.empty() || !opt_.viewShot.empty()) && !opt_.fullscreen &&
                               !(std::getenv("REFALL_HEADLESS") && std::strcmp(std::getenv("REFALL_HEADLESS"), "0") == 0);
-    const bool streamHeadless = opt_.stream && !opt_.fullscreen;
+    // (and REFALL_DEBUG_FALL with --hidden: real play, in real time, headless)
+    const bool debugFallHeadless = opt_.hidden && std::getenv("REFALL_DEBUG_FALL");
+    const bool streamHeadless = (opt_.stream || debugFallHeadless) && !opt_.fullscreen;
     if ((wantHeadless || streamHeadless) && headless::init(opt_.width, opt_.height)) {
         headless_ = true;
         headW_ = opt_.width; headH_ = opt_.height;
@@ -1603,7 +1613,7 @@ int App::run() {
     loop_.clipMode = clipMode;
     loop_.shotMode = shotMode;
     loop_.reviewMode = reviewMode;
-    loop_.fixedStep = headless_ && !opt_.stream;
+    loop_.fixedStep = headless_ && !opt_.stream && !(opt_.hidden && std::getenv("REFALL_DEBUG_FALL"));
     loop_.last = loop_.fixedStep ? 0.0 : clock();
 #ifdef REFALL_WEB
     // the browser calls the frames (the page's main thread never waits): run() returns, the game goes on
@@ -1838,7 +1848,7 @@ bool App::frame() {
             if (track_ && !paused_ && !songHeld_) simSongTime_ += dt;
             songTime_ = simSongTime_;
         } else {
-            songTime_ = audio_.position();
+            songTime_ = audio_.smoothPosition(); // (the raw position moves by whole audio blocks: an uneven fall)
         }
 
         // ---- Global controls.
@@ -2006,6 +2016,45 @@ bool App::frame() {
             }
         }
 
+        // Test hook: REFALL_DEBUG_FALL=<file> logs each frame (wall time, song time, the audio's raw position,
+        // gravity steps, the piece's row and its drawn row) to look at the fall's regularity
+        static FILE* fallLog = std::getenv("REFALL_DEBUG_FALL") ? std::fopen(std::getenv("REFALL_DEBUG_FALL"), "w") : nullptr;
+        if (fallLog) {
+            static const auto t0 = std::chrono::steady_clock::now();
+            std::fprintf(fallLog, "%.6f %.6f %.6f %d %d %.4f %d %.3f\n",
+                         std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(), songTime_,
+                         audio_.position(), fallSteps_, game_.hasPiece() ? game_.piece().y : -99, game_.pieceVisualY(),
+                         paused_ ? 1 : 0, audio_.currentSpeed());
+        }
+        fallSteps_ = 0;
+        // (REFALL_DEBUG_FALL_EVENTS="P10,B15,S20": at those song times a 1.5 s pause, the bonus, a 10 s jump ahead)
+        static std::string fallEvents = std::getenv("REFALL_DEBUG_FALL_EVENTS") ? std::getenv("REFALL_DEBUG_FALL_EVENTS") : "";
+        static double resumeAt = -1;
+        {
+            const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+            if (resumeAt > 0 && wall >= resumeAt) { resumeAt = -1; paused_ = false; audio_.setPaused(false); std::printf("[debug] resume at %.3f\n", songTime_); }
+            if (!fallEvents.empty() && track_ && !paused_) {
+                const char c = fallEvents[0];
+                const double at = std::atof(fallEvents.c_str() + 1);
+                if (songTime_ >= at) {
+                    const size_t comma = fallEvents.find(',');
+                    fallEvents = comma == std::string::npos ? "" : fallEvents.substr(comma + 1);
+                    std::printf("[debug] %c at %.3f\n", c, songTime_);
+                    if (c == 'P') { paused_ = true; audio_.setPaused(true); resumeAt = wall + 1.5; }
+                    else if (c == 'B') { game_.debugChargeBonus(); game_.activateBonus(); }
+                    else if (c == 'S') seekSong(songTime_ + 10.0);
+                }
+            }
+        }
+        // (REFALL_DEBUG_FPS=N: frames paced at N per second, a vsync for a hidden window)
+        static const double debugFps = std::getenv("REFALL_DEBUG_FPS") ? std::atof(std::getenv("REFALL_DEBUG_FPS")) : 0.0;
+        if (debugFps > 0) {
+            static auto next = std::chrono::steady_clock::now();
+            next += std::chrono::microseconds((long long)(1e6 / debugFps));
+            const auto now = std::chrono::steady_clock::now();
+            if (next < now - std::chrono::milliseconds(50)) next = now;
+            std::this_thread::sleep_until(next);
+        }
         // ---- Music-driven state.
         if (track_) {
             const Analysis& an = track_->analysis;

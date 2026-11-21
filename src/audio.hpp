@@ -38,7 +38,11 @@ public:
     // crossfades from the current track; fadeIn false: the song starts at full level on its first frame
     void play(std::shared_ptr<Track> track, bool fadeIn = true);
     std::shared_ptr<Track> current() const { return current_; }
-    double position() const;                 // seconds into the current track
+    double position() const;                 // seconds into the current track (where the mix has got to: it moves by whole audio blocks)
+    // The song's clock for the game (main thread only): the position carried on in real time between the audio blocks
+    // (10-40 ms apart, depending on the backend) at the rate the song plays, kept in step with them: it moves on
+    // smoothly, never goes back but for a seek or a new song, and on average reads what position() did.
+    double smoothPosition();
     bool finished() const;                   // current track reached its end
     void seek(double seconds);               // jump inside the current track
     void setPaused(bool p) { paused_ = p; }
@@ -81,6 +85,18 @@ private:
     std::shared_ptr<Track> current_, previous_;
     uint64_t pos_ = 0, prevPos_ = 0;
     std::atomic<uint64_t> atomicPos_{0};
+    // The smooth clock. The audio thread publishes, at each block, where the song got to, when, how fast it went over
+    // the block and how long the block was (a seqlock: snapSeq_ odd while it writes); gen_ counts the jumps (play,
+    // seek) so the clock knows a block from before one.
+    std::atomic<uint32_t> snapSeq_{0}, snapGen_{0}, gen_{0};
+    std::atomic<double> snapPos_{0};       // seconds into the track at the block's end
+    std::atomic<int64_t> snapNs_{0};       // the block's time (steady clock, ns)
+    std::atomic<float> snapRate_{0};       // song seconds per second over the block (0 paused, or at the end)
+    std::atomic<float> snapPeriod_{0};     // the block's length in seconds
+    void publishClock(double posSec, int64_t ns, float rate, float period, uint32_t gen);
+    double clock_ = 0;                     // the smooth clock's last reading (main thread)
+    int64_t clockNs_ = 0;
+    uint32_t clockGen_ = ~0u;
     float fade_ = 1.f, prevFade_ = 0.f;
     struct Voice {
         std::shared_ptr<const std::vector<float>> pcm;

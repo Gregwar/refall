@@ -46,6 +46,9 @@ public:
     // that way (an initial shift), before any gravity, so a direction held before it appears always counts (in 20G
     // the piece would otherwise reach the stack first, and a press shorter than the auto-repeat delay was lost).
     void setHeldShift(int dir) { heldShift_ = dir; }
+    // The fall as gravity runs it this frame, for the drawn piece: how far toward its next row the piece has got (0..1)
+    // and the rows per second it falls at (0: no steady fall, the drawn piece slides after each step).
+    void setFallGlide(float frac, float rowsPerSec) { fallFrac_ = frac; fallSpeed_ = rowsPerSec; }
     bool rotate(int dir); // +1 CW, -1 CCW
     bool softDrop();      // one row
     // The bonus: a piece resting on the stack set down (by a fresh press of down, as a hard drop would); false if
@@ -209,6 +212,8 @@ private:
     float fallHold_ = 0;
     bool over_ = false;
     float visX_ = 0, visY_ = 0;
+    float fallFrac_ = 0, fallSpeed_ = 0;
+    float seenY_ = 0; // the row the lock delay waits for (see update)
     int score_ = 0, lines_ = 0, best_ = 0, combo_ = -1;
     int bonusLines_ = 0; // gauge steps charged
     bool bonusActive_ = false, lastWasQuad_ = false;
