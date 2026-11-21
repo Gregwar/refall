@@ -202,6 +202,7 @@ set(REFALL_GAME_SOURCES
   src/input.cpp
   src/headless.cpp
   src/campaign.cpp
+  src/saveslots.cpp
   src/playlists.cpp
   src/voyages.cpp
   src/menu.cpp

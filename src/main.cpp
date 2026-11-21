@@ -32,6 +32,7 @@
 #include "menuworlds.hpp"
 #include "platform.hpp"
 #include "renderer.hpp"
+#include "saveslots.hpp"
 #include "songplan.hpp"
 #include "voyages.hpp"
 #include "voyageviewer.hpp"
@@ -209,20 +210,18 @@ static void usage() {
         "                       free play's speed (EASY x0.6, NORMAL x0.8, HARD x1, EXPERT x1.4), the voyage's difficulty\n"
         "  --level N            free play's starting level (1..50, default 1; the menu picks the nearest of its steps)\n"
         "  --stage S[:SONG]     a voyage run straight away: stage S (1..15) from its song SONG (default 1)\n"
-        "  --unlock             unlock every voyage stage (saved)\n"
-        "  --reset              forget the voyage progress (stages cleared, best scores)\n"
         "  --campaign FILE      the campaign data (default: data/campaign.tsv)\n"
-        "  --progress FILE      the progress file (default: campaign-progress.tsv in the user data folder)\n"
+        "  --progress FILE      save slot 1's progress file (default: campaign-progress.tsv in the user data\n"
+        "                       folder); slots 2 and 3 in slot2/ and slot3/ next to it\n"
         "  --playlists FILE     free play's remembered playlists (default: playlists.tsv in the user data folder)\n"
         "  --no-menu-music      no music on the menu's screens\n"
-        "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free|debrief-over|debrief-clear|\n"
+        "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free|slots|debrief-over|debrief-clear|\n"
         "                       debrief-songs|debrief-over-songs|unlock, --menu-hover S:SONG, --menu-time SECONDS\n"
         "                       into the screen), then exit (testing)\n"
         "  --menu-clip OUT.mp4  a video walking through the menus (needs ffmpeg), then exit; --menu-demo shows\n"
         "                       made-up campaign progress in shots (clips always do; never saved)\n");
 }
 
-static std::string menuPlacePath(const std::string& progressPath);
 
 class App {
 public:
@@ -275,7 +274,9 @@ private:
     enum Mode { MODE_MENU, MODE_FREE, MODE_CAMPAIGN } mode_ = MODE_FREE;
     bool menuEnabled_ = false; // started on the title screen: game overs and Q go back to it
     Campaign campaign_;        // the voyage open: the main campaign, or a custom voyage (and its progress)
-    Progress progress_;
+    Progress progress_;        // (the save slot's in use)
+    SaveSlots slots_;
+    void useSlot(int slot);
     VoyageStore voyages_;
     std::string voyage_;       // the custom voyage open ("" the main campaign)
     bool openVoyage(const std::string& id);
@@ -306,6 +307,7 @@ private:
     Menu::Place savedPlace_, lastPlace_;
     float placeChangedAt_ = -1;
     void keepPlace(bool now);
+    bool loadPlace(Menu::Place& pl) const;
     void applyOption(const Menu::Choice& c);
     bool remapKeys();
     // The menu's music (data/menu_music.mp3): decoded in the background, a looping bed under the menu's screens, ducked
@@ -1494,10 +1496,17 @@ int App::run() {
     }
 
     campaign_.load(opt_.campaignPath);
-    progress_.load(opt_.progressPath, &campaign_);
+    slots_.init(opt_.progressPath, campaign_);
+    menu_.setSlots(&slots_);
+    progress_.load(slots_.progressPath(slots_.active()), &campaign_);
 #ifndef REFALL_WEB // (the web build: the campaign only, no voyages of the player's own, no free play)
     voyages_.load(VoyageStore::defaultDir(opt_.progressPath));
-    voyages_.setMain(campaign_, opt_.progressPath);
+    {
+        std::vector<std::string> dirs;
+        for (int i = 0; i < SaveSlots::COUNT; i++) dirs.push_back(slots_.voyagesDir(i));
+        voyages_.setProgressDirs(dirs, slots_.active());
+    }
+    voyages_.setMain(campaign_, slots_.progressPath(slots_.active()));
     menu_.setVoyages(&voyages_, [this](const std::string& id) { return openVoyage(id); });
     playlists_.load(opt_.playlistsPath);
     menu_.setPlaylists(&playlists_);
@@ -1519,8 +1528,8 @@ int App::run() {
     if (!R_.init(fbw, fbh)) std::fprintf(stderr, "[gl] warning: renderer init reported a GL error\n");
     if (win_) input_.init(win_);
     input_.setCheatSkip(opt_.cheatSkip);
-    // the player's gamepad remaps, next to the progress
-    input_.setMappingFile((fs::path(menuPlacePath(opt_.progressPath)).parent_path() / "gamepad-mapping.tsv").string());
+    // the player's gamepad remaps, next to the progress (slot 1's: the same on every slot)
+    input_.setMappingFile((fs::path(slots_.globalPlacePath()).parent_path() / "gamepad-mapping.tsv").string());
     menu_.setInput(&input_);
 
     if (opt_.stream) startStream();
@@ -1567,10 +1576,10 @@ int App::run() {
     }
     if (mode_ == MODE_MENU) menu_.open(Menu::TITLE);
     if (menuEnabled_) { // back where the menu was last time (the command line's difficulty wins)
-        placePath_ = menuPlacePath(opt_.progressPath);
+        placePath_ = slots_.placePath(slots_.active());
         Menu::Place pl;
-        // the game's first launch (or after --reset: no place kept), or REFALL_MENU_INTRO=1: the title's opening
-        const bool known = Menu::loadPlace(placePath_, pl);
+        // the game's first launch (no place kept), or REFALL_MENU_INTRO=1: the title's opening
+        const bool known = loadPlace(pl);
         if ((!known && mode_ == MODE_MENU) || std::getenv("REFALL_MENU_INTRO")) menu_.startIntro();
         if (known) {
             if (!pl.voyage.empty() && !menu_.selectVoyage(pl.voyage)) pl.stage = -1; // (a voyage deleted since)
@@ -2377,10 +2386,39 @@ void App::updateMenuMusic() {
     musicState_ = want;
 }
 
-// The menu's place file: next to the progress file (a test's temporary progress keeps it there too).
-static std::string menuPlacePath(const std::string& progressPath) {
-    const std::string p = progressPath.empty() ? Progress::defaultPath() : progressPath;
-    return (fs::path(p).parent_path() / "menu-state.tsv").string();
+// The menu's place on the save slot in use; the options it keeps (the menu's music and theme) are slot 1's file's,
+// the same on every slot. False when none was kept (the game's first launch).
+bool App::loadPlace(Menu::Place& pl) const {
+    bool known = Menu::loadPlace(placePath_, pl);
+    Menu::Place g;
+    if (slots_.active() > 0 && Menu::loadPlace(slots_.globalPlacePath(), g)) {
+        known = true;
+        pl.music = g.music;
+        pl.theme = g.theme;
+    }
+    return known;
+}
+
+// Another save slot in use: the main voyage open, with that slot's progress, the menu where it was on that slot.
+void App::useSlot(int slot) {
+    keepPlace(true);
+    menu_.selectVoyage(""); // (on the slot left)
+    slots_.setActive(slot);
+    const std::string path = slots_.progressPath(slot);
+    std::vector<std::string> dirs;
+    for (int i = 0; i < SaveSlots::COUNT; i++) dirs.push_back(slots_.voyagesDir(i));
+    voyages_.setProgressDirs(dirs, slot);
+    voyages_.setMain(campaign_, path);
+    progress_.load(path, &campaign_);
+    menu_.resetPlace();
+    if (placePath_.empty()) return; // (no menu place kept: shots)
+    placePath_ = slots_.placePath(slot);
+    Menu::Place pl;
+    if (loadPlace(pl)) {
+        if (!pl.voyage.empty() && !menu_.selectVoyage(pl.voyage)) pl.stage = -1; // (a voyage deleted since)
+        menu_.restore(pl, true);
+    }
+    savedPlace_ = lastPlace_ = menu_.place();
 }
 
 // The main campaign ("") or a custom voyage becomes the one played, with its progress.
@@ -2390,50 +2428,53 @@ bool App::openVoyage(const std::string& id) {
     Campaign c;
     if (id.empty() ? !c.load(opt_.campaignPath) : !voyages_.find(id) || !c.load(voyages_.campaignPath(id))) return false;
     campaign_ = c;
-    progress_.load(id.empty() ? opt_.progressPath : voyages_.progressPath(id), &campaign_);
+    progress_.load(id.empty() ? slots_.progressPath(slots_.active()) : voyages_.progressPath(id), &campaign_);
     voyage_ = id;
     std::printf("[voyages] %s\n", id.empty() ? "the main voyage" : voyages_.find(id)->title.c_str());
     return true;
 }
 
-// The options: every stage of the main voyage unlocked (as --unlock), or the saved data forgotten (as --reset: the
-// main voyage's progress and the menu's place), the game then opening as on its first launch, music from the top.
+// The menu's choices that stay on it: the save slots' (one put in use; every stage of its main voyage unlocked, the
+// slot marked so; one forgotten: its progress and its menu place), the gamepad's.
 void App::applyOption(const Menu::Choice& c) {
-    if (c.kind == Menu::Choice::UNLOCK_ALL) {
-        if (voyage_.empty()) {
+    const std::string slot = "SLOT " + std::to_string(c.slot + 1);
+    if (c.kind == Menu::Choice::SLOT_USE) {
+        if (c.slot != slots_.active()) useSlot(c.slot);
+        menu_.slotsChanged();
+        menu_.note(Menu::SLOTS, slot + " IN USE");
+    } else if (c.kind == Menu::Choice::SLOT_UNLOCK) {
+        if (c.slot == slots_.active() && voyage_.empty()) {
             progress_.unlockAll();
             progress_.save();
-        } else { // (a custom voyage open: the main one's file)
-            Campaign camp;
-            camp.load(opt_.campaignPath);
-            Progress p;
-            p.load(opt_.progressPath, &camp);
-            p.unlockAll();
-            p.save();
+            std::printf("[slots] slot %d: every stage unlocked\n", c.slot + 1);
+        } else slots_.unlockAll(c.slot); // (another slot, or a custom voyage open: the main one's file)
+        menu_.slotsChanged();
+        menu_.note(Menu::SLOTS, slot + ": EVERY STAGE UNLOCKED");
+    } else if (c.kind == Menu::Choice::SLOT_ERASE) {
+        if (c.slot == slots_.active()) { // (the main voyage open, its progress forgotten, the menu as on a first launch)
+            menu_.selectVoyage("");
+            progress_.reset();
+            slots_.erase(c.slot);
+            menu_.resetPlace();
+            savedPlace_ = lastPlace_ = menu_.place();
+            if (!placePath_.empty()) Menu::savePlace(placePath_, savedPlace_); // (the options it keeps stay)
+        } else {
+            slots_.erase(c.slot);
+            if (c.slot == 0) { // (slot 1's place keeps every slot's options)
+                Menu::Place g;
+                g.music = menu_.place().music;
+                g.theme = menu_.place().theme;
+                Menu::savePlace(slots_.globalPlacePath(), g);
+            }
         }
-        std::printf("[campaign] every stage unlocked\n");
-        menu_.note(Menu::OPTIONS, "STAGES UNLOCKED");
+        menu_.slotsChanged();
+        menu_.note(Menu::SLOTS, slot + " ERASED");
     } else if (c.kind == Menu::Choice::PAD_REMAP) {
         input_.startRemap();
         return;
     } else if (c.kind == Menu::Choice::PAD_DEFAULT) {
         input_.resetMapping();
         menu_.note(Menu::GAMEPAD, "MAPPING RESTORED");
-    } else if (c.kind == Menu::Choice::RESET_ALL) {
-        menu_.selectVoyage("");
-        progress_.reset();
-        progress_.save();
-        std::error_code ec;
-        if (!placePath_.empty() && fs::remove(placePath_, ec)) std::printf("[menu] forgot where the menu was (%s)\n", placePath_.c_str());
-        menu_.resetPlace();
-        menu_.open(Menu::TITLE);
-        menu_.startIntro();
-        savedPlace_ = lastPlace_ = menu_.place();
-        if (musicReady_) { // (silenced at once, from the top: it fades in again)
-            audio_.setBedGain(0.f, 0.f);
-            audio_.rewindBed();
-            musicState_ = 0;
-        }
     }
 #ifdef REFALL_WEB
     web::persist(runTime_, true);
@@ -2459,6 +2500,13 @@ void App::keepPlace(bool now) {
     if (pl != lastPlace_) { lastPlace_ = pl; placeChangedAt_ = runTime_; }
     if (pl != savedPlace_ && (now || runTime_ - placeChangedAt_ > 1.5f)) {
         Menu::savePlace(placePath_, pl);
+        if (slots_.active() > 0 && (pl.music != savedPlace_.music || pl.theme != savedPlace_.theme)) { // (every slot's)
+            Menu::Place g;
+            Menu::loadPlace(slots_.globalPlacePath(), g);
+            g.music = pl.music;
+            g.theme = pl.theme;
+            Menu::savePlace(slots_.globalPlacePath(), g);
+        }
         savedPlace_ = pl;
     }
 }
@@ -2860,7 +2908,8 @@ int App::runMenuShot() {
     }
     menu_.init(&campaign_, &progress_);
     const std::string& sc = opt_.menuScreen;
-    menu_.open(sc == "campaign" || sc == "unlock" || sc.rfind("debrief", 0) == 0 ? Menu::CAMPAIGN : sc == "free" ? Menu::FREE : Menu::TITLE);
+    menu_.open(sc == "campaign" || sc == "unlock" || sc.rfind("debrief", 0) == 0 ? Menu::CAMPAIGN : sc == "free" ? Menu::FREE
+               : sc == "slots" ? Menu::SLOTS : Menu::TITLE);
     if (sc == "free" && opt_.levelGiven) menu_.setFreeLevel(opt_.level, true); // (the level's row in focus)
     // (debrief-over-song: a run started on a later song, RETRY SONG only; debrief-over-retried: RETRY SONG chosen
     // before; debrief-over-first: ended on the stage's first song, RETRY STAGE only)
@@ -3113,7 +3162,7 @@ int main(int argc, char** argv) {
     return viewerMain(argc, argv);
 #endif
     Options o;
-    bool freePlay = false, unlock = false, reset = false;
+    bool freePlay = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "-h" || a == "--help") { usage(); return 0; }
@@ -3172,8 +3221,6 @@ int main(int argc, char** argv) {
             }
             o.levelGiven = true;
         }
-        else if (a == "--unlock") unlock = true;
-        else if (a == "--reset") reset = true;
         else if (a == "--stage" && i + 1 < argc) o.stage = argv[++i];
         else if (a == "--campaign" && i + 1 < argc) o.campaignPath = argv[++i];
         else if (a == "--progress" && i + 1 < argc) o.progressPath = argv[++i];
@@ -3190,25 +3237,6 @@ int main(int argc, char** argv) {
         else if (a == "--menu-hover" && i + 1 < argc) o.menuHover = argv[++i];
         else if (a == "--menu-time" && i + 1 < argc) o.menuTime = std::stof(argv[++i]);
         else o.paths.push_back(a);
-    }
-    if (reset || unlock) {
-        // (with the campaign: the stage clears are keyed by the stage's songs, and saved without them they'd be dropped
-        // on the next launch)
-        Campaign camp;
-        camp.load(o.campaignPath);
-        Progress p;
-        p.load(o.progressPath, &camp);
-        if (reset) {
-            p.reset();
-            const std::string place = menuPlacePath(o.progressPath);
-            std::error_code ec;
-            if (fs::remove(place, ec)) std::printf("[menu] forgot where the menu was (%s)\n", place.c_str());
-        }
-        if (unlock) {
-            p.unlockAll();
-            std::printf("[campaign] every stage unlocked\n");
-        }
-        p.save();
     }
     // The title screen when the game is started for play with no songs; songs on the command line, --free and the
     // offline renders play straight away (free play), --stage runs a campaign stage.

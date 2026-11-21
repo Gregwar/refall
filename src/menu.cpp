@@ -67,7 +67,15 @@ void Menu::open(Screen s, const std::string& message, const std::string& sub, bo
     msgBad_ = bad;
     msgT_ = message.empty() ? 0.f : 5.f;
     if (s == FREE) { freeRow_ = 0; editing_ = false; plMsg_.clear(); }
-    if (s == OPTIONS && message.empty()) { optSel_ = 0; aOpt_ = 0; optConfirm_ = false; }
+    if (s == OPTIONS && message.empty()) { optSel_ = 0; aOpt_ = 0; }
+    if (s == SLOTS && message.empty()) {
+        slotSel_ = slots_ ? slots_->active() : 0;
+        slotRow_ = 0;
+        aSlot_ = (float)slotSel_;
+        aSlotRow_ = 0;
+        slotConfirm_ = false;
+        slotsChanged();
+    }
     if (s == GAMEPAD && message.empty()) { padSel_ = 0; aPad_ = 0; }
     if (s == VOYAGES) {
         editing_ = false;
@@ -85,6 +93,12 @@ void Menu::open(Screen s, const std::string& message, const std::string& sub, bo
         aV_ = (float)vSel_;
         aVRow_ = (float)(vSel_ / VOYAGE_COLS);
     }
+}
+
+void Menu::slotsChanged() {
+    slotSum_.clear();
+    if (slots_)
+        for (int i = 0; i < SaveSlots::COUNT; i++) slotSum_.push_back(slots_->summary(i));
 }
 
 bool Menu::selectVoyage(const std::string& id) {
@@ -233,7 +247,7 @@ bool Menu::savePlace(const std::string& path, const Place& p) {
     const std::string tmp = path + ".tmp";
     FILE* f = std::fopen(tmp.c_str(), "w");
     if (!f) return false;
-    std::fprintf(f, "# Refall: where the menu was (--reset forgets it)\ntitle\t%d\nvoyage-difficulty\t%d\nvoyage-stage\t%d\n"
+    std::fprintf(f, "# Refall: where the menu was (SAVE SLOTS > ERASE forgets it)\ntitle\t%d\nvoyage-difficulty\t%d\nvoyage-stage\t%d\n"
                     "free-difficulty\t%d\nfree-level\t%d\nfree-playlist\t%s\nvoyage\t%s\nmenu-music\t%d\nmenu-theme\t%d\n",
                  p.titleItem, p.voyageDiff, p.stage + 1, p.freeDiff, p.freeLevel, p.playlist.c_str(), p.voyage.c_str(), p.music < 0 ? 1 : p.music, p.theme < 0 ? 0 : p.theme);
     std::fclose(f);
@@ -280,6 +294,8 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aOpt_ += (optSel_ - aOpt_) * k;
         aPad_ += (padSel_ - aPad_) * k;
         aYes_ += (optYes_ - aYes_) * k;
+        aSlot_ += (slotSel_ - aSlot_) * k;
+        aSlotRow_ += (slotRow_ - aSlotRow_) * k;
         noteT_ = std::max(0.f, noteT_ - dt);
         aFree_ += (freeDiff_ - aFree_) * k;
         aDiff_ += (diff_ - aDiff_) * k;
@@ -385,6 +401,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         if (ok) {
             if (titleItem_ == TI_VOYAGE) open(voyages_ ? VOYAGES : CAMPAIGN);
             else if (titleItem_ == TI_FREE) open(FREE);
+            else if (titleItem_ == TI_SLOTS) open(SLOTS);
             else if (titleItem_ == TI_OPTIONS) open(OPTIONS);
             else ch.kind = Choice::QUIT;
         }
@@ -392,25 +409,39 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         break;
     case OPTIONS:
         if (noteT_ > 0.f) { if (ok || back || dx || dy) noteT_ = 0.f; break; } // (a key: back to the rows)
-        if (optConfirm_) { // are you sure? YES / NO
-            if (dx || dy) optYes_ = 1 - optYes_;
-            if (ok && optYes_) ch.kind = optSel_ == 0 ? Choice::UNLOCK_ALL : Choice::RESET_ALL;
-            if (ok || back) optConfirm_ = false;
-            break;
-        }
         optSel_ = (optSel_ + dy + OPTION_ITEMS * 8) % OPTION_ITEMS;
-        if (ok && optSel_ == 2) open(GAMEPAD);
-        else if (ok && optSel_ == 3) music_ = !music_; // (at once, no question)
-        else if (ok && optSel_ == 4) theme_ = 1 - theme_;
-        else if (ok) { optConfirm_ = true; optYes_ = 0; aYes_ = 0; }
+        if (ok && optSel_ == 0) open(GAMEPAD);
+        else if (ok && optSel_ == 1) music_ = !music_; // (at once, no question)
+        else if (ok && optSel_ == 2) theme_ = 1 - theme_;
         if (back) open(TITLE);
         break;
+    case SLOTS: {
+        if (noteT_ > 0.f) { if (ok || back || dx || dy) noteT_ = 0.f; break; }
+        if (slotConfirm_) { // are you sure? YES / NO
+            if (dx || dy) optYes_ = 1 - optYes_;
+            if (ok && optYes_) { ch.kind = slotRow_ == 1 ? Choice::SLOT_UNLOCK : Choice::SLOT_ERASE; ch.slot = slotSel_; }
+            if (ok || back) slotConfirm_ = false;
+            break;
+        }
+        if (back) { open(TITLE); break; }
+        if (!slots_) break;
+        slotSel_ = std::clamp(slotSel_ + dx, 0, SaveSlots::COUNT - 1);
+        slotRow_ = (slotRow_ + dy + SLOT_ACTIONS * 8) % SLOT_ACTIONS;
+        if (!ok) break;
+        const SaveSlots::Summary sm = slotSel_ < (int)slotSum_.size() ? slotSum_[slotSel_] : SaveSlots::Summary{};
+        const std::string name = "SLOT " + std::to_string(slotSel_ + 1);
+        if (slotRow_ == 0) { ch.kind = Choice::SLOT_USE; ch.slot = slotSel_; }
+        else if (slotRow_ == 1 && sm.unlocked) note(SLOTS, name + " IS ALREADY UNLOCKED");
+        else if (slotRow_ == 2 && sm.empty) note(SLOTS, name + " IS EMPTY");
+        else { slotConfirm_ = true; optYes_ = 0; aYes_ = 0; }
+        break;
+    }
     case GAMEPAD:
         if (input_ && input_->remapping()) break; // (its keys are the app's: Esc cancels, Space skips)
         if (noteT_ > 0.f) { if (ok || back || dx || dy) noteT_ = 0.f; break; }
         padSel_ = (padSel_ + dy + PAD_ITEMS * 8) % PAD_ITEMS;
         if (ok) ch.kind = padSel_ == 0 ? Choice::PAD_REMAP : Choice::PAD_DEFAULT;
-        if (back) { open(OPTIONS); optSel_ = 2; aOpt_ = 2; }
+        if (back) { open(OPTIONS); optSel_ = 0; aOpt_ = 0; }
         break;
     case FREE: {
         if (!playlists_) { // no playlist store: a difficulty only

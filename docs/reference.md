@@ -5,8 +5,8 @@ Everything beyond the [README](../README.md): command-line options, tools, how t
 ## Menu and modes
 
 Started with no songs, the game opens on its menu, a crystal kaleidoscope (the game is called **Refall** for
-now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **VOYAGE**, **FREE PLAY**
-or QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). On the first launch (or after `--reset`) the title opens with a short, sober
+now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **VOYAGE**, **FREE PLAY**,
+**SAVE SLOTS**, OPTIONS or QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). On the first launch the title opens with a short, sober
 animation. The game's own universes are folded into the
 kaleidoscope: on the title and in free play they turn in turn, on Voyage it shows the most colourful of the focused stage's
 universes (the focused song's in an open petal), graded toward the stage's hue: a saturation boost, a contrast stretch
@@ -22,7 +22,7 @@ the missing ones are made one at a time on a worker thread with its own OpenGL c
 pressed for a moment (the first launch fills the cache in about a minute on the title), and until a snapshot is ready
 its place is procedural glass in the universe's colours, cross-fading to the image when it arrives. The menu remembers
 where it was (`menu-state.tsv` next to the progress: the title entry, Voyage's difficulty, the voyage open and its focused stage, free
-play's difficulty and playlist) and opens there on the next launch (`--reset` forgets it). The menu has its own music,
+play's difficulty and playlist) and opens there on the next launch (per save slot; ERASE forgets it). The menu has its own music,
 [`data/menu_music.mp3`](data/menu_music.mp3), looping seamlessly (a 1 s crossfade at its loop point) at about 70% of a
 game song's level: it fades in when the menu appears, fades out (0.8 s) when a game starts and starts over from the top
 back on the menu (`--no-menu-music` keeps the menu silent; `--mute` silences everything; offline renders never play it).
@@ -77,6 +77,16 @@ no song previews.
   index) is migrated the same way on load, the old file kept as `campaign-progress.tsv.bak`. Records name their
   difficulty `EASY`, `NORMAL`, `HARD` or `EXPERT2`: EXPERT is written `EXPERT2` because a bare `EXPERT` is HARD's
   former name, which files written before it still use and which is read as HARD.
+- **SAVE SLOTS** (`src/saveslots.cpp`): three slots, one in use. Each card shows its main voyage's progress (a small
+  rosette, the songs beaten in %, the stages cleared, the best scores summed, when it was last played) and an
+  **UNLOCKED** tag once UNLOCK ALL was used on it. Left / right chooses a slot; under the cards, USE puts it in use (the
+  main voyage opens with its progress, the menu where it was on that slot), UNLOCK ALL STAGES opens every stage of its
+  main voyage (the tag stays: the file keeps `unlock all`) and ERASE forgets it; both ask "are you sure?" first. A slot
+  holds the campaign progress, the menu's place and the custom voyages' progress; the menu's music and theme, the
+  gamepad mapping, the playlists and the custom voyages themselves are shared. Slot 1 is the files where they always
+  were (`campaign-progress.tsv`, `menu-state.tsv`, `voyages/<id>-progress.tsv`), so a save from before the slots is
+  slot 1 as it is; slots 2 and 3 are the same files in `slot2/` and `slot3/`, and `save-slot.tsv` says which one is in
+  use.
 
 A game over muffles the song like the slow-motion bonus does (a low-pass filter) and lowers its volume, then fades it out
 to silence; the game over holds until the player presses a key (with songs given on the command line, a key plays
@@ -87,8 +97,6 @@ again).
 | `--free` | free play straight away, without the menu |
 | `--difficulty easy\|normal\|hard\|expert` | free play's difficulty (default: hard; or `e`, `n`, `h`, `x`), or a gravity multiplier such as `0.7`; also Voyage's |
 | `--stage S[:SONG]` | a Voyage run straight away (stage S, from its song SONG) |
-| `--unlock` | unlock every Voyage stage (saved) |
-| `--reset` | forget the Voyage progress (prints what was forgotten) |
 
 Songs or playlists given on the command line play free play straight away, as before; so do the offline renders
 (`--review-shot`, `--clip`, `--analysis`, ...).
@@ -192,7 +200,7 @@ the same universe again), `--universe-on-peak` (a long song may also change univ
 `--shots PREFIX N` (renders N screenshots of different universes and exits), `--phase-shots PREFIX` (one screenshot per scene level of a song),
 `--transition-shots PREFIX N` (at `--shot-time` in the song, with a filled board, changes from `--universe` to `--to NAME`
 with `--transition NAME`, saves N frames across the change and exits),
-`--free`, `--difficulty`, `--stage`, `--unlock`, `--reset`, `--campaign FILE`, `--progress FILE`, `--playlists FILE`,
+`--free`, `--difficulty`, `--stage`, `--campaign FILE`, `--progress FILE`, `--playlists FILE`,
 `--no-menu-music`, `--menu-shot`, `--menu-screen`, `--menu-hover`, `--menu-time`, `--menu-petal`, `--menu-demo` and `--menu-clip` (the kaleidoscope menu, Voyage and
 modes: see [the README](../README.md#modes)),
 `--clip OUT.mp4` (records a video with sound, via ffmpeg, from 4 s before the first drop of the song to 6 s after it,

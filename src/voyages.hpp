@@ -33,14 +33,16 @@ public:
     const std::vector<CustomVoyage>& list() const { return list_; } // the most recently played first
     const CustomVoyage* find(const std::string& id) const;
     std::string campaignPath(const std::string& id) const;
-    std::string progressPath(const std::string& id) const;
+    std::string progressPath(const std::string& id) const; // (the save slot's in use)
+    // Where each save slot keeps the voyages' progress, and the slot in use (by default, next to the voyages).
+    void setProgressDirs(const std::vector<std::string>& dirs, int active) { progDirs_ = dirs; progActive_ = active; }
     // The main campaign, whose velocities the voyages follow, and its progress file.
     void setMain(const Campaign& main, const std::string& progressPath) { curve_ = main; mainProgress_ = progressPath; }
     const Campaign& main() const { return curve_; }
     // Makes a voyage of `entries` (library entries, "ytdl:ID\tTITLE") and registers it: its id, or "" (*err why not).
     std::string create(const std::string& title, const std::string& url, const std::vector<std::string>& entries,
                        uint64_t seed, std::string* err);
-    void remove(const std::string& id); // with its files
+    void remove(const std::string& id); // with its files (its progress on every slot)
     void used(const std::string& id);   // now its last use (it moves first)
     // How far a voyage went (read from its progress file); "" the main campaign.
     VoyageProgress progress(const std::string& id) const;
@@ -48,6 +50,8 @@ public:
 private:
     std::vector<CustomVoyage> list_;
     std::string dir_;
+    std::vector<std::string> progDirs_;
+    int progActive_ = 0;
     Campaign curve_;
     std::string mainProgress_;
 
