@@ -65,9 +65,19 @@ private:
     float modelRect_[4] = {-21.8f, -12.2f, -11.3f, 2.6f}; // board space (x0, y0, x1, y1)
     vec3 eye_, fwd_, right_, up_;
     vec2 tan_{1, 1};
-    vec3 lensPos_, lensDir_;
+    vec3 lensPos_, lensDir_;   // the projector this frame (rolled in and aimed in the setup)
+    vec3 lensPos0_, lensDir0_; // its place once set up
     vec2 lensScreen_{-18, -7};
     void setupModelCamera();
+    void placeLens(const vec3& pos, const vec3& dir);
+    // the setup's choreography (setupAt: from the frame's setup, at rest at 1)
+    struct Setup {
+        vec3 lensPos, lensDir;
+        float lamp = 1.f, iris = 1.f, fill = 0.f;
+        vec2 key{0, 0}, off{0, 0}, scale{1, 1}; // the shadow thrown askew: keystone, shift, stretch
+        float rot = 0.f, blur = 0.f;
+    };
+    Setup setupAt(float s) const;
     void setCommon(GLuint prog);
 
     // ---- Song, variant, staging.

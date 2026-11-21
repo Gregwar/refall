@@ -185,6 +185,9 @@ struct Frame {
     // alone, a song's outro), and time keeps passing in them.
     // Test hooks: REFALL_TEST_SETUP=x / REFALL_TEST_TEARDOWN=x force them (with REFALL_BARE=1 for the world alone).
     float setup = 1.f, teardown = 0.f;
+    // In a break's world-alone frame: the real game behind it (`game` is the blank board), for a world whose setup
+    // shows the board's stack before the game comes in (SHADOW's little model); nullptr otherwise.
+    const Game* live = nullptr;
 };
 
 class Universe {

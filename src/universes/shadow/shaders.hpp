@@ -106,6 +106,8 @@ uniform vec4 uClr[40];             // cleared cells shrinking: x, y, scale, type
 uniform int uClrN;
 uniform vec2 uEchoOff, uEchoScale; // the second projector's shadow: offset, stretch (from the table's line)
 uniform vec2 uLens;                // where the beam comes from (board space, on screen)
+uniform vec4 uWarp, uWarpS;        // the setup's misaligned projector: keystone (xy), turn; shift (xy), stretch (zw)
+uniform float uBlur;               // and its focus (added to the penumbra)
 
 float lightCircle(vec2 p, vec4 c, float spread) {
     vec2 q = (p - c.xy) / c.zw;
@@ -190,17 +192,27 @@ vec3 transmit(vec2 p, float pen, bool previews) {
 
 void main() {
     vec2 p = uViewC + (vUv * 2.0 - 1.0) * uViewH;
+    // what the projector throws at p: in the setup, askew until it is aligned (pw: the wall's own point)
+    vec2 pw = p;
+    if (uWarpS.z != 1.0 || uWarpS.w != 1.0 || uWarp.z != 0.0) {
+        vec2 r = p - uCircle1.xy - uWarpS.xy;
+        float c = cos(uWarp.z), s = sin(uWarp.z);
+        r = vec2(c * r.x + s * r.y, -s * r.x + c * r.y) / uWarpS.zw;
+        r /= max(0.3, 1.0 + dot(uWarp.xy, r));
+        p = uCircle1.xy + r;
+    }
     // the wall: plaster (soft, a fine grain), or a woven screen
-    float n = fbm(p * 0.45) * 0.6 + fbm(p * 2.3 + 3.0) * 0.4;
-    float grain = vnoise(p * 14.0) * 0.5 + vnoise(p * 31.0) * 0.5;
+    float n = fbm(pw * 0.45) * 0.6 + fbm(pw * 2.3 + 3.0) * 0.4;
+    float grain = vnoise(pw * 14.0) * 0.5 + vnoise(pw * 31.0) * 0.5;
     vec3 alb = uWall * (0.9 + 0.12 * (n - 0.5) * (1.0 - 0.6 * uWallKind) + 0.05 * (grain - 0.5));
     // the projector: a focused circle, slightly brighter toward the lamp's side, a faint colored fringe at its edge
     vec2 toLens = normalize(uLens - uCircle1.xy);
     float side = 1.0 + 0.1 * dot(normalize(p - uCircle1.xy + 1e-4), toLens) * length((p - uCircle1.xy) / uCircle1.zw);
-    vec3 c1 = vec3(lightCircle(p, uCircle1 * vec4(1, 1, 1.006, 1.006), 0.0), lightCircle(p, uCircle1, 0.0),
-                   lightCircle(p, uCircle1 * vec4(1, 1, 0.992, 0.992), 0.0));
+    float ca = 1.0 + 1.5 * uBlur, sp = 0.05 * uBlur;
+    vec3 c1 = vec3(lightCircle(p, uCircle1 * vec4(1, 1, 1.0 + 0.006 * ca, 1.0 + 0.006 * ca), sp), lightCircle(p, uCircle1, sp),
+                   lightCircle(p, uCircle1 * vec4(1, 1, 1.0 - 0.008 * ca, 1.0 - 0.008 * ca), sp));
     // the penumbra widens a little with the distance from the model (higher up the wall)
-    float pen = 0.045 + 0.03 * clamp((p.y + 10.0) / 20.0, 0.0, 1.0);
+    float pen = 0.045 + 0.03 * clamp((p.y + 10.0) / 20.0, 0.0, 1.0) + uBlur;
     vec3 T1 = transmit(p, pen, true);
     vec3 light = uLight1 * c1 * side * T1;
     if (uDrop > 0.002) {
@@ -214,6 +226,7 @@ void main() {
         light += uLight2 * c2 * T2 * uDrop * keep;
     }
     vec3 col = alb * (light + uAmbient * (0.6 + 0.4 * n));
+    p = pw;
     frag = vec4(col, 1.0);
 }
 )";
@@ -238,6 +251,7 @@ uniform int uFlyN;
 uniform vec4 uPile[7];             // the spent blocks' stacks: x, z, count, type
 uniform vec4 uBasket;              // the box of the oldest ones: x, z, count
 uniform float uLensGlow;
+uniform vec3 uFill;                // the setup's dim room light, before the lamp (cool, from above)
 
 const float TABLE_Y = -10.8, PILE_S = 0.44, TABLE_R = 9.4;
 const vec2 TABLE_C = vec2(-0.6, 2.2);
@@ -441,7 +455,7 @@ vec3 shadeSolid(vec3 p, vec3 n, vec3 rd, int mat, float type) {
     vec3 L = vec3(0.0, 1.0, 0.0);
     vec3 lit = mat == 5 ? vec3(0.0) : lampAt(p, n, L);
     float ao = ambientOcc(p, n);
-    vec3 bounce = uLight1 * 0.07 * (0.35 + 0.65 * max(-n.z, 0.0)) + uRoom;
+    vec3 bounce = uLight1 * 0.07 * (0.35 + 0.65 * max(-n.z, 0.0)) + uRoom + uFill * (0.3 + 0.7 * max(n.y, 0.0));
     vec3 L2 = normalize(uL2Pos - p);
     vec3 lit2 = uLight2 * uDrop * 0.9;
     float diff = max(dot(n, L), 0.0), diff2 = max(dot(n, L2), 0.0);
@@ -499,6 +513,8 @@ vec3 shadeGlass(vec3 p, vec3 n, vec3 rd, float type, float flash, float F) {
     vec3 rl = reflect(rd, n);
     col += F * (uRoom * 3.0 + uLight1 * 0.12 * smoothstep(0.2, 1.0, dot(rl, normalize(vec3(-0.2, 0.25, -1.0)))));
     col += g * flash * lit * 0.4;
+    // (the room light: a faint rim on the edges, hardly any color)
+    col += uFill * (edge * edge * 0.8 + F * 0.5 + 0.03 * g);
     return col;
 }
 

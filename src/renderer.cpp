@@ -622,6 +622,7 @@ void Renderer::renderBreak(const Frame& f) {
             Frame fb{*brk_.blank, f.music, f.time, whole ? 0.f : f.dt, false, false, f.fade, quiet(*cur_.u, brk_.bareHud, mute), panels_, true};
             fb.setup = f.setup;
             fb.teardown = f.teardown;
+            fb.live = &f.game;
             if (host) { hudLines(*cur_.u, brk_.bareHud, lines, boxBare); fb.hudBoxes = &boxBare; }
             texB_.bind();
             cur_.u->render(fb, texB_.fbo);
@@ -896,6 +897,7 @@ Frame Renderer::withHud(const Frame& f, const std::vector<HudText>& hud) {
     Frame g{f.game, f.music, f.time, f.dt, f.paused, f.dim, f.fade, hud, f.panels, f.bare, f.card, f.hudBoxes};
     g.setup = f.setup;
     g.teardown = f.teardown;
+    g.live = f.live;
     return g;
 }
 
