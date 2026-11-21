@@ -1,6 +1,6 @@
 #pragma once
-// GLACIER: a frozen cave seen from inside; the blocks are ice cubes, cleared rows melt into the water that rises in
-// the cave over the run, and the drop lights the ice from within (see glacier.cpp).
+// GLACIER: an ice cave seen from inside; the blocks are ice cubes, cleared rows melt into the water that rises in the
+// cave over the run, and the drop is a sun bursting from the tunnel behind the well (see glacier.cpp).
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -35,6 +35,7 @@ public:
         vec3 deep, edge, far, open, floor, water, waterHi, shaft, glowA, glowB, well, grid, frame;
         vec3 ink, accent, veil;
         vec3 piece[7];
+        vec3 sun, warm[7]; // the drop's sun, and the cubes' tints in its light
         float night, aurora;
     };
 
@@ -52,15 +53,16 @@ private:
     float surface(float x) const; // the surface's height at x (the same function as the shaders')
     double lastRippleBeat_ = -1.0;
 
-    // ---- Particles: drips of melting ice, frost motes, flakes shaken from the icicles, light streaks, mist.
+    // ---- Particles: drips of melting ice, frost motes, snow and flakes shaken from the icicles, mist.
     struct Mote {
         vec2 p{0, 0}, v{0, 0};
         float age = 0.f, life = 1.f, size = 0.1f, alpha = 1.f, seed = 0.f;
+        float stop = -99.f; // a drip: where it lands (the stack under it, the well's floor), unless the water is higher
         vec3 col{1.f};
         int kind = 0; // 0 frost mote, 1 drip, 3 flake, 4 mist, 5 spray, 6 splash crown
     };
     std::vector<Mote> motes_;
-    float pieceFrostAcc_ = 0.f, ambientAcc_ = 0.f;
+    float ambientAcc_ = 0.f;
 
     // ---- Cubes: each locked cell keeps its own id (its cracks and bubbles go with it as rows fall).
     struct CellInst { float a[4], b[4], c[4]; };
@@ -75,16 +77,15 @@ private:
     // rows above fall into the room it leaves), its column, where its drip hangs (local x)
     struct Melting { float x, y; int type; float seed, t, delay; int row, low, col; float dripX; };
     std::vector<Melting> melting_;
-    // The melt's water flowing (real time): a rivulet from a melting cube's foot down the stack to the well's floor
-    // or the water, or a sheet spilling from the row's end down the glass into the pool. Its top (y0) leaves when the
-    // cube has run dry, its head (y1) runs down; both accelerate to a cap.
+    // The melt's water flowing (real time): a sheet spilling from the row's end down the outside of the glass into
+    // the pool (never over the stack). Its top (y0) leaves when the cubes have run dry, its head (y1) runs down; both
+    // accelerate to a cap.
     struct Stream {
         float x, y0, y1, v0 = 0.f, v1 = 0.f, t = 0.f, start, stop, hw, seed, surge = 0.f, sprayAcc = 0.f;
         vec3 col;
         bool sheet = false, arrived = false;
     };
     std::vector<Stream> streams_;
-    float streamEnd(const Stream& s) const;
     void splash(vec2 p, const vec3& col, int n, float strength);
     float riseHold_ = 0.f; // the water rises once the melt reaches it
     struct OverCell { float x, y; int type; float seed, row; };
@@ -119,6 +120,7 @@ private:
     bool dropMode_ = false;
     float dropAmt_ = 0.f, swell_ = 0.f;
     float dropFlash_ = 0.f; // the drop's first light, a burst fading over a second and a half
+    float warm_ = 0.f;      // the drop's sun (0 none): the cave's warm light, the cubes' pastels
     bool wasDrop_ = false;
     float kickIn_ = 0.f, kickPrev_ = 0.f, glint_ = 0.f;
     double ownBeat_ = 0.0;
