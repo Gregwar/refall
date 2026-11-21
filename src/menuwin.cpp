@@ -977,13 +977,23 @@ void Worlds::kalSlots() {
     tourAt(11.f, cur, next, mix);
     kalBackground(mix > 0.5f ? next : cur);
     p.frostSource();
+    constexpr float CW = 540, CH = 370, GAP = 36, TOP = 248;
+    constexpr float INSET = 24, STEP = 62, SIZE = 26, TRACK = 0.3f;
+    const int n = SaveSlots::COUNT;
+    const float x0 = 960 - (n * CW + (n - 1) * GAP) / 2;
+    const float by0 = TOP + CH + 18, bh = Menu::SLOT_ACTIONS * STEP + 44;
+    // portrait: the title, the three cards one under the other, then the focused card's box, down the column
+    const bool pt = m.portrait_;
+    if (pt) {
+        const float bxl = x0 + m.aSlot_ * (CW + GAP) + INSET;
+        pLayout({{610, 90, 700, 130, 1.4f}, {x0, TOP, CW, CH, 1.7f}, {x0 + CW + GAP, TOP, CW, CH, 1.7f},
+                 {x0 + 2 * (CW + GAP), TOP, CW, CH, 1.7f}, {bxl, by0, CW - 2 * INSET, bh, 1.7f}}, 22);
+        pAt(0);
+    }
     const char* title = "SAVE SLOTS";
     const float tw = std::max(600.f * u, p.width(F::JOSEFIN_LIGHT, title, 72 * u, 0.22f) + 120 * u);
     p.glass(X(960) - tw / 2, Y(90), tw, 130 * u, 24 * u, u, 0.f, 0.45f);
     p.text(F::JOSEFIN_LIGHT, title, X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
-    constexpr float CW = 540, CH = 370, GAP = 36, TOP = 248;
-    const int n = SaveSlots::COUNT;
-    const float x0 = 960 - (n * CW + (n - 1) * GAP) / 2, w = CW * u, h = CH * u;
     const int active = m.slots_ ? m.slots_->active() : 0;
     const Col gold = hex(0xe8c06a);
     // a line of text at `size`, smaller if it would be wider than `maxw`
@@ -995,6 +1005,8 @@ void Worlds::kalSlots() {
         const SaveSlots::Summary sm = i < (int)m.slotSum_.size() ? m.slotSum_[i] : SaveSlots::Summary{};
         const bool sel = i == m.slotSel_, inUse = i == active;
         const float g = sel ? 1.f : 0.f;
+        if (pt) pAt(1 + i);
+        const float w = CW * u, h = CH * u;
         const float x = X(x0 + i * (CW + GAP)), y = Y(TOP);
         if (sel) {
             p.setAdditive(true);
@@ -1056,9 +1068,8 @@ void Worlds::kalSlots() {
         p.setFade(1.f);
     }
     // what to do with the focused slot: a box under its card, gliding along with the focus
-    constexpr float INSET = 24, STEP = 62, SIZE = 26, TRACK = 0.3f;
+    if (pt) pAt(4);
     const float bx = X(x0 + m.aSlot_ * (CW + GAP) + INSET), bw = (CW - 2 * INSET) * u;
-    const float by0 = TOP + CH + 18, bh = Menu::SLOT_ACTIONS * STEP + 44;
     const float cx = bx + bw / 2, mid = by0 + bh / 2;
     p.glass(bx, Y(by0), bw, bh * u, 20 * u, u, 0.f, 0.55f);
     p.rrectLine(bx, Y(by0), bw, bh * u, 20 * u, 1.4f * u, hex(0xffffff, 0.35f));
