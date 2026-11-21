@@ -22,9 +22,14 @@
 // bubbles of its own that go with it as rows fall, a soft highlight; under the water a deeper, saturated teal; seven
 // icy tints that stay apart (aqua, frost white, pale blue, mint, deep blue, sea green, ocean blue in ICE). The falling
 // piece trails faint streaks of cold light and a few frost motes; the ghost is a frosted outline. A lock frosts the
-// cubes white for a moment; a hard drop breathes a little mist out at the contact. A cleared row melts in 0.8 s, with a
-// stagger from the middle out: clear and glossy, rounded off, down into a thin film that fades, kept under the rows
-// settling above it; clean drops fall from the films into the water and ring; the water rises a little.
+// cubes white for a moment; a hard drop breathes a little mist out at the contact. A cleared row melts in 1.2 s, with a
+// stagger from the middle out: wet at once (clear, glossy, a bright rim, water running down its faces), the cubes
+// soften, round off and slump from the top, their feet spreading, drips swelling and letting go at their feet, down
+// into a thin film that fades, kept under the cubes settling above (column by column: a free column melts all the way;
+// in a clear's rows each rests on the one below as it slumps). The water flows out: rivulets from a few feet of each
+// clear's lowest row run down the stack to the well's floor or the water, and a sheet spills from each end of the rows
+// down the glass into the pool; droplets and a little crown splash where they land, rings where they reach the pool,
+// and the water rises (with the clear's surge) when the first sheet gets there.
 //
 // The music: the cave's light breathes slowly with the energy (never with the beats), the water's swell grows with the
 // level, a ripple spreads every two beats at mid and peak, and at a peak the kicks shake frost loose from the icicles
@@ -133,8 +138,11 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
 }
 
 // A cleared cube melts in MELT_T (real time): MELT_U of its own after a stagger from the middle out (MELT_STAGGER a
-// column).
-constexpr float MELT_T = 0.82f, MELT_U = 0.66f, MELT_STAGGER = 0.035f;
+// column). Its water runs down at up to STREAM_V (board units a second, STREAM_G its acceleration).
+constexpr float MELT_T = 1.4f, MELT_U = 1.2f, MELT_STAGGER = 0.03f;
+constexpr float STREAM_G = 22.f, STREAM_V = 9.f;
+constexpr float WELL_FLOOR = -10.f;
+constexpr int MAX_STREAMS = 48;
 constexpr int MAX_MOTES = 700;
 constexpr int MAX_RIPPLES = 16;
 // The previews' frosted frames (board units: center, half size).
@@ -328,6 +336,34 @@ float GlacierUniverse::surface(float x) const {
     return s;
 }
 
+// where a stream ends: the water, or the well's floor for a rivulet inside the well
+float GlacierUniverse::streamEnd(const Stream& s) const { return s.sheet ? surface(s.x) : std::max(WELL_FLOOR, surface(s.x)); }
+
+// water hitting water or the floor: a few droplets thrown up and a small crown
+void GlacierUniverse::splash(vec2 p, const vec3& col, int n, float strength) {
+    for (int i = 0; i < n && (int)motes_.size() < MAX_MOTES; i++) {
+        Mote m;
+        m.kind = 5;
+        m.p = p;
+        m.v = V(rng_.range(-1.4f, 1.4f) * strength, rng_.range(1.2f, 2.8f) * strength);
+        m.life = rng_.range(0.25f, 0.45f);
+        m.size = rng_.range(0.035f, 0.055f);
+        m.col = col;
+        m.alpha = 0.9f;
+        motes_.push_back(m);
+    }
+    if ((int)motes_.size() < MAX_MOTES) {
+        Mote c;
+        c.kind = 6;
+        c.p = p;
+        c.life = 0.3f;
+        c.size = 0.16f * strength;
+        c.col = col;
+        c.alpha = 0.8f;
+        motes_.push_back(c);
+    }
+}
+
 // =====================================================================================================
 // Game events
 // =====================================================================================================
@@ -382,32 +418,76 @@ void GlacierUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) rows[c.y] = true;
         const int lines = std::max(1, ev.count);
-        int n = 0;
+        // the rivulets: from a few cubes of each lowest row of the clear (the rows above melt through it), into the
+        // columns with the most ice below to run down
+        bool runs[Game::H][Game::W] = {};
+        for (int y = Game::HIDDEN; y < Game::H; y++) {
+            if (!rows[y] || (y + 1 < Game::H && rows[y + 1])) continue;
+            int order[Game::W];
+            for (int x = 0; x < Game::W; x++) order[x] = x;
+            for (int i = Game::W - 1; i > 0; i--) std::swap(order[i], order[(int)(rng_.uniform() * (i + 1)) % (i + 1)]);
+            const int n = std::min(Game::W, 3 + lines);
+            for (int i = 0; i < n; i++) runs[y][order[i]] = true;
+        }
+        float yLo = 99.f, yHi = -99.f;
         for (auto& cl : ev.cells) {
             if (cl.y < Game::HIDDEN || cl.y >= Game::H || cl.x < 0 || cl.x >= Game::W) continue;
             const vec3 p = layout::cellPos((float)cl.x, (float)cl.y);
+            yLo = std::min(yLo, p.y);
+            yHi = std::max(yHi, p.y);
             const int id = ids_[cl.y][cl.x] ? ids_[cl.y][cl.x] : nextId_++;
             int low = cl.y;
             while (low + 1 < Game::H && rows[low + 1]) low++;
             const float delay = MELT_STAGGER * std::fabs(cl.x - 4.5f);
-            melting_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), (float)(id % 997) * 0.731f, 0.f, delay, cl.y, low});
-            // one cube in two of the clear's lowest row lets a clean drop fall from its film into the water
-            const int nd = (cl.x + cl.y) % 2 == 0 && cl.y == low ? 1 : 0;
-            for (int i = 0; i < nd && (int)motes_.size() < MAX_MOTES; i++) {
+            const float seed = (float)(id % 997) * 0.731f;
+            const float dripX = rng_.range(0.12f, 0.3f) * (rng_.uniform() < 0.5f ? -1.f : 1.f);
+            melting_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), seed, 0.f, delay, cl.y, low, cl.x, dripX});
+            const vec3 water = lerp(pal_.piece[std::clamp(cl.type, 0, 6)], pal_.open, 0.5f);
+            if (runs[cl.y][cl.x]) {
+                // its water runs down from the drip at its foot, while it melts
+                Stream st;
+                st.x = p.x + dripX;
+                st.y0 = st.y1 = p.y - 0.47f;
+                st.start = delay + MELT_U * 0.08f;
+                st.v1 = 1.5f;
+                st.stop = delay + MELT_U * rng_.range(0.75f, 0.9f);
+                st.hw = rng_.range(0.045f, 0.065f) * (1.f + 0.12f * (lines - 1));
+                st.seed = rng_.uniform();
+                st.col = water;
+                streams_.push_back(st);
+            } else if (cl.y == low && (cl.x + cl.y) % 2 == 0 && (int)motes_.size() < MAX_MOTES) {
+                // the drip hanging at its foot lets go and falls into the water
                 Mote d;
                 d.kind = 1;
-                d.p = V(p.x, p.y - 0.47f);
+                d.p = V(p.x + dripX, p.y - 0.62f);
                 d.v = V(0.f, -0.4f);
-                d.age = -(delay + MELT_U * 0.62f);
+                d.age = -(delay + MELT_U * 0.47f);
                 d.life = 3.f;
                 d.size = 0.085f;
-                d.col = lerp(pal_.piece[std::clamp(cl.type, 0, 6)], pal_.open, 0.45f);
+                d.col = water;
                 d.alpha = 0.95f;
                 d.seed = 0.f; // rings the water where it falls
-                n++;
                 motes_.push_back(d);
             }
         }
+        if (yLo <= yHi) {
+            // a sheet spills from each end of the rows and runs down the glass into the pool; the first brings the
+            // surge
+            for (int side = -1; side <= 1; side += 2) {
+                Stream st;
+                st.sheet = true;
+                st.x = side * 5.17f;
+                st.y0 = st.y1 = 0.5f * (yLo + yHi) + 0.1f;
+                st.start = 0.12f + rng_.range(0.f, 0.08f);
+                st.stop = st.start + 0.6f + 0.12f * lines;
+                st.hw = 0.07f + 0.02f * lines;
+                st.seed = rng_.uniform();
+                st.col = lerp(pal_.edge, pal_.open, 0.5f);
+                st.surge = side < 0 ? 0.05f + 0.025f * lines : 0.f;
+                streams_.push_back(st);
+            }
+            riseHold_ = 2.5f; // (until the first sheet reaches the pool)
+        } else ripple(0.f, 0.05f + 0.025f * lines, 1.4f);
         {
             int nb[Game::H][Game::W] = {};
             float nf[Game::H][Game::W] = {};
@@ -421,8 +501,6 @@ void GlacierUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(ids_, nb, sizeof(ids_));
             std::memcpy(flash_, nf, sizeof(flash_));
         }
-        // the melt reaches the water: a surge running out from the well
-        ripple(0.f, 0.05f + 0.025f * lines, 1.4f);
         break;
     }
     case GameEvent::TopOut:
@@ -451,10 +529,35 @@ void GlacierUniverse::cube(float x, float y, float half, float seed, const vec3&
 void GlacierUniverse::buildBoard(const Game& g) {
     auto tintOf = [&](int t) { return pal_.piece[std::clamp(t, 0, 6)]; };
     // the melting cubes first (the rows falling into their room cover their films), each kept under the rows above
-    for (const Melting& m : melting_) {
+    // (the room: down to the nearest cube above it in its column, wherever it is on its way down; a free column
+    // lets it melt all the way)
+    // (in a column of a clear's rows, bottom up, each rests on the one below as that one slumps: its height as the
+    // cube shader makes it)
+    std::vector<int> order(melting_.size());
+    for (int i = 0; i < (int)order.size(); i++) order[i] = i;
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
+        return melting_[a].col != melting_[b].col ? melting_[a].col < melting_[b].col : melting_[a].row > melting_[b].row;
+    });
+    int lastCol = -1, lastRow = -1, lastLow = -1;
+    float lastTop = 0.f;
+    for (int i : order) {
+        const Melting& m = melting_[i];
         const float u = saturate((m.t - m.delay) / MELT_U);
-        const float room = std::clamp(m.row - m.low + g.rowOffset(m.low), 0.f, 1.f);
-        cube(m.x, m.y, 0.5f, m.seed, tintOf(m.type), 1.f, 2, u, room, 0.f);
+        float room = 1.f;
+        for (int y = std::min(m.low, Game::H - 1); y >= 0; y--)
+            if (g.cell(m.col, y).type >= 0) {
+                room = m.row - (y - g.rowOffset(y));
+                break;
+            }
+        const float ownFoot = m.y - 0.47f;
+        float foot = ownFoot;
+        if (m.col == lastCol && m.low == lastLow && m.row == lastRow - 1) foot = std::min(ownFoot, lastTop + 0.03f);
+        room = std::clamp(room + (ownFoot - foot), 0.f, 1.f);
+        const float s = smoothstepf(0.06f, 0.92f, u);
+        const float hgt = std::min(lerpf(1.f, 0.09f, s * s * (3.f - 2.f * s) * 0.4f + s * 0.6f), std::max(room, 0.09f));
+        lastCol = m.col; lastRow = m.row; lastLow = m.low;
+        lastTop = foot + 0.94f * hgt;
+        cube(m.x, foot + 0.47f, 0.5f, m.seed, tintOf(m.type), 1.f, 2, u, room, m.dripX);
     }
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
@@ -669,6 +772,9 @@ void GlacierUniverse::render(const Frame& f, GLuint fbo) {
         float target = levelFor(lines);
         // (the song's teardown keeps the water it melted: a new game drains it only once the next song plays)
         if (f.teardown > 0.f) target = std::max(target, level_);
+        // (a clear's water rises once its sheets reach the pool)
+        riseHold_ = std::max(0.f, riseHold_ - dt);
+        if (riseHold_ > 0.f) target = std::min(target, level_);
         if (!levelSet_) { level_ = target; levelVel_ = 0.f; levelSet_ = true; }
         // eased: a clear is a soft rise, a quad a longer one; a new game drains it slowly
         const float vmax = target > level_ ? 0.35f * std::clamp(paceScale(), 1.f, 2.f) : 0.8f;
@@ -748,9 +854,16 @@ void GlacierUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     for (Mote& m : motes_) {
-        const float mdt = m.kind == 1 ? dt : wdt; // (drips at the real speed, like the melt)
+        const float mdt = m.kind == 1 || m.kind >= 5 ? dt : wdt; // (the melt's water at the real speed, like the melt)
         m.age += mdt;
         if (m.age < 0.f) continue;
+        if (m.kind == 5 || m.kind == 6) {
+            if (m.kind == 5) {
+                m.v.y -= 14.f * dt;
+                m.p = vec2{m.p.x + m.v.x * dt, m.p.y + m.v.y * dt};
+            }
+            continue;
+        }
         if (m.kind == 1) {
             m.v.y -= 16.f * mdt;
             m.p = vec2{m.p.x + m.v.x * mdt, m.p.y + m.v.y * mdt};
@@ -769,6 +882,39 @@ void GlacierUniverse::render(const Frame& f, GLuint fbo) {
     motes_.erase(std::remove_if(motes_.begin(), motes_.end(), [](const Mote& m) { return m.age >= m.life; }), motes_.end());
     for (auto& md : melting_) md.t += dt;
     melting_.erase(std::remove_if(melting_.begin(), melting_.end(), [](const Melting& x) { return x.t > MELT_T; }), melting_.end());
+    if ((int)streams_.size() > MAX_STREAMS) streams_.erase(streams_.begin(), streams_.end() - MAX_STREAMS);
+    for (Stream& st : streams_) {
+        st.t += dt;
+        if (st.t < st.start) continue;
+        const float end = streamEnd(st);
+        st.v1 = std::min(STREAM_V, st.v1 + STREAM_G * dt);
+        st.y1 = std::max(std::min(end, st.y0), st.y1 - st.v1 * dt);
+        if (st.t > st.stop) {
+            st.v0 = std::min(STREAM_V, st.v0 + STREAM_G * dt);
+            st.y0 -= st.v0 * dt;
+        }
+        const bool pool = end > WELL_FLOOR + 0.01f || st.sheet;
+        if (!st.arrived && st.y1 <= end + 1e-3f && st.t > st.start + 0.02f) {
+            // the water arrives: a splash, a ring where it falls into the pool, the clear's surge with the first sheet
+            st.arrived = true;
+            if (pool) ripple(st.x, st.sheet ? 0.03f : 0.016f, st.sheet ? 0.4f : 0.28f);
+            if (st.surge > 0.f) {
+                ripple(0.f, st.surge, 1.4f);
+                riseHold_ = 0.f;
+            }
+            splash(V(st.x, end), st.col, st.sheet ? 6 : 3, st.sheet ? 1.f : 0.7f);
+        }
+        if (st.arrived && st.y0 > end) {
+            // while it pours: droplets kept thrown up where it lands
+            st.sprayAcc += dt * (st.sheet ? 26.f : 12.f);
+            while (st.sprayAcc >= 1.f) {
+                st.sprayAcc -= 1.f;
+                splash(V(st.x + rng_.range(-1.f, 1.f) * st.hw, end), st.col, 1, st.sheet ? 0.8f : 0.55f);
+            }
+        }
+    }
+    streams_.erase(std::remove_if(streams_.begin(), streams_.end(), [&](const Stream& st) {
+        return st.t > st.start && st.y0 <= streamEnd(st) + 1e-3f; }), streams_.end());
     for (auto& row : flash_)
         for (float& v : row) v = approach(v, 0.f, 5.f, dt);
 
@@ -781,10 +927,23 @@ void GlacierUniverse::render(const Frame& f, GLuint fbo) {
         const float t = m.age / m.life;
         float a = m.alpha;
         if (m.kind == 1) a *= 1.f;
+        else if (m.kind == 5) a *= 1.f - smoothstepf(0.5f, 1.f, t);
+        else if (m.kind == 6) a *= 1.f - t;
         else a *= smoothstepf(0.f, 0.12f, t) * (1.f - smoothstepf(0.6f, 1.f, t));
         if (m.kind == 3) a *= world;
-        sprite(m.p, m.kind == 4 ? m.size * (1.f + 1.2f * t) : m.size, m.col, a, m.kind, m.kind == 1 ? 1.4f : 1.f, m.seed);
+        if (m.kind == 5) sprite(m.p, m.size, m.col, a, 1, 1.3f, m.seed);
+        else if (m.kind == 6) sprite(m.p, m.size * (0.6f + 1.4f * t), m.col, a, 6, 0.45f, m.seed);
+        else sprite(m.p, m.kind == 4 ? m.size * (1.f + 1.2f * t) : m.size, m.col, a, m.kind, m.kind == 1 ? 1.4f : 1.f, m.seed);
     }
+    // the melt's water running down: a thin thread of water (its quad twice its width, for the meander)
+    if (!f.bare)
+        for (const Stream& st : streams_) {
+            const float half = 0.5f * (st.y0 - st.y1);
+            if (st.t < st.start || half < 0.005f) continue;
+            const float qw = 2.f * st.hw;
+            sprites_.push_back({{st.x, 0.5f * (st.y0 + st.y1), qw, 5.f}, {st.col.x, st.col.y, st.col.z, 1.f - bridge},
+                                {half / qw, st.seed, half, st.sheet ? 1.f : 0.f}});
+        }
     // streaks of cold light trailing above the falling piece (one per column, from its top cell)
     if (!f.bare && game.hasPiece() && !game.over()) {
         int cells[4][2];

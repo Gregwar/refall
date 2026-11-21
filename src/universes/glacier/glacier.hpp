@@ -57,7 +57,7 @@ private:
         vec2 p{0, 0}, v{0, 0};
         float age = 0.f, life = 1.f, size = 0.1f, alpha = 1.f, seed = 0.f;
         vec3 col{1.f};
-        int kind = 0; // 0 frost mote, 1 drip, 3 flake, 4 mist
+        int kind = 0; // 0 frost mote, 1 drip, 3 flake, 4 mist, 5 spray, 6 splash crown
     };
     std::vector<Mote> motes_;
     float pieceFrostAcc_ = 0.f, ambientAcc_ = 0.f;
@@ -72,9 +72,21 @@ private:
     void cube(float x, float y, float half, float seed, const vec3& tint, float alpha, int mode, float erase, float flash, float frost);
     void buildBoard(const Game& g);
     // a melting cube: where, its type and seed, its time, its stagger, its row and the lowest row of its clear (the
-    // rows above fall into the room it leaves)
-    struct Melting { float x, y; int type; float seed, t, delay; int row, low; };
+    // rows above fall into the room it leaves), its column, where its drip hangs (local x)
+    struct Melting { float x, y; int type; float seed, t, delay; int row, low, col; float dripX; };
     std::vector<Melting> melting_;
+    // The melt's water flowing (real time): a rivulet from a melting cube's foot down the stack to the well's floor
+    // or the water, or a sheet spilling from the row's end down the glass into the pool. Its top (y0) leaves when the
+    // cube has run dry, its head (y1) runs down; both accelerate to a cap.
+    struct Stream {
+        float x, y0, y1, v0 = 0.f, v1 = 0.f, t = 0.f, start, stop, hw, seed, surge = 0.f, sprayAcc = 0.f;
+        vec3 col;
+        bool sheet = false, arrived = false;
+    };
+    std::vector<Stream> streams_;
+    float streamEnd(const Stream& s) const;
+    void splash(vec2 p, const vec3& col, int n, float strength);
+    float riseHold_ = 0.f; // the water rises once the melt reaches it
     struct OverCell { float x, y; int type; float seed, row; };
     std::vector<OverCell> overCells_; // the stack at the top out (the board is emptied)
     struct SpriteInst { float a[4], b[4], c[4]; };
