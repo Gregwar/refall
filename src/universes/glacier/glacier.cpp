@@ -959,8 +959,8 @@ void GlacierUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progPost_, "uWaterA", waterA);
     // the drop: the whole cave brighter and warmer in the drop's light (the sun through the ice; the variant's own glow)
     set1f(progPost_, "uSunK", (0.8f * dropAmt_ + 0.35f * dropFlash_ * dropFlash_) * (1.f - over_));
-    // (warmed toward a low sun's orange, whatever the variant's glow)
-    set3f(progPost_, "uSun", lerp(lerp(pal_.glowA, vec3(1.f, 0.62f, 0.3f), 0.5f), vec3(1.f), 0.15f));
+    // (an orange-red low sun, whatever the variant's glow)
+    set3f(progPost_, "uSun", lerp(pal_.glowA, vec3(1.f, 0.3f, 0.12f), 0.85f));
     {
         const vec3 hi = pal_.waterHi;
         const float mx = std::max(1e-3f, std::max(hi.x, std::max(hi.y, hi.z)));
