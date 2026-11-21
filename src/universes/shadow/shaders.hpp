@@ -106,6 +106,8 @@ uniform vec4 uClr[40];             // cleared cells shrinking: x, y, scale, type
 uniform int uClrN;
 uniform vec2 uEchoOff, uEchoScale; // the second projector's shadow: offset, stretch (from the table's line)
 uniform vec2 uLens;                // where the beam comes from (board space, on screen)
+uniform vec4 uWarp, uWarpS;        // the setup's misaligned projector: keystone (xy), turn; shift (xy), stretch (zw)
+uniform float uBlur;               // and its focus (added to the penumbra)
 
 float lightCircle(vec2 p, vec4 c, float spread) {
     vec2 q = (p - c.xy) / c.zw;
@@ -190,17 +192,27 @@ vec3 transmit(vec2 p, float pen, bool previews) {
 
 void main() {
     vec2 p = uViewC + (vUv * 2.0 - 1.0) * uViewH;
+    // what the projector throws at p: in the setup, askew until it is aligned (pw: the wall's own point)
+    vec2 pw = p;
+    if (uWarpS.z != 1.0 || uWarpS.w != 1.0 || uWarp.z != 0.0) {
+        vec2 r = p - uCircle1.xy - uWarpS.xy;
+        float c = cos(uWarp.z), s = sin(uWarp.z);
+        r = vec2(c * r.x + s * r.y, -s * r.x + c * r.y) / uWarpS.zw;
+        r /= max(0.3, 1.0 + dot(uWarp.xy, r));
+        p = uCircle1.xy + r;
+    }
     // the wall: plaster (soft, a fine grain), or a woven screen
-    float n = fbm(p * 0.45) * 0.6 + fbm(p * 2.3 + 3.0) * 0.4;
-    float grain = vnoise(p * 14.0) * 0.5 + vnoise(p * 31.0) * 0.5;
+    float n = fbm(pw * 0.45) * 0.6 + fbm(pw * 2.3 + 3.0) * 0.4;
+    float grain = vnoise(pw * 14.0) * 0.5 + vnoise(pw * 31.0) * 0.5;
     vec3 alb = uWall * (0.9 + 0.12 * (n - 0.5) * (1.0 - 0.6 * uWallKind) + 0.05 * (grain - 0.5));
     // the projector: a focused circle, slightly brighter toward the lamp's side, a faint colored fringe at its edge
     vec2 toLens = normalize(uLens - uCircle1.xy);
     float side = 1.0 + 0.1 * dot(normalize(p - uCircle1.xy + 1e-4), toLens) * length((p - uCircle1.xy) / uCircle1.zw);
-    vec3 c1 = vec3(lightCircle(p, uCircle1 * vec4(1, 1, 1.006, 1.006), 0.0), lightCircle(p, uCircle1, 0.0),
-                   lightCircle(p, uCircle1 * vec4(1, 1, 0.992, 0.992), 0.0));
+    float ca = 1.0 + 1.5 * uBlur, sp = 0.05 * uBlur;
+    vec3 c1 = vec3(lightCircle(p, uCircle1 * vec4(1, 1, 1.0 + 0.006 * ca, 1.0 + 0.006 * ca), sp), lightCircle(p, uCircle1, sp),
+                   lightCircle(p, uCircle1 * vec4(1, 1, 1.0 - 0.008 * ca, 1.0 - 0.008 * ca), sp));
     // the penumbra widens a little with the distance from the model (higher up the wall)
-    float pen = 0.045 + 0.03 * clamp((p.y + 10.0) / 20.0, 0.0, 1.0);
+    float pen = 0.045 + 0.03 * clamp((p.y + 10.0) / 20.0, 0.0, 1.0) + uBlur;
     vec3 T1 = transmit(p, pen, true);
     vec3 light = uLight1 * c1 * side * T1;
     if (uDrop > 0.002) {
@@ -214,6 +226,7 @@ void main() {
         light += uLight2 * c2 * T2 * uDrop * keep;
     }
     vec3 col = alb * (light + uAmbient * (0.6 + 0.4 * n));
+    p = pw;
     frag = vec4(col, 1.0);
 }
 )";

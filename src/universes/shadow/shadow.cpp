@@ -16,8 +16,11 @@
 // sorted on stacks by color: the table fills up with spent blocks over the song. Slow motion turns the lamp to a cool
 // moonlight; game over dims it.
 //
-// Around a song, the projector is switched on and off: in the setup its lamp warms up from a dull red filament and
-// its iris opens on the wall; in the teardown the iris closes back to a spot and the lamp cools down to dark.
+// Around a song, the projector is switched on and off. In the setup the model stands first in a faint room light,
+// the game's stack already in its well; the projector is rolled in beside it and swung round to the wall; its lamp
+// warms up from a dull red filament and its iris opens, throwing the shadow askew (keystoned, turned, shifted) and
+// out of focus; a few small nudges align it and the focus is pulled sharp, until the shadow is the playfield, cell
+// for cell. In the teardown the iris closes back to a spot and the lamp cools down to dark.
 //
 // Layout contract: a flat orthographic view of the wall at the reference camera's scale on the board plane; the
 // model is ray marched in its own corner with a camera of its own.
@@ -186,14 +189,20 @@ void ShadowUniverse::setupModelCamera() {
     const float aspect = (modelRect_[2] - modelRect_[0]) / (modelRect_[3] - modelRect_[1]);
     tan_.y = std::tan(15.5f * PI / 180.f);
     tan_.x = tan_.y * aspect;
-    lensPos_ = vec3(-11.f, -5.2f, 9.5f);
-    lensDir_ = normalize(vec3(0.f, -0.8f, -0.6f) - lensPos_);
+    lensPos0_ = vec3(-11.f, -5.2f, 9.5f);
+    lensDir0_ = normalize(vec3(0.f, -0.8f, -0.6f) - lensPos0_);
+    placeLens(lensPos0_, lensDir0_);
+    if (std::getenv("REFALL_SHADOW_DEBUG")) std::fprintf(stderr, "[shadow] lens on screen %.2f %.2f\n", lensScreen_.x, lensScreen_.y);
+}
+
+void ShadowUniverse::placeLens(const vec3& pos, const vec3& dir) {
+    lensPos_ = pos;
+    lensDir_ = dir;
     // where the lens is on screen (board space)
     const vec3 q = lensPos_ - eye_;
     const float z = dot(q, fwd_);
     const float nx = dot(q, right_) / (z * tan_.x), ny = dot(q, up_) / (z * tan_.y);
     lensScreen_ = vec2{lerpf(modelRect_[0], modelRect_[2], nx * 0.5f + 0.5f), lerpf(modelRect_[1], modelRect_[3], ny * 0.5f + 0.5f)};
-    if (std::getenv("REFALL_SHADOW_DEBUG")) std::fprintf(stderr, "[shadow] lens on screen %.2f %.2f\n", lensScreen_.x, lensScreen_.y);
 }
 
 ShadowUniverse::~ShadowUniverse() {
@@ -622,15 +631,51 @@ void ShadowUniverse::setCommon(GLuint prog) {
     set1f(prog, "uPieceType", pieceType_);
 }
 
+// The setup's choreography, from its progress (0 .. 1, ~5.2 s: the black lifting over its first 0.38, the game
+// coming in over its last 0.31). Only from `setup`, so the world alone and the whole frame always agree; all of it
+// at rest at 1.
+ShadowUniverse::Setup ShadowUniverse::setupAt(float s) const {
+    Setup u;
+    const float t = s * 5.2f; // (seconds)
+    // a faint room light while the projector is off: the model on its table, its stack in the well
+    u.fill = smoothstepf(0.f, 0.22f, s) * (1.f - smoothstepf(0.42f, 0.62f, s));
+    // the projector rolled in from the left on its stand, swung round toward the wall, settling with a small sway
+    const float r = saturate((s - 0.08f) / 0.34f);
+    const float roll = 1.f + 2.2f * (r - 1.f) * (r - 1.f) * (r - 1.f) + 1.2f * (r - 1.f) * (r - 1.f); // (eased out, overshooting a touch)
+    // then aimed: misaligned when its lamp comes on, nudged in a few small corrections, eased to rest
+    const float a = 1.f - easeInOut((s - 0.54f) / 0.36f);
+    const float focus = 1.f - easeInOut((s - 0.6f) / 0.32f); // (the focus pulled a little after)
+    const float nudge = a * (0.55f * std::sin(t * 6.1f) + 0.3f * std::sin(t * 10.7f + 1.3f)) * smoothstepf(0.44f, 0.54f, s);
+    const float yaw = 0.75f * (1.f - roll) + 0.07f * a + 0.025f * nudge, pitch = -0.45f * (1.f - roll) - 0.05f * a + 0.02f * nudge;
+    auto rotY = [](vec3 v, float g) { return vec3(v.x * std::cos(g) + v.z * std::sin(g), v.y, -v.x * std::sin(g) + v.z * std::cos(g)); };
+    vec3 d = rotY(lensDir0_, yaw);
+    d = normalize(d + vec3(0.f, pitch, 0.f));
+    u.lensDir = d;
+    u.lensPos = lensPos0_ + vec3(-11.f, 0.4f, 3.5f) * (1.f - roll);
+    u.lamp = smoothstepf(0.38f, 0.56f, s);
+    u.iris = smoothstepf(0.41f, 0.6f, s);
+    // its shadow on the wall: thrown askew (keystoned toward the far side, turned, shifted, stretched), out of focus
+    u.key = vec2{0.014f * a, 0.017f * a};
+    u.rot = 0.075f * a + 0.025f * nudge;
+    u.off = vec2{-1.6f * a + 0.4f * nudge, -1.2f * a + 0.3f * nudge};
+    u.scale = vec2{1.f + 0.05f * a, 1.f + 0.09f * a};
+    u.blur = std::max(0.f, 0.7f * focus + 0.2f * focus * std::sin(t * 4.3f));
+    return u;
+}
+
 void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = std::min(f.dt, 0.1f);
     const VariantDef& V = VARIANTS[variant_];
     const bool bare = f.bare;
+    // in the setup, the world alone already shows the model with the game's stack in its well (the falling piece,
+    // the ghost, the previews and the HUD come with the game)
+    const bool model = !bare || (f.live && f.setup < 1.f && f.teardown <= 0.f);
+    const Game& board = bare && model ? *f.live : game;
 
     // ---- Time, staging.
-    if (!bare) syncIds(game);
+    if (model) syncIds(board);
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (overT_ >= 0.f) overT_ += dt;
@@ -669,10 +714,13 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
 
     float intensity = lerpf(0.8f, 1.02f, saturate(lv_ * 0.5f)) * (0.95f + 0.1f * energyS_) * flicker_ * (1.f + 0.12f * dropSwell_);
     if (overT_ >= 0.f) intensity *= 1.f - 0.55f * smoothstepf(0.f, 0.6f, overT_) * (1.f - smoothstepf(2.2f, 4.f, overT_));
-    // the scene's setup and teardown: the projector switched on (its lamp warming up from a dull filament, then its
-    // iris opening on the wall), and switched off (the iris closing, the lamp cooling down)
-    const float lamp = std::min(smoothstepf(0.f, 0.5f, f.setup), 1.f - smoothstepf(0.4f, 0.95f, f.teardown));
-    const float iris = 0.12f + 0.88f * std::min(smoothstepf(0.2f, 0.68f, f.setup), 1.f - smoothstepf(0.05f, 0.7f, f.teardown));
+    // the scene's setup and teardown: the projector rolled in beside the model and switched on (its lamp warming up
+    // from a dull filament, its iris opening on the wall), its shadow first thrown askew and blurred, then aligned
+    // and focused; switched off (the iris closing, the lamp cooling down)
+    const Setup su = setupAt(f.setup);
+    placeLens(su.lensPos, su.lensDir);
+    const float lamp = std::min(su.lamp, 1.f - smoothstepf(0.4f, 0.95f, f.teardown));
+    const float iris = 0.12f + 0.88f * std::min(su.iris, 1.f - smoothstepf(0.05f, 0.7f, f.teardown));
     intensity *= lamp * lamp;
     vec3 light1 = lin(V.light) * intensity * lerp(vec3(1.f, 0.35f, 0.08f), vec3(1.f), lamp);
     light1 = lerp(light1, MOON * 0.8f * intensity, 0.75f * slow_);
@@ -718,7 +766,7 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     }
 
     // ---- The board.
-    uploadBoard(game);
+    uploadBoard(board);
     if (bare) { for (float& v : piece_) v = 0.f; for (float& v : ghost_) v = 0.f; prev_.clear(); }
 
     vec3 gelShadow[7], gelModel[7];
@@ -749,12 +797,15 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progWall_, "uLight1", light1);
     set3f(progWall_, "uLight2", light2);
     set3f(progWall_, "uWall", lin(V.wall));
-    set3f(progWall_, "uAmbient", lin(V.ambient) + light1 * 0.075f);
+    set3f(progWall_, "uAmbient", lin(V.ambient) * (1.f + 1.5f * su.fill) + light1 * 0.075f);
     set4f(progWall_, "uCircle1", circle1[0], circle1[1], circle1[2], circle1[3]);
     set4f(progWall_, "uCircle2", circle2[0], circle2[1], circle2[2], circle2[3]);
     set1f(progWall_, "uDrop", drop_);
     set1f(progWall_, "uWallKind", V.wallKind);
-    set1f(progWall_, "uBare", bare ? 1.f : 0.f);
+    set1f(progWall_, "uBare", model ? 0.f : 1.f);
+    set4f(progWall_, "uWarp", su.key.x, su.key.y, su.rot, 0.f);
+    set4f(progWall_, "uWarpS", su.off.x, su.off.y, su.scale.x, su.scale.y);
+    set1f(progWall_, "uBlur", su.blur);
     set1f(progWall_, "uTime", worldTime_);
     glUniform3fv(ugl::U(progWall_, "uGel"), 7, &gelShadow[0].x);
     glUniform4fv(ugl::U(progWall_, "uGhost"), 4, ghost_);
@@ -788,13 +839,13 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progModel_, "uLight2", light2 * 1.6f);
     set3f(progModel_, "uL2Pos", vec3(22.f, 8.f, 18.f));
     set1f(progModel_, "uDrop", drop_);
-    set1f(progModel_, "uBare", bare ? 1.f : 0.f);
+    set1f(progModel_, "uBare", model ? 0.f : 1.f);
     set1f(progModel_, "uTime", worldTime_);
     glUniform3fv(ugl::U(progModel_, "uGelC"), 7, &gelModel[0].x);
     set3f(progModel_, "uWood", lin(V.wood));
     set3f(progModel_, "uTable", lin(V.table));
     set3f(progModel_, "uBody", lin(V.body));
-    set3f(progModel_, "uRoom", lin(V.room) + light1 * 0.006f);
+    set3f(progModel_, "uRoom", lin(V.room) + light1 * 0.006f + lin(V.light) * 0.14f * su.fill);
     set1f(progModel_, "uTableKind", V.tableKind);
     const int flyN = (int)flyS.size();
     if (flyN) {
