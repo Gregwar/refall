@@ -1076,7 +1076,9 @@ void Worlds::kalFree() {
         }
     }
     // only the keys a player wouldn't guess (paste, remove); the arrows, Enter and Esc go without saying
-    const char* hint = m.editing_ ? "CTRL+V  PASTE" : (rows && m.freeRow_ == 1) ? "DEL  REMOVE" : "";
+    // (the built-in playlists can't be removed: no hint on them)
+    const bool removable = rows && m.freeRow_ == 1 && m.plSel_ >= 2 && m.plSel_ < (int)m.plChoices().size();
+    const char* hint = m.editing_ ? "CTRL+V  PASTE" : removable ? "DEL  REMOVE" : "";
     if (*hint) p.text(F::JOSEFIN, hint, X(1760), Y(714), 15 * u, hex(0xffffff, 0.55f), 1, 0.3f);
 }
 

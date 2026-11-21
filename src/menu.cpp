@@ -254,7 +254,8 @@ void Menu::resetPlace() {
     stage_ = song_ = 0;
     row_ = 1;
     petal_ = false;
-    freeRow_ = plSel_ = lvlSel_ = 0;
+    freeRow_ = lvlSel_ = 0;
+    plSel_ = 1; // (the electro playlist, free play's default)
     voyageStage_.clear();
     snap();
 }

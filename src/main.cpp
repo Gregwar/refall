@@ -3218,8 +3218,8 @@ int main(int argc, char** argv) {
     o.menu = o.menuEnabled && o.stage.empty();
     if (!o.universe.empty() && !universes::check(o.universe)) return 1;
     if (!o.toUniverse.empty() && !universes::check(o.toUniverse)) return 1;
-    // No songs given: the default playlist.
-    if (o.paths.empty()) o.paths.push_back(DEFAULT_PLAYLIST);
+    // No songs given: the default playlist (free play: the electro one, thousands of songs)
+    if (o.paths.empty()) o.paths.push_back(freePlay ? ELECTRO_PLAYLIST : DEFAULT_PLAYLIST);
     App app(o);
     int rc = app.run();
     // Exit now: don't wait for background downloads/analysis (an unfinished download resumes next time).
