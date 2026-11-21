@@ -742,13 +742,19 @@ void main() {
     float line = exp(-sq(depth / (px * 1.0))) * 0.75 + exp(-abs(depth) / (px * 5.0)) * 0.12;
     line += step(0.0, depth) * exp(-depth / (px * 16.0)) * 0.06;
     c += uLine * line * (1.0 - 0.9 * hide) * uWaterA;
-    // the drop's light: an exposure lift, the shadows filled with the light's colour, the ice tinted toward it
+    // the cave a little darker at rest; the drop's light: the hues turned toward the light's colour (the brightness
+    // kept), a modest lift on the lit ice, and the shadows behind deeper: light and shade, not a white-out
     vec3 sunN = uSun / max(max(uSun.r, max(uSun.g, uSun.b)), 1e-3);
-    c = c * (1.0 + 0.85 * uSunK) + sunN * 0.05 * uSunK;
-    c = mix(c, c * sunN * 1.15, 0.3 * min(uSunK, 1.0));
+    float k = min(uSunK, 1.0);
+    c *= 0.86;
+    float l0 = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    vec3 hue = sunN * l0 / max(dot(sunN, vec3(0.2126, 0.7152, 0.0722)), 1e-3);
+    c = mix(c, hue, 0.45 * k);
+    float lit = smoothstep(0.12, 0.5, l0);
+    c *= mix(1.0 - 0.4 * k, 1.0 + 0.3 * uSunK, lit);
     c *= (1.0 - uDim * 0.5) * uFade;
     vec2 q = vUv - 0.5;
-    c *= 1.0 - 0.3 * (1.0 - 0.6 * min(uSunK, 1.0)) * dot(q, q) * 2.0;
+    c *= 1.0 - 0.3 * (1.0 + 0.4 * k) * dot(q, q) * 2.0;
     // a soft shoulder on the luminance (the hues kept: lit ice stays blue), then a little on each channel
     float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
     float lt = lum / (1.0 + max(lum - 0.7, 0.0) * 0.8);
