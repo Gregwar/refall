@@ -179,7 +179,23 @@ def _draw(N, word, outline, icon=False, t=0.0, ss=SS):
                 dd = sgn * ((x1 - x0) * (y - y0) - (y1 - y0) * (x - x0)) / ln
                 dmin = dd if dmin is None else np.minimum(dmin, dd)
             if outline:
-                m = np.clip(1 - np.abs(dmin) / (line * 0.8), 0, 1)
+                # the contour is the distance to the face's four SEGMENTS (the distance to their infinite lines
+                # drew needles out of the edge-on faces), only around the face's bounding box
+                reach = line * 0.8 + 1
+                bx0, bx1 = max(0, int(min(p[0] for p in pts) - reach)), min(S, int(max(p[0] for p in pts) + reach) + 1)
+                by0, by1 = max(0, int(min(p[1] for p in pts) - reach)), min(S, int(max(p[1] for p in pts) + reach) + 1)
+                if bx1 <= bx0 or by1 <= by0:
+                    continue
+                xs, ys = x[by0:by1, bx0:bx1], y[by0:by1, bx0:bx1]
+                dseg = None
+                for i in range(4):
+                    (x0, y0), (x1, y1) = pts[i], pts[(i + 1) % 4]
+                    ex, ey = x1 - x0, y1 - y0
+                    u = np.clip(((xs - x0) * ex + (ys - y0) * ey) / ((ex * ex + ey * ey) or 1.0), 0, 1)
+                    dd = np.hypot(xs - (x0 + u * ex), ys - (y0 + u * ey))
+                    dseg = dd if dseg is None else np.minimum(dseg, dd)
+                m = np.zeros((S, S), np.float32)
+                m[by0:by1, bx0:bx1] = np.clip(1 - dseg / (line * 0.8), 0, 1)
                 cv.over(white, m if hidden is None else m * (1 - hidden))
                 continue
             cover = np.clip(dmin / 1.2 + 0.5, 0, 1)
