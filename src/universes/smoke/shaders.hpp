@@ -800,7 +800,7 @@ void main() {
         float seed = v2.y, V = v2.z, t = v2.w;
         vec2 ext = vec2(v0.z, v0.z * v0.w);
         vec2 wp = v0.xy + q * ext;
-        float rowY = v0.y - ext.y + 0.6;
+        float rowY = v0.y - ext.y + 1.0;            // the quad reaches 1.0 under the row's middle (its foot fades out)
         float h = max(wp.y - rowY, 0.0);
         // some of the smoke climbs faster than the rest: fingers, not a bar
         V *= 0.5 + 1.0 * texture(uNoise, vec2(wp.x * 0.035 + seed * 0.3, 0.37 + seed)).g;
@@ -824,7 +824,11 @@ void main() {
         // it tears open as it rises: holes that widen with the parcel's age
         float n3 = texture(uNoise, vec2(xo * 0.03 + seed * 0.9, te * 0.09 + h * 0.012 + seed * 0.2)).r;
         tend *= mix(1.0, smoothstep(0.15 + 0.3 * age, 0.5 + 0.3 * age, n3), hk);
-        float a = col * env * tend * exp(-age * 1.3) * v1.a * fade;
+        // its foot: under the row's middle the smoke thins out over a ragged edge (cut flat at the quad's bottom, it
+        // drew a straight line across the row below where the rows above had fallen)
+        float nb = texture(uNoise, vec2(wp.x * 0.11 + seed * 0.7, te * 0.25 + seed * 0.3)).r;
+        float foot = 1.0 - smoothstep(-0.05, 0.45, rowY - wp.y + (nb - 0.5) * 0.5);
+        float a = col * env * tend * foot * exp(-age * 1.3) * v1.a * fade;
         frag = vec4(v1.rgb * a, a);
         return;
     }

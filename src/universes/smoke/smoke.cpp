@@ -888,7 +888,7 @@ void SmokeUniverse::buildFx() {
         const float B = d.big;
         const float V = 3.6f * B;                // how fast the smoke streams up (board units per second)
         const float H = V * 1.5f;                // the column's height
-        const float bottom = d.y - 0.6f, top = d.y + H;
+        const float bottom = d.y - 1.f, top = d.y + H; // (the shader fades its foot out above the bottom)
         const float lit = spotAt(vec3(d.x, d.y + 1.5f, 0.6f));
         const float glow = std::max(lit, 0.4f);
         const vec3 pc = cur_.piece[d.type];
