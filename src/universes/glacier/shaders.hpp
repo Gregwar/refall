@@ -749,7 +749,8 @@ void main() {
     c *= 0.86;
     float l0 = dot(c, vec3(0.2126, 0.7152, 0.0722));
     vec3 hue = sunN * l0 / max(dot(sunN, vec3(0.2126, 0.7152, 0.0722)), 1e-3);
-    c = mix(c, hue, 0.45 * k);
+    c = mix(c, hue, 0.55 * k);
+    c *= mix(vec3(1.0), vec3(1.2, 1.0, 0.74), k); // (a warm balance: the blue of the ice gives way to gold)
     float lit = smoothstep(0.12, 0.5, l0);
     c *= mix(1.0 - 0.4 * k, 1.0 + 0.3 * uSunK, lit);
     c *= (1.0 - uDim * 0.5) * uFade;
