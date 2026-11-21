@@ -1092,7 +1092,8 @@ vec4 plate(vec2 q, float d) {
                 mix(1.0, 0.12, cup) * mix(0.75, 1.0, lip) * (1.0 - 0.6 * pore), 1.0);
 }
 vec4 tubes(vec2 q) {
-    vec2 id;
+)"
+R"(    vec2 id;
     vec4 v = voro(q * 3.9 + gOff, 0.55, id);
     // each tube: a wall from its hole out to its rim, rounded on top, the dark gaps between the tubes
     float ro = 0.42 + 0.1 * hash(id + 2.3), ri = ro * (0.14 + 0.12 * hash(id + 5.1));

@@ -443,7 +443,8 @@ void main() {
         } else {
             float sp = mix(0.4, 1.0, open); // the petals spread as it opens
             float petals = 0.0, rim = 0.0;
-            for (int k = 0; k < 5; k++) {
+)"
+R"(            for (int k = 0; k < 5; k++) {
                 float a = 6.2831853 * float(k) / 5.0 + seed;
                 vec2 c = vec2(cos(a), sin(a)) * 0.45 * sp;
                 float d = length(q - c) / (0.42 * sp) + (vnoise(q * 5.0 + float(k) * 3.1 + seed) - 0.5) * 0.14;

@@ -505,7 +505,8 @@ vec4 blockLook(vec2 q, float s, float px, vec3 pc, vec2 wpos, vec2 cc, float lig
         float a = t * 2.0 + ps * 6.28;
         w.xy = mat2(cos(a), sin(a), -sin(a), cos(a)) * w.xy;
         vec4 n = textureLod(uVol, sp3 + w * 0.35, 0.0);
-        vec4 n2 = textureLod(uVol, sp3 * 2.2 + w * 0.6 + vec3(0.4, 0.1, 0.2), 0.0);
+)"
+R"(        vec4 n2 = textureLod(uVol, sp3 * 2.2 + w * 0.6 + vec3(0.4, 0.1, 0.2), 0.0);
         float dens = smoothstep(0.3, 0.75, n.r * 0.75 + n2.r * 0.25 + (n2.g - 0.5) * 0.12) * 1.1 + 0.08;
         float inner = smoothstep(gap, gap + 0.22, D);
         float beam = max(spotC(vec3(wpos, 0.3), 0.08, uConeTrue), board ? 0.0 : 0.6) * on;
@@ -724,7 +725,8 @@ void main() {
         // (its top going last, as if it lifted away), and the eroding rim thins into smoke of its own color.
         float k = v3.y;
         float sd = sdRound(p, vec2(0.45), 0.07);
-        float cov = 1.0 - smoothstep(-px * 0.7, px * 0.7, sd);
+)"
+R"(        float cov = 1.0 - smoothstep(-px * 0.7, px * 0.7, sd);
         if (cov <= 0.0 && uBlock == 0) discard;
         float n = texture(uNoise, vWorld * 0.13 + v3.z).r * 0.5 + texture(uNoise, vWorld * 0.09 + v3.z * 1.7).b * 0.5;
         float inner = clamp(-sd / 0.45, 0.0, 1.0);            // 0 at the edge, 1 at the heart

@@ -511,7 +511,8 @@ void main() {
             float ro = uTime * (0.08 + 0.2 * h21(vec2(fi, 6.0))) + fi;
             vec2 dr = mat2(cos(ro), -sin(ro), sin(ro), cos(ro)) * da;
             float lumpy = ar * (1.0 + 0.45 * (vn(vec2(atan(dr.y, dr.x) * 1.4 + fi * 7.0, fi)) - 0.5));
-            float inA = smoothstep(lumpy + 1.5 / uRes.y, lumpy - 1.5 / uRes.y, length(dr));
+)"
+R"(            float inA = smoothstep(lumpy + 1.5 / uRes.y, lumpy - 1.5 / uRes.y, length(dr));
             if (inA > 0.0) {
                 vec2 nr = da / ar;
                 float lt = clamp(0.4 + nr.x * 0.7 - nr.y * 0.4, 0.0, 1.0);
