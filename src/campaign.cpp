@@ -4,9 +4,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -225,6 +227,7 @@ void Progress::setBeaten(int stage, int song, int diff, int score, int lines) {
     if (!s.beaten || score > s.best || (score == s.best && s.lines < 0)) { s.best = score; s.lines = lines; }
     s.mostLines = std::max(s.mostLines, lines);
     s.beaten = true;
+    played_ = (int64_t)std::time(nullptr);
 }
 void Progress::setCleared(int stage, int diff, int runScore, int runLines) {
     StageRec& r = at(stage);
@@ -233,6 +236,7 @@ void Progress::setCleared(int stage, int diff, int runScore, int runLines) {
         r.lines[diff] = runLines;
     }
     r.cleared[diff] = true;
+    played_ = (int64_t)std::time(nullptr);
 }
 int Progress::clearedCount() const {
     int n = 0;
@@ -248,7 +252,8 @@ std::string Progress::stageKey(int stage) const {
 }
 
 // The file, one record per line (tabs):
-//   unlock	all
+//   unlock	all	(UNLOCK ALL used on the save slot)
+//   played	<seconds since the epoch>	(the last song beaten or stage cleared)
 //   reach	<stage 1..>	(stages up to it open)
 //   stage	<stage 1..>	<DIFF>	<best run score>	<its lines>	<its songs' ids, comma separated>
 //   songid	<video id>	<DIFF>	<best score>	<its lines>	<most lines>
@@ -261,6 +266,7 @@ void Progress::load(const std::string& path, const Campaign* camp) {
     stages_.clear();
     keep_.clear();
     unlockAll_ = false;
+    played_ = 0;
     reach_ = 0;
     std::map<std::string, std::pair<int, int>> where; // video id -> (stage, song) in the campaign
     if (camp_)
@@ -278,6 +284,7 @@ void Progress::load(const std::string& path, const Campaign* camp) {
     auto num = [](const std::vector<std::string>& c, size_t i) { return c.size() > i && !c[i].empty() ? std::atoi(c[i].c_str()) : -1; };
     bool legacy = false;
     int dropped = 0;
+    int64_t played = 0;
     auto song = [&](const std::string& id, int d, const std::vector<std::string>& c, size_t i, const std::string& raw) {
         auto it = where.find(id);
         if (it == where.end()) { keep_.push_back(raw); return; }
@@ -290,6 +297,7 @@ void Progress::load(const std::string& path, const Campaign* camp) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         std::vector<std::string> c = splitTabs(line);
         if (c[0] == "unlock") unlockAll_ = true;
+        else if (c[0] == "played" && c.size() >= 2) played = std::atoll(c[1].c_str());
         else if (c[0] == "reach" && c.size() >= 2) reach_ = std::max(reach_, std::atoi(c[1].c_str()) - 1);
         else if (c[0] == "stage" && c.size() >= 4) {
             const int s = std::atoi(c[1].c_str()) - 1, d = diffOf(c[2]);
@@ -315,6 +323,14 @@ void Progress::load(const std::string& path, const Campaign* camp) {
             legacy = true;
             if (s < 12 && k < 5) song(LEGACY_12x5[s][k], d, c, 4, "");
         }
+    }
+    played_ = played; // (the records read set it to now)
+    if (!played_ && !stages_.empty()) { // (a file of before the record: its last change)
+        std::error_code ec;
+        const auto t = fs::last_write_time(path_, ec);
+        if (!ec)
+            played_ = std::chrono::duration_cast<std::chrono::seconds>(
+                          (t - fs::file_time_type::clock::now() + std::chrono::system_clock::now()).time_since_epoch()).count();
     }
     // the stages where songs were beaten are open (they were reached)
     if (legacy || dropped)
@@ -348,8 +364,9 @@ bool Progress::save() const {
     const std::string tmp = path_ + ".tmp";
     FILE* f = std::fopen(tmp.c_str(), "w");
     if (!f) { std::fprintf(stderr, "[campaign] could not save %s\n", path_.c_str()); return false; }
-    std::fprintf(f, "# %s campaign progress (--reset forgets it)\n", GAME_TITLE);
+    std::fprintf(f, "# %s campaign progress (SAVE SLOTS > ERASE forgets it)\n", GAME_TITLE);
     if (unlockAll_) std::fprintf(f, "unlock\tall\n");
+    if (played_ > 0) std::fprintf(f, "played\t%lld\n", (long long)played_);
     if (reach_ > 0) std::fprintf(f, "reach\t%d\n", reach_ + 1);
     for (int s = 0; s < (int)stages_.size(); s++)
         for (int d = 0; d < DIFF_COUNT; d++) {
@@ -384,6 +401,7 @@ void Progress::reset() {
     stages_.clear();
     keep_.clear();
     unlockAll_ = false;
+    played_ = 0;
     reach_ = 0;
     std::error_code ec;
     fs::remove(path_, ec);

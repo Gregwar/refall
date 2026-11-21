@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <ctime>
 #include <map>
 #include <random>
 #include <string>
@@ -159,6 +160,7 @@ struct Worlds {
     void kalVoyages();
     void kalOptions();
     void kalGamepad();
+    void kalSlots();
     static constexpr float OPT_STEP = 90; // the options' panel: a row's step
     float optMid = 470; // its middle (from its height)
     void optionPanel(const char* title, int n);
@@ -183,6 +185,7 @@ void Worlds::draw() {
     else if (m.screen_ == Menu::VOYAGES) kalVoyages();
     else if (m.screen_ == Menu::OPTIONS) kalOptions();
     else if (m.screen_ == Menu::GAMEPAD) kalGamepad();
+    else if (m.screen_ == Menu::SLOTS) kalSlots();
     else kalCampaign();
 }
 
@@ -211,9 +214,9 @@ void Worlds::tabs(F f, Col ink, Col accent, float track) {
 
 void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track, float alpha) {
 #ifdef REFALL_WEB
-    static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE", "OPTIONS"};
+    static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE", "SAVE SLOTS", "OPTIONS"};
 #else
-    static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE", "FREE PLAY", "OPTIONS", "QUIT"};
+    static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE", "FREE PLAY", "SAVE SLOTS", "OPTIONS", "QUIT"};
 #endif
     const float cx = X(960);
     // the focused entry's inked edges (eased between entries): the underline spans them
@@ -381,7 +384,7 @@ void Worlds::kalBackground(const std::string& cur) {
     lvlNow += (lvl - lvlNow) * k;
     // its centre: the rosette's on Voyage, the title's disc, above the screen on free play and the voyages
     const bool title = m.screen_ == Menu::TITLE, head = m.screen_ == Menu::FREE || m.screen_ == Menu::VOYAGES || m.screen_ == Menu::OPTIONS ||
-                     m.screen_ == Menu::GAMEPAD;
+                     m.screen_ == Menu::GAMEPAD || m.screen_ == Menu::SLOTS;
     cxNow += ((title || head ? 960.f : 720.f) - cxNow) * k;
     cyNow += ((title ? TITLE_CY : head ? -80.f : 440.f) - cyNow) * k;
     satNow += (sat - satNow) * k;
@@ -395,6 +398,7 @@ void Worlds::kalBackground(const std::string& cur) {
     case Menu::FREE: camT[0] = -0.5f; camT[1] = 0.18f; break;
     case Menu::OPTIONS: camT[0] = -0.2f; camT[1] = 0.45f; break;
     case Menu::GAMEPAD: camT[0] = -0.05f; camT[1] = 0.7f; break;
+    case Menu::SLOTS: camT[0] = 0.2f; camT[1] = 0.6f; break;
     default: break;
     }
     const float kc = first ? 1.f : 1.f - std::exp(-dt / 0.45f);
@@ -953,32 +957,146 @@ bool Worlds::optionNote() {
     return true;
 }
 
-// The options: unlocking every stage (as --unlock), forgetting the saved data (as --reset), either asking "are you
-// sure?" first (YES / NO), and the gamepad's page.
+// The options: the gamepad's page, the menu's music and theme.
 void Worlds::kalOptions() {
     optionPanel("OPTIONS", Menu::OPTION_ITEMS);
     if (optionNote()) return;
-    if (!m.optConfirm_) {
-        const char* LABEL[Menu::OPTION_ITEMS] = {"UNLOCK STAGES", "RESET SAVED DATA", "GAMEPAD",
-                                                 m.music_ ? "MENU MUSIC: ON" : "MENU MUSIC: OFF",
-                                                 m.theme_ ? "MENU THEME: KALEIDOSCOPE" : "MENU THEME: SPACE"};
-        optionRows(Menu::OPTION_ITEMS, LABEL, m.aOpt_);
+    const char* LABEL[Menu::OPTION_ITEMS] = {"GAMEPAD", m.music_ ? "MENU MUSIC: ON" : "MENU MUSIC: OFF",
+                                             m.theme_ ? "MENU THEME: KALEIDOSCOPE" : "MENU THEME: SPACE"};
+    optionRows(Menu::OPTION_ITEMS, LABEL, m.aOpt_);
+}
+
+// The save slots: three glass cards side by side (the focused one lit, the one in use with a gold rim), each with what
+// its main voyage holds: a rosette (a kite per stage, the cleared ones lit), its songs beaten in %, its stages cleared,
+// UNLOCKED once UNLOCK ALL was used on it, its best scores summed and when it was last played. Under the focused card
+// (gliding along with the focus), a smaller glass box of what to do with it (use it, unlock every stage, erase it),
+// which also asks "are you sure?" and tells what was done.
+void Worlds::kalSlots() {
+    std::string cur, next;
+    float mix;
+    tourAt(11.f, cur, next, mix);
+    kalBackground(mix > 0.5f ? next : cur);
+    p.frostSource();
+    const char* title = "SAVE SLOTS";
+    const float tw = std::max(600.f * u, p.width(F::JOSEFIN_LIGHT, title, 72 * u, 0.22f) + 120 * u);
+    p.glass(X(960) - tw / 2, Y(90), tw, 130 * u, 24 * u, u, 0.f, 0.45f);
+    p.text(F::JOSEFIN_LIGHT, title, X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
+    constexpr float CW = 540, CH = 370, GAP = 36, TOP = 248;
+    const int n = SaveSlots::COUNT;
+    const float x0 = 960 - (n * CW + (n - 1) * GAP) / 2, w = CW * u, h = CH * u;
+    const int active = m.slots_ ? m.slots_->active() : 0;
+    const Col gold = hex(0xe8c06a);
+    // a line of text at `size`, smaller if it would be wider than `maxw`
+    auto fit = [&](F f, const std::string& s, float x, float y, float size, float maxw, Col c, int align, float track) {
+        const float wd = p.width(f, s, size, track);
+        p.text(f, s, x, y, wd > maxw ? size * maxw / wd : size, c, align, track);
+    };
+    for (int i = 0; i < n; i++) {
+        const SaveSlots::Summary sm = i < (int)m.slotSum_.size() ? m.slotSum_[i] : SaveSlots::Summary{};
+        const bool sel = i == m.slotSel_, inUse = i == active;
+        const float g = sel ? 1.f : 0.f;
+        const float x = X(x0 + i * (CW + GAP)), y = Y(TOP);
+        if (sel) {
+            p.setAdditive(true);
+            p.rrect(x - 6 * u, y - 6 * u, w + 12 * u, h + 12 * u, 26 * u, withA(inUse ? hex(0xffc860) : hex(0xffffff), 0.32f), 30 * u);
+            p.setAdditive(false);
+        }
+        p.glass(x, y, w, h, 20 * u, u, sel ? 0.35f : 0.f, 0.45f);
+        p.rrectLine(x, y, w, h, 20 * u, (inUse ? 2.6f : 1.4f) * u + 1.2f * g * u,
+                    sel ? hex(0xffffff, 0.95f) : inUse ? withA(gold, 0.6f) : hex(0xffffff, 0.25f));
+        p.setFade(sel ? 1.f : 0.7f); // the dull cards' contents dimmer
+        p.text(F::JOSEFIN, "SLOT " + std::to_string(i + 1), x + 34 * u, y + 64 * u, 32 * u, hex(0xffffff), -1, 0.35f);
+        if (inUse) p.text(F::JOSEFIN, "IN USE", x + w - 34 * u, y + 62 * u, 22 * u, sel ? hex(0xffffff) : gold, 1, 0.3f);
+        if (sm.empty) {
+            p.text(F::JOSEFIN_LIGHT, "EMPTY", x + w / 2, y + 222 * u, 72 * u, hex(0xffffff, 0.6f + 0.3f * g), 0, 0.12f);
+            p.text(F::JOSEFIN, "A NEW VOYAGE", x + w / 2, y + 276 * u, 24 * u, hex(0xffffff, 0.55f + 0.35f * g), 0, 0.25f);
+            p.setFade(1.f);
+            continue;
+        }
+        // the rosette: a kite per stage in the stages' hues, the cleared ones lit
+        const float mx = x + 122 * u, my = y + 196 * u, mr = 86 * u;
+        const int st = std::max(1, sm.stages);
+        for (int k = 0; k < st; k++) {
+            unsigned char sc[3];
+            m.stageColor(k, sc);
+            const Col c = rgb8(sc);
+            const Col lit = sel ? mixc(c, hex(0xffffff), 0.12f) : mixc(c, hex(0x6a6c78), 0.55f);
+            kite(mx, my, k * TAU / st, mr * 0.22f, mr, std::min(0.42f, 2.8f / st), k < sm.cleared ? lit : mixc(lit, hex(0x14141c), 0.8f),
+                 sel ? 1.f : 0.92f, true, hex(0x08080c, 0.9f));
+        }
+        p.circle(mx, my, mr * 0.22f, hex(0x0a0a12));
+        p.ring(mx, my, mr * 0.22f, 1.5f * u, sm.cleared >= st ? gold : hex(0xffffff, 0.6f));
+        // beside it: how far it went, its stages cleared, UNLOCKED
+        const float tx = mx + mr + 30 * u, tmax = x + w - 30 * u - tx;
+        const int pc = sm.percent();
+        p.text(F::JOSEFIN_LIGHT, std::to_string(pc) + "%", tx, y + 176 * u, 76 * u, pc > 0 ? hex(0xffd27a, 0.95f) : hex(0xffffff, 0.7f), -1, 0.02f);
+        char b[96];
+        std::snprintf(b, sizeof(b), "%d / %d STAGES", sm.cleared, sm.stages);
+        fit(F::JOSEFIN, b, tx, y + 216 * u, 24 * u, tmax, hex(0xffffff, 0.95f), -1, 0.15f);
+        if (sm.unlocked) { // UNLOCK ALL used on it: a gold tag, an open padlock in it
+            const float th = 38 * u, ts = 20 * u, tagw = p.width(F::JOSEFIN, "UNLOCKED", ts, 0.25f) + 66 * u;
+            const float gx = tx, gy = y + 236 * u;
+            p.rrect(gx, gy, tagw, th, th / 2, withA(gold, 0.16f));
+            p.rrectLine(gx, gy, tagw, th, th / 2, 1.4f * u, withA(gold, 0.85f));
+            padlock(gx + 24 * u, gy + th * 0.5f + 1 * u, 15 * u, 0.f, 1.f, gold);
+            p.text(F::JOSEFIN, "UNLOCKED", gx + 44 * u, gy + th * 0.5f + 7 * u, ts, hex(0xffe0a0), -1, 0.25f);
+        }
+        // along the bottom: its scores, when it was last played
+        const float by = y + h - 30 * u, half = w / 2 - 44 * u;
+        fit(F::JOSEFIN, text::thousands((int)std::min<int64_t>(sm.score, 2000000000)) + " POINTS", x + 34 * u, by, 22 * u, half,
+            hex(0xffffff, 0.9f), -1, 0.15f);
+        if (sm.played > 0) {
+            static const char* MON[12] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
+            const std::time_t tt = (std::time_t)sm.played;
+            if (const std::tm* lt = std::localtime(&tt)) {
+                std::snprintf(b, sizeof(b), "%d %s %d", lt->tm_mday, MON[lt->tm_mon % 12], lt->tm_year + 1900);
+                fit(F::JOSEFIN, b, x + w - 34 * u, by, 22 * u, half, hex(0xffffff, 0.7f), 1, 0.15f);
+            }
+        }
+        p.setFade(1.f);
+    }
+    // what to do with the focused slot: a box under its card, gliding along with the focus
+    constexpr float INSET = 24, STEP = 62, SIZE = 26, TRACK = 0.3f;
+    const float bx = X(x0 + m.aSlot_ * (CW + GAP) + INSET), bw = (CW - 2 * INSET) * u;
+    const float by0 = TOP + CH + 18, bh = Menu::SLOT_ACTIONS * STEP + 44;
+    const float cx = bx + bw / 2, mid = by0 + bh / 2;
+    p.glass(bx, Y(by0), bw, bh * u, 20 * u, u, 0.f, 0.55f);
+    p.rrectLine(bx, Y(by0), bw, bh * u, 20 * u, 1.4f * u, hex(0xffffff, 0.35f));
+    const float maxw = bw - 40 * u;
+    if (m.noteT_ > 0.f) { // a choice's "done", for a moment
+        const float a = std::min(1.f, m.noteT_ / 0.3f) * std::min(1.f, (Menu::NOTE_TIME - m.noteT_) / 0.2f + 0.2f);
+        fit(F::JOSEFIN, m.note_, cx, Y(mid + 10), SIZE * u, maxw, hex(0xffffff, a), 0, TRACK);
         return;
     }
-    // are you sure? then YES / NO, the answer underlined
-    const float track = 0.35f, size = 30;
-    optionLines({{m.optSel_ == 0 ? "UNLOCK STAGES?" : "RESET SAVED DATA?", 1.f}}, size);
-    const float y = optMid + OPT_STEP * 0.5f + 10;
-    const char* ANS[2] = {"NO", "YES"}; // (optYes_: 0 NO, 1 YES; YES on the left)
-    const float ax[2] = {1080, 840};
-    for (int i = 0; i < 2; i++)
-        p.text(F::JOSEFIN, ANS[i], X(ax[i]), Y(y), size * u, hex(0xffffff, 0.45f + 0.55f * near1(m.aYes_, i)), 0, track);
-    float l0, r0, l1, r1;
-    p.inkExtent(F::JOSEFIN, ANS[0], size * u, track, l0, r0);
-    p.inkExtent(F::JOSEFIN, ANS[1], size * u, track, l1, r1);
-    const float s0 = X(ax[0]) - p.width(F::JOSEFIN, ANS[0], size * u, track) * 0.5f, s1 = X(ax[1]) - p.width(F::JOSEFIN, ANS[1], size * u, track) * 0.5f;
-    const float k = std::clamp(m.aYes_, 0.f, 1.f);
-    p.line(s0 + l0 + (s1 + l1 - s0 - l0) * k, Y(y) + 14 * u, s0 + r0 + (s1 + r1 - s0 - r0) * k, Y(y) + 14 * u, 1.6f * u, hex(0xffffff, 0.9f));
+    const std::string name = "SLOT " + std::to_string(m.slotSel_ + 1);
+    if (m.slotConfirm_) { // are you sure? YES / NO, the answer underlined (YES on the left)
+        fit(F::JOSEFIN, m.slotRow_ == 1 ? "UNLOCK ALL OF " + name + "?" : "ERASE " + name + "?", cx, Y(mid - STEP * 0.5f + 10), SIZE * u,
+            maxw, hex(0xffffff), 0, TRACK);
+        const char* ANS[2] = {"NO", "YES"};
+        const float ax[2] = {cx + 90 * u, cx - 90 * u}, y = Y(mid + STEP * 0.5f + 10);
+        float l[2], r[2], s0[2];
+        for (int i = 0; i < 2; i++) {
+            p.text(F::JOSEFIN, ANS[i], ax[i], y, SIZE * u, hex(0xffffff, 0.45f + 0.55f * near1(m.aYes_, i)), 0, TRACK);
+            p.inkExtent(F::JOSEFIN, ANS[i], SIZE * u, TRACK, l[i], r[i]);
+            s0[i] = ax[i] - p.width(F::JOSEFIN, ANS[i], SIZE * u, TRACK) * 0.5f;
+        }
+        const float k = std::clamp(m.aYes_, 0.f, 1.f);
+        p.line(s0[0] + l[0] + (s0[1] + l[1] - s0[0] - l[0]) * k, y + 13 * u, s0[0] + r[0] + (s0[1] + r[1] - s0[0] - r[0]) * k, y + 13 * u,
+               1.6f * u, hex(0xffffff, 0.9f));
+        return;
+    }
+    const std::string label[Menu::SLOT_ACTIONS] = {"USE " + name, "UNLOCK ALL STAGES", "ERASE " + name};
+    const float y0 = mid - (Menu::SLOT_ACTIONS - 1) * STEP * 0.5f + 10;
+    float inkL = 0, inkR = 0;
+    for (int i = 0; i < Menu::SLOT_ACTIONS; i++) {
+        p.text(F::JOSEFIN, label[i], cx, Y(y0 + i * STEP), SIZE * u, hex(0xffffff, 0.45f + 0.55f * near1(m.aSlotRow_, i)), 0, TRACK);
+        float l, r;
+        p.inkExtent(F::JOSEFIN, label[i], SIZE * u, TRACK, l, r);
+        const float start = cx - p.width(F::JOSEFIN, label[i], SIZE * u, TRACK) * 0.5f;
+        inkL += near1(m.aSlotRow_, i) * (start + l);
+        inkR += near1(m.aSlotRow_, i) * (start + r);
+    }
+    p.line(inkL, Y(y0 + m.aSlotRow_ * STEP) + 13 * u, inkR, Y(y0 + m.aSlotRow_ * STEP) + 13 * u, 1.6f * u, hex(0xffffff, 0.9f));
 }
 
 // The gamepad: remapping it control by control, or its own mapping back; a remap asks for each control in the panel.

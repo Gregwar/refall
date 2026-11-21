@@ -1,6 +1,6 @@
 #pragma once
 // The menus, over a crystal kaleidoscope with frosted glass panels (menuwin.cpp): the title screen (VOYAGE, FREE
-// PLAY, QUIT), the voyages to choose from (the game's own, and those made from the player's YouTube playlists), free
+// PLAY, SAVE SLOTS, OPTIONS, QUIT), the save slots, the voyages to choose from (the game's own, and those made from the player's YouTube playlists), free
 // play's difficulty, playlist and starting level, and the campaign's stages (gem petals in a quiet rosette, opening
 // onto their songs), with an audio preview of the song under the cursor.
 #include <functional>
@@ -17,6 +17,7 @@
 #include "input.hpp"
 #include "menupaint.hpp"
 #include "playlists.hpp"
+#include "saveslots.hpp"
 #include "title.hpp"
 #include "voyages.hpp"
 
@@ -34,12 +35,13 @@ class Menu {
 public:
     // DEBRIEF: the end of a Voyage run (a game over or a stage cleared), before the Voyage's screen comes back.
     // VOYAGES: the voyages (the game's own first, then the player's) and the making of one from a playlist; the one
-    // chosen then shows as CAMPAIGN.
-    enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF, VOYAGES, OPTIONS, GAMEPAD };
+    // chosen then shows as CAMPAIGN. SLOTS: the save slots (saveslots.hpp), one to use, unlock or erase.
+    enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF, VOYAGES, OPTIONS, GAMEPAD, SLOTS };
     struct Choice {
-        // UNLOCK_ALL, RESET_ALL: the options' (as --unlock and --reset); PAD_REMAP, PAD_DEFAULT: the gamepad's (a remap
-        // started, its own mapping back); the menu stays
-        enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN, UNLOCK_ALL, RESET_ALL, PAD_REMAP, PAD_DEFAULT } kind = NONE;
+        // SLOT_USE, SLOT_UNLOCK, SLOT_ERASE: the save slots' (`slot` the one: put in use, every stage unlocked on it,
+        // forgotten); PAD_REMAP, PAD_DEFAULT: the gamepad's (a remap started, its own mapping back); the menu stays
+        enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN, SLOT_USE, SLOT_UNLOCK, SLOT_ERASE, PAD_REMAP, PAD_DEFAULT } kind = NONE;
+        int slot = 0;
         int difficulty = DIFF_HARD;
         int stage = 0, song = 0; // PLAY_CAMPAIGN: where the run starts
         bool stageRun = false;   // PLAY_CAMPAIGN: a run of the stage (from its first song, or RETRY SONG within one)
@@ -108,18 +110,21 @@ public:
     // Back to a saved place (the stage clamped to the last unlocked one); the difficulties only when `difficulties`.
     void restore(const Place& p, bool difficulties);
     // Everything as on the game's first launch: the title's first entry, the main voyage's first stage, the default
-    // difficulties and playlist (after a reset of the saved data).
+    // difficulties and playlist (another save slot put in use, or the one in use erased).
     void resetPlace();
     void setInput(const Input* in) { input_ = in; } // (the gamepad page shows its remap)
     bool music() const { return music_; } // the menu's music wanted (OPTIONS > MENU MUSIC)
     // An options page's "done", in its panel for a moment (instead of a message over the menu).
     void note(Screen s, const std::string& text) { screen_ = s; note_ = text; noteT_ = NOTE_TIME; }
-    // The opening (the game's first launch, or after --reset): on black, the title's disc and its name come up, the
+    // The opening (the game's first launch, or REFALL_MENU_INTRO=1): on black, the title's disc and its name come up, the
     // petals open round it, then the world and the menu; a key hurries it to its end.
     static constexpr float INTRO_END = 6.f;
     void startIntro() { introT_ = 0.f; }
     static bool loadPlace(const std::string& path, Place& p);
     static bool savePlace(const std::string& path, const Place& p);
+    // The save slots (the slots' screen shows what each holds, read again by slotsChanged()); the app's.
+    void setSlots(const SaveSlots* s) { slots_ = s; }
+    void slotsChanged();
     // Free play's playlists (the free screen picks one); the store is the app's.
     void setPlaylists(PlaylistStore* s) { playlists_ = s; }
     // The custom voyages; `open` makes the app's campaign and progress those of a voyage ("" the main one), false if
@@ -223,28 +228,34 @@ private:
     Screen screen_ = TITLE;
     int titleItem_ = 0, freeDiff_ = DIFF_HARD, diff_ = DIFF_NORMAL;
 #ifdef REFALL_WEB
-    static constexpr int TITLE_ITEMS = 2; // the web build: the campaign only
-    static constexpr int TI_VOYAGE = 0, TI_FREE = -1, TI_OPTIONS = 1, TI_QUIT = -1;
+    static constexpr int TITLE_ITEMS = 3; // the web build: the campaign only
+    static constexpr int TI_VOYAGE = 0, TI_FREE = -1, TI_SLOTS = 1, TI_OPTIONS = 2, TI_QUIT = -1;
 #else
-    static constexpr int TITLE_ITEMS = 4;
-    static constexpr int TI_VOYAGE = 0, TI_FREE = 1, TI_OPTIONS = 2, TI_QUIT = 3;
+    static constexpr int TITLE_ITEMS = 5;
+    static constexpr int TI_VOYAGE = 0, TI_FREE = 1, TI_SLOTS = 2, TI_OPTIONS = 3, TI_QUIT = 4;
 #endif
-    // the options: 0 unlock every stage, 1 reset the saved data (either asks "are you sure?" first: YES / NO, NO
-    // focused), 2 the gamepad's page, 3 the menu's music on or off, 4 its theme (space or the kaleidoscope; both kept
-    // with the menu's place)
-    static constexpr int OPTION_ITEMS = 5;
+    // the options: 0 the gamepad's page, 1 the menu's music on or off, 2 its theme (space or the kaleidoscope; both
+    // kept with the menu's place, the same on every save slot)
+    static constexpr int OPTION_ITEMS = 3;
     bool music_ = true;
     int theme_ = 0;
     int optSel_ = 0, optYes_ = 0;
     float aOpt_ = 0, aYes_ = 0;
-    bool optConfirm_ = false;
+    // the save slots: a card each (left / right), under them what to do with the focused one: 0 use it, 1 unlock
+    // every stage, 2 erase it (either asks "are you sure?" first: YES / NO, NO focused)
+    static constexpr int SLOT_ACTIONS = 3;
+    const SaveSlots* slots_ = nullptr;
+    std::vector<SaveSlots::Summary> slotSum_;
+    int slotSel_ = 0, slotRow_ = 0;
+    float aSlot_ = 0, aSlotRow_ = 0;
+    bool slotConfirm_ = false;
     // the gamepad's page: 0 remap it control by control, 1 its default mapping back; while a remap runs (`input_`
     // tells), the control asked for
     static constexpr int PAD_ITEMS = 2;
     int padSel_ = 0;
     float aPad_ = 0;
     const Input* input_ = nullptr;
-    // a choice's "done" (STAGES UNLOCKED, GAMEPAD REMAPPED...), told in the options' panel for a moment
+    // a choice's "done" (SLOT 2 ERASED, GAMEPAD REMAPPED...), told in the options' (or the slots') panel for a moment
     static constexpr float NOTE_TIME = 2.2f;
     std::string note_;
     float noteT_ = 0;

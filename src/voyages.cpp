@@ -183,7 +183,10 @@ const CustomVoyage* VoyageStore::find(const std::string& id) const {
 }
 
 std::string VoyageStore::campaignPath(const std::string& id) const { return (fs::path(dir_) / (id + ".tsv")).string(); }
-std::string VoyageStore::progressPath(const std::string& id) const { return (fs::path(dir_) / (id + "-progress.tsv")).string(); }
+std::string VoyageStore::progressPath(const std::string& id) const {
+    const std::string d = progActive_ < (int)progDirs_.size() ? progDirs_[progActive_] : dir_;
+    return (fs::path(d) / (id + "-progress.tsv")).string();
+}
 
 std::string VoyageStore::create(const std::string& title, const std::string& url, const std::vector<std::string>& entries,
                                 uint64_t seed, std::string* err) {
@@ -224,6 +227,7 @@ void VoyageStore::remove(const std::string& id) {
     std::error_code ec;
     fs::remove(campaignPath(id), ec);
     fs::remove(progressPath(id), ec);
+    for (const std::string& d : progDirs_) fs::remove(fs::path(d) / (id + "-progress.tsv"), ec);
     save();
 }
 
