@@ -336,10 +336,15 @@ uniform float uTheme; // 0 space, 1 the crystal kaleidoscope
 uniform int uSeg;
 uniform vec3 uTint;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+// (the corners stepped in integers: a phone's compiler (fast math) turns h21(i + vec2(1, 0)) into fract(i * K + K),
+// a rounding off h21(i') one cell over, which the hash blows up into another value: two cells then disagree on the
+// corner they share and the nebula breaks into two different skies along a line. ivec2 steps are exact, and the same
+// floats as before.)
 float vn(vec2 p) {
     vec2 i = floor(p), f = fract(p);
     vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(h21(i), h21(i + vec2(1, 0)), u.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), u.x), u.y);
+    ivec2 c = ivec2(i);
+    return mix(mix(h21(vec2(c)), h21(vec2(c + ivec2(1, 0))), u.x), mix(h21(vec2(c + ivec2(0, 1))), h21(vec2(c + ivec2(1, 1))), u.x), u.y);
 }
 // a procedural pane of glass in the tint's hue, its neighbours and light streaks; each seed its own pattern (where in
 // the noise, its scale and its turn)
@@ -468,8 +473,7 @@ void main() {
         float rg = 0.0; amp = 0.55; frq = 3.0;
         for (int i = 0; i < 4; i++) { float n = vn(ww * frq + 3.3); rg += amp * pow(max(1.0 - abs(2.0 * n - 1.0), 0.0), 3.0); frq *= 2.1; amp *= 0.5; }
         // where the clouds are: a broad sweep across from the lower left to the upper right, thicker at both ends
-        // (squared by hand: pow() of a negative base is undefined, NaN on WebGL and phones, the nebula then cut in
-        // hard-edged sheets)
+        // (squared by hand: pow() of a negative base is undefined, NaN on some GPUs)
         float bd = (sp.y - (0.62 - 0.32 * sp.x / asp + 0.08 * sin(sp.x * 2.3 + seedOff))) / 0.33;
         float band = exp(-bd * bd);
         float leftC = exp(-dot((sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42), (sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42)));
