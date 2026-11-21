@@ -982,12 +982,16 @@ void Worlds::kalSlots() {
     const int n = SaveSlots::COUNT;
     const float x0 = 960 - (n * CW + (n - 1) * GAP) / 2;
     const float by0 = TOP + CH + 18, bh = Menu::SLOT_ACTIONS * STEP + 44;
-    // portrait: the title, the three cards one under the other, then the focused card's box, down the column
+    // portrait: the title, then the three cards one under the other, the focused card's box right under it
     const bool pt = m.portrait_;
+    const int psel = std::clamp(m.slotSel_, 0, n - 1);
+    auto cardBlock = [&](int i) { return PBlock{x0 + i * (CW + GAP), TOP, CW, CH, 1.7f}; };
+    auto pCard = [&](int i) { return i <= psel ? 1 + i : 2 + i; }; // (its place in the column)
     if (pt) {
-        const float bxl = x0 + m.aSlot_ * (CW + GAP) + INSET;
-        pLayout({{610, 90, 700, 130, 1.4f}, {x0, TOP, CW, CH, 1.7f}, {x0 + CW + GAP, TOP, CW, CH, 1.7f},
-                 {x0 + 2 * (CW + GAP), TOP, CW, CH, 1.7f}, {bxl, by0, CW - 2 * INSET, bh, 1.7f}}, 22);
+        const PBlock title{610, 90, 700, 130, 1.4f}, box{x0 + psel * (CW + GAP) + INSET, by0, CW - 2 * INSET, bh, 1.7f};
+        if (psel == 0) pLayout({title, cardBlock(0), box, cardBlock(1), cardBlock(2)}, 22);
+        else if (psel == 1) pLayout({title, cardBlock(0), cardBlock(1), box, cardBlock(2)}, 22);
+        else pLayout({title, cardBlock(0), cardBlock(1), cardBlock(2), box}, 22);
         pAt(0);
     }
     const char* title = "SAVE SLOTS";
@@ -1005,7 +1009,7 @@ void Worlds::kalSlots() {
         const SaveSlots::Summary sm = i < (int)m.slotSum_.size() ? m.slotSum_[i] : SaveSlots::Summary{};
         const bool sel = i == m.slotSel_, inUse = i == active;
         const float g = sel ? 1.f : 0.f;
-        if (pt) pAt(1 + i);
+        if (pt) pAt(pCard(i));
         const float w = CW * u, h = CH * u;
         const float x = X(x0 + i * (CW + GAP)), y = Y(TOP);
         if (sel) {
@@ -1068,8 +1072,8 @@ void Worlds::kalSlots() {
         p.setFade(1.f);
     }
     // what to do with the focused slot: a box under its card, gliding along with the focus
-    if (pt) pAt(4);
-    const float bx = X(x0 + m.aSlot_ * (CW + GAP) + INSET), bw = (CW - 2 * INSET) * u;
+    if (pt) pAt(2 + psel);
+    const float bx = X(x0 + (pt ? (float)psel : m.aSlot_) * (CW + GAP) + INSET), bw = (CW - 2 * INSET) * u;
     const float cx = bx + bw / 2, mid = by0 + bh / 2;
     p.glass(bx, Y(by0), bw, bh * u, 20 * u, u, 0.f, 0.55f);
     p.rrectLine(bx, Y(by0), bw, bh * u, 20 * u, 1.4f * u, hex(0xffffff, 0.35f));
