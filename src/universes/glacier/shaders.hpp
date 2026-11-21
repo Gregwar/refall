@@ -1,9 +1,9 @@
 #pragma once
-// GLACIER's shaders: the ice cave (arches of translucent ice receding to a bright opening, icicles, a snowy floor,
-// ice chunks in the foreground, light shafts, the drop's light from within the ice), the water that fills the cave
-// (its body mirroring the ice, its rippled surface), the glass case of the well and the frosted frames of the
-// previews, the ice cubes, the particles, and the post (the water in front: what is under it looks submerged, its
-// surface a thin bright line across the whole screen).
+// GLACIER's shaders: the ice cave (arches of sculpted translucent ice receding to a bright tunnel, icicles, a snowy
+// mound, ice chunks in the foreground, light shafts, the drop's sun bursting from the tunnel), the water that fills the
+// cave (its body mirroring the ice, its rippled surface), the frosted ice case of the well and the frosted panels of
+// the previews, the ice cubes, the particles, and the post (the water in front: what is under it looks submerged, its
+// surface a thin bright line across the whole screen; the sun's lens glow).
 
 namespace glacier_shaders {
 
@@ -67,7 +67,8 @@ float surf(float x) {
 // Front to back: the near arch (the screen's sides and top, its icicles hanging across the top), the middle arch,
 // the floor, the far arch, and the opening, bright, behind the well. Each wall is translucent ice: deep where it is
 // thick, glowing at its thin edges where the light from the opening comes through, draped in long vertical folds,
-// frosted on the faces turned up. Light shafts fan down from the opening; the drop lights the ice from within.
+// frosted on the faces turned up. Light shafts fan down from the opening; in the drop a sun bursts from it, its warm
+// rays turning round it, the ice near it turned gold.
 inline const char* CAVE_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
@@ -75,12 +76,16 @@ uniform vec2 uViewC, uViewH;
 uniform float uTime, uBreath, uDrop, uShaft, uSlow, uAurora, uNight, uGlint, uWorldA, uPx;
 uniform vec4 uReveal; // the light reached: the opening, the far arch, the middle one, the near one
 uniform vec3 uDeep, uEdge, uFar, uOpen, uFloor, uShaftC, uGlowA, uGlowB, uBridgeCol;
-uniform float uWarm;   // the drop's low sun: warm rays through the cave (0 none)
-uniform vec3 uWarmC;
+uniform float uWarm;   // the drop's sun bursting from the opening (0 none)
+uniform vec3 uSunC;
+uniform vec2 uSunP;    // where it bursts (just past the well's left edge, in the opening)
 uniform vec4 uColL, uColR;
 uniform int uSamples;
 
-const vec2 O = vec2(0.0, 4.0); // the opening's heart
+const vec2 O = vec2(0.0, 3.0); // the opening's heart
+
+// how much of the drop's sun reaches p: near the opening, the outer cave stays cold
+float sunNear(vec2 p) { return uWarm * exp(-length((p - vec2(0.5 * uSunP.x, uSunP.y)) * vec2(0.6, 1.0)) * 0.085); }
 
 float archD(vec2 p, vec2 ab, float yc, float seed, float rough) {
     float d;
@@ -105,7 +110,7 @@ vec3 icicle(vec2 p, float d, float w, float L, float seed, float top) {
         float x = p.x / ww + float(k) * 0.37;
         float c = floor(x), fx = fract(x) - 0.5;
         float h = hash(vec2(c, seed + float(k) * 7.1));
-        float keep = step(k == 0 ? 0.45 : 0.25, hash(vec2(c + 3.7, seed + float(k))));
+        float keep = step(k == 0 ? 0.3 : 0.2, hash(vec2(c + 3.7, seed + float(k))));
         float len = (k == 0 ? L : L * 0.45) * (0.25 + 0.75 * h * h * h) * top * keep;
         float t = -d;
         if (t > len) continue;
@@ -139,21 +144,21 @@ vec3 innerGlow(vec2 p, float thick, float k) {
     return gc * amt * ((vein * 0.6 + vein2 * 0.25) * (0.15 + 0.85 * patch) + body * 0.75 * (0.45 + 0.55 * patch));
 }
 
-// A wall of the cave: translucent ice in great bulging masses, its face dimpled with the scallops of melting ice
-// (each a shallow bowl: a crescent of light on its far side, a fine bright ridge between them), deep where it is
-// thick, the light of the opening coming through where it is thin.
+// A wall of the cave: sculpted translucent ice in great bulging masses, its face cut into the shallow facets of
+// melting ice (a honeycomb of bowls: a glossy crescent of light on each, a fine bright ridge between them), deep and
+// dark where it is thick, the light of the opening coming through its thin rims; glassy at the grazing angles.
 vec3 iceWall(vec2 p, float d, float k, float seed) {
     vec2 q = p + vec2(seed * 17.3, seed * 5.1);
     float thick = 1.0 - exp(-max(d, 0.0) * (0.3 + 0.25 * k));
     // the big forms
     float sc = 0.2 + 0.07 * k;
     float h0 = fbm3(q * sc), hx = fbm3(q * sc + vec2(0.12, 0.0)), hy = fbm3(q * sc + vec2(0.0, 0.12));
-    vec2 gBig = vec2(h0 - hx, h0 - hy) * 9.0;
+    vec2 gBig = vec2(h0 - hx, h0 - hy) * 11.0;
     // long vertical folds
     float fold = fbm3(vec2(q.x * 0.7, q.y * 0.12));
-    gBig.x += (fold - 0.5) * 1.6;
-    // the scallops
-    vec2 sp = q * (1.25 + 0.6 * k) * vec2(1.0, 0.7);
+    gBig.x += (fold - 0.5) * 1.8;
+    // the facets
+    vec2 sp = q * (0.8 + 0.45 * k) * vec2(1.0, 0.8);
     vec2 ip = floor(sp), fp = fract(sp);
     float d1 = 8.0, d2 = 8.0;
     vec2 rel = vec2(0.0);
@@ -165,38 +170,57 @@ vec3 iceWall(vec2 p, float d, float k, float seed) {
             if (dd < d1) { d2 = d1; d1 = dd; rel = o; } else if (dd < d2) d2 = dd;
         }
     float edge = sqrt(d2) - sqrt(d1);
-    vec3 n = normalize(vec3(gBig + rel * 0.85 * vec2(1.0, 0.7) * smoothstep(0.0, 0.3, edge), 1.0));
+    vec3 n = normalize(vec3(gBig + rel * 1.15 * vec2(1.0, 0.8) * smoothstep(0.0, 0.32, edge), 1.0));
     vec3 L = normalize(vec3(O - p, 5.0));
     float lam = max(dot(n, L), 0.0);
-    float spec = pow(max(dot(reflect(-L, n), vec3(0.0, 0.0, 1.0)), 0.0), 18.0);
+    float rv = max(dot(reflect(-L, n), vec3(0.0, 0.0, 1.0)), 0.0);
+    float spec = pow(rv, 28.0), sheen = pow(rv, 6.0);
+    float fres = sq(1.0 - n.z);
     // brighter toward the opening, darker toward the frame's edges
-    float near = exp(-length((p - O) * vec2(0.8, 1.0)) * (0.07 - 0.015 * k));
+    float near = exp(-length((p - O) * vec2(0.8, 1.0)) * (0.075 - 0.015 * k));
+    float sun = sunNear(p);
+    vec3 lc = mix(uOpen, uSunC * 1.7, sun);
     vec3 base = mix(uEdge, uDeep, thick);
-    vec3 c = base * (0.18 + 1.1 * lam) * (0.42 + 0.85 * near);
-    c += uOpen * spec * 0.22 * (0.4 + near);
-    c += mix(uEdge, uOpen, 0.5) * (1.0 - smoothstep(0.0, 0.05, edge)) * 0.05 * (0.5 + near);
-    // the light through the thin edge (uneven)
-    float thin = exp(-max(d, 0.0) * 1.4) * (0.45 + 0.9 * vnoise(q * 0.9));
-    c += mix(uEdge, uOpen, 0.4) * thin * 0.38;
+    vec3 c = base * (0.12 + 1.05 * lam) * (0.36 + 0.9 * near);
+    c += lc * (spec * 0.5 + sheen * 0.07) * (0.35 + near);
+    c += mix(uEdge, lc, 0.6) * (1.0 - smoothstep(0.0, 0.05, edge)) * 0.05 * (0.45 + near);
+    c += uEdge * fres * 0.6 * (0.4 + 0.6 * near);
+    // the light through the thin rim (uneven)
+    float thin = exp(-max(d, 0.0) * 1.3) * (0.5 + 0.8 * vnoise(q * 0.9));
+    c += mix(uEdge, lc, 0.55) * thin * 0.5;
     // frost, glints
     float fr = smoothstep(0.62, 0.92, vnoise(q * 4.5)) * smoothstep(-0.2, 0.5, n.y);
-    c += uOpen * fr * 0.07;
+    c += uOpen * fr * 0.08;
     float gl = smoothstep(0.985, 1.0, hash(floor(q * 6.0))) * (0.5 + 0.5 * sin(uTime * 2.0 + hash(floor(q * 6.0) + 3.0) * 40.0)) *
                smoothstep(0.3, 0.0, length(fract(q * 6.0) - 0.5));
-    c += uOpen * gl * (0.12 + 0.6 * uGlint) * (1.0 - thick * 0.5);
+    c += lc * gl * (0.12 + 0.6 * uGlint) * (1.0 - thick * 0.5);
+    // the great masses: deep creases between the bulges
+    c *= 0.62 + 0.6 * smoothstep(0.25, 0.75, h0);
     c *= uBreath;
-    c += innerGlow(p, thick, k) * uDrop * (0.8 - 0.12 * k) * (0.5 + 0.7 * lam) * (0.45 + 0.9 * near);
+    // the drop's sun: the ice near the opening turned gold, warm reflections on the faces turned to it, its fire in
+    // the thin rims
+    c = mix(c, uSunC * dot(c, vec3(0.2126, 0.7152, 0.0722)) * 1.7, 0.65 * sun);
+    c += uSunC * sun * (0.3 * lam + 1.0 * thin + 1.1 * spec + 0.3 * sheen);
+    c += innerGlow(p, thick, k) * uDrop * (0.45 - 0.08 * k) * (0.5 + 0.7 * lam) * (0.45 + 0.9 * near);
     // the haze of the cave's depth
     return mix(c, uFar * (0.7 + 0.3 * uBreath), 0.03 + 0.14 * k);
 }
 
-vec3 icicleCol(vec3 ic, float k) {
+// an icicle: clear glassy ice, bright refracting edges on both sides, a dark core line, a bright tip; the drop's sun
+// catches the ones near the opening
+vec3 icicleCol(vec3 ic, vec2 p, float k) {
     float across = ic.y, along = ic.z;
-    vec3 c = mix(uDeep, uEdge, 0.45 + 0.4 * along) * (0.55 + 0.45 * (0.5 - 0.5 * across));
-    c += uOpen * exp(-sq((across + 0.45) / 0.18)) * 0.4;
-    c += uOpen * pow(along, 5.0) * 0.4;
+    float sun = sunNear(p);
+    vec3 lc = mix(uOpen, uSunC * 1.7, sun);
+    vec3 c = mix(uDeep, uEdge, 0.35 + 0.45 * along) * (0.5 + 0.5 * (0.5 - 0.5 * across));
+    c *= 0.75 + 0.25 * smoothstep(0.0, 0.25, abs(across + 0.1));
+    c += lc * exp(-sq((across + 0.55) / 0.16)) * 0.55;
+    c += mix(uEdge, lc, 0.5) * exp(-sq((across - 0.75) / 0.14)) * 0.25;
+    c += lc * pow(along, 5.0) * 0.45;
     c *= uBreath;
-    c += innerGlow(vec2(across, along * 3.0), 0.2, k) * uDrop * 0.4;
+    c = mix(c, uSunC * dot(c, vec3(0.2126, 0.7152, 0.0722)) * 1.7, 0.6 * sun);
+    c += uSunC * sun * (0.3 + 0.5 * exp(-sq((across + 0.5) / 0.3)));
+    c += innerGlow(vec2(across, along * 3.0), 0.2, k) * uDrop * 0.25;
     return mix(c, uFar, 0.05 + 0.2 * k);
 }
 
@@ -224,14 +248,14 @@ vec4 caveAt(vec2 p, out float nearMask, out float edge) {
     float reveal;
     nearMask = 0.0;
     float d0 = archD(p, vec2(17.2, 11.4), 0.0, 0.0, 3.4);
-    vec3 i0 = icicle(p, d0, 1.0, 4.2, 1.0, smoothstep(2.0, 8.0, p.y));
+    vec3 i0 = icicle(p, d0, 0.8, 3.8, 1.0, smoothstep(2.0, 8.0, p.y));
     edge = min(abs(d0), i0.x > -0.5 ? abs(i0.x) : 1e3);
     if (d0 > 0.0) {
         col = iceWall(p, d0, 0.0, 0.0);
         reveal = uReveal.w;
         nearMask = 1.0;
     } else if (i0.x > 0.0) {
-        col = icicleCol(i0, 0.0);
+        col = icicleCol(i0, p, 0.0);
         reveal = uReveal.w;
         nearMask = 1.0;
     } else {
@@ -242,7 +266,7 @@ vec4 caveAt(vec2 p, out float nearMask, out float edge) {
         float floorTop = -6.6 - 0.025 * p.x * p.x + (fbm3(vec2(p.x * 0.22, 3.0)) - 0.5) * 1.2;
         edge = min(edge, min(abs(d1), i1.x > -0.5 ? abs(i1.x) * 0.7 : 1e3));
         if (d1 > 0.0 || i1.x > 0.0) {
-            col = d1 > 0.0 ? iceWall(p, d1, 1.0, 5.3) : icicleCol(i1, 1.0);
+            col = d1 > 0.0 ? iceWall(p, d1, 1.0, 5.3) : icicleCol(i1, p, 1.0);
             reveal = uReveal.z;
             nearMask = 0.6;
         } else {
@@ -250,21 +274,26 @@ vec4 caveAt(vec2 p, out float nearMask, out float edge) {
             edge = min(edge, abs(p.y - floorTop));
             if (p.y < floorTop) {
                 float far = smoothstep(-11.5, -6.0, p.y);
-                col = uFloor * (0.32 + 0.5 * far) * uBreath;
-                col *= 0.82 + 0.18 * fbm3(vec2(p.x * 0.5, p.y * 2.4));
-                col += uFloor * smoothstep(0.55, 0.85, vnoise(vec2(p.x * 1.4, p.y * 5.0))) * 0.1;
-                col += uOpen * exp(-(floorTop - p.y) * 3.0) * 0.15;
+                // snow: soft drifts, lit from the opening, sparkling
+                float dr = fbm3(vec2(p.x * 0.5, p.y * 2.4));
+                float lift = exp(-abs(p.x) * 0.12);
+                col = uFloor * (0.3 + 0.45 * far + 0.25 * lift) * (0.78 + 0.3 * dr) * uBreath;
+                col += uFloor * smoothstep(0.55, 0.85, vnoise(vec2(p.x * 1.4, p.y * 5.0))) * 0.12;
+                col += uOpen * exp(-(floorTop - p.y) * 3.0) * 0.2;
+                float spk = smoothstep(0.93, 1.0, hash(floor(p * 9.0)));
+                col += uOpen * spk * (0.25 + 0.25 * sin(uTime * 3.0 + hash(floor(p * 9.0) + 1.3) * 30.0)) * (0.4 + far);
+                col += uSunC * sunNear(p) * 0.5 * (0.6 + 0.4 * dr);
                 col += mix(uFar, uOpen, 0.5) * exp(-abs(p.x) * 0.25) * far * 0.35;
                 col = mix(col, uFar, far * 0.3);
                 col += innerGlow(p, 0.8, 1.0) * uDrop * 0.2;
                 reveal = uReveal.y;
             } else {
-                float d2 = archD(p, vec2(8.2, 7.4), 0.5, 11.7, 1.8);
+                float d2 = archD(p, vec2(9.4, 8.0), 0.5, 11.7, 1.8);
                 vec3 i2 = icicle(p, d2, 0.45, 1.8, 3.0, smoothstep(1.0, 6.0, p.y));
                 edge = min(edge, min(abs(d2), i2.x > -0.5 ? abs(i2.x) * 0.45 : 1e3));
-                float d3 = d2 > 0.0 || i2.x > 0.0 ? -1.0 : archD(p, vec2(4.8, 5.4), 1.5, 21.3, 1.3);
+                float d3 = d2 > 0.0 || i2.x > 0.0 ? -1.0 : archD(p, vec2(6.8, 6.2), 1.0, 21.3, 1.3);
                 if (d2 > 0.0 || i2.x > 0.0) {
-                    col = d2 > 0.0 ? iceWall(p, d2, 2.0, 11.7) : icicleCol(i2, 2.0);
+                    col = d2 > 0.0 ? iceWall(p, d2, 2.0, 11.7) : icicleCol(i2, p, 2.0);
                     reveal = uReveal.y;
                 } else if (d3 > 0.0) {
                     // the far end of the cave, in its haze
@@ -272,16 +301,20 @@ vec4 caveAt(vec2 p, out float nearMask, out float edge) {
                     col = iceWall(p, d3, 3.0, 21.3) * (1.0 - exp(d2 * 1.2) * 0.25);
                     reveal = uReveal.x;
                 } else {
-                    // the opening: the light at the end of the cave
+)"
+R"(                    // the opening: the light at the end of the cave
                     edge = min(edge, -d3);
                     float sh2 = exp(d2 * 1.2) * 0.25;
                     float r = length((p - O) * vec2(0.55, 1.0));
-                    col = mix(uFar, uOpen, exp(-r * 0.3));
-                    col += uOpen * exp(-r * 0.7) * 0.5;
+                    col = mix(uFar, uOpen, exp(-r * 0.22));
+                    col += uOpen * exp(-r * 0.45) * 0.7;
                     col *= 0.88 + 0.12 * fbm3(vec2(p.x * 0.45, p.y * 0.09));
+                    col += uOpen * exp(-r * 0.25) * 0.35 * (0.7 + 0.3 * fbm3(vec2(p.x * 0.3 - uTime * 0.03, p.y * 0.5)));
                     col *= 1.0 - sh2;
                     col *= mix(1.0, uBreath, 0.5);
-                    col += mix(uGlowA, uOpen, 0.3) * uDrop * exp(-r * 0.18) * 1.1;
+                    float rs = length((p - uSunP) * vec2(0.8, 1.0));
+                    col = mix(col, uSunC * 1.7 * (0.55 + 0.45 * exp(-rs * 0.15)), uWarm * exp(-r * 0.07) * 0.9);
+                    col += uSunC * uWarm * (exp(-rs * 0.35) * 1.5 + exp(-rs * 1.2) * 2.5);
                     reveal = uReveal.x;
                 }
                 col *= 1.0 - sh1;
@@ -328,17 +361,20 @@ void main() {
         float ang = atan(v.x, -v.y), rr = length(v);
         float n = vnoise(vec2(ang * 15.0, uTime * 0.05)) * 0.65 + vnoise(vec2(ang * 37.0, uTime * 0.08 + 5.0)) * 0.35;
         float sh = smoothstep(0.45, 0.95, n) * exp(-rr * 0.045) * smoothstep(3.0, 9.0, rr);
-        col += uShaftC * sh * uShaft * (1.0 - 0.65 * nearMask);
-        // the drop: a low sun's warm rays, wider and slower, across the ice they cross (the rest of the cave stays
-        // cold): the ice in them turned orange-red, a warm haze along them
+        // (none behind the well: seen through its glass, a shaft would read as a trail under the piece)
+        float behindWell = 1.0 - smoothstep(-0.5, 1.0, rbox(p, vec2(5.3, 10.3), 0.3));
+        col += uShaftC * sh * uShaft * (1.0 - 0.65 * nearMask) * (1.0 - behindWell);
+        // the drop: the sun bursting from the opening, its warm rays turning slowly round it (about 9 degrees a
+        // second) across the ice they cross, a warm haze near it; the outer cave stays cold
         if (uWarm > 0.002) {
-            // (the rays turn round the opening, about 9 degrees a second)
-            float aw = ang + uTime * 0.16;
-            float nw = vnoise(vec2(aw * 7.0, uTime * 0.03 + 11.0)) * 0.7 + vnoise(vec2(aw * 19.0, uTime * 0.05 + 3.0)) * 0.3;
-            float ray = smoothstep(0.42, 0.85, nw) * exp(-rr * 0.03) * smoothstep(2.0, 7.0, rr) * uWarm;
+            vec2 vs = p - uSunP;
+            float as = atan(vs.x, -vs.y) + uTime * 0.16, rs = length(vs);
+            float nw = vnoise(vec2(as * 7.0, uTime * 0.03 + 11.0)) * 0.7 + vnoise(vec2(as * 19.0, uTime * 0.05 + 3.0)) * 0.3;
+            float ray = smoothstep(0.42, 0.85, nw) * exp(-rs * 0.075) * smoothstep(0.5, 3.0, rs) * uWarm;
             float lc = dot(col, vec3(0.2126, 0.7152, 0.0722));
-            col = mix(col, uWarmC * lc * 1.6, 0.75 * ray);
-            col += uWarmC * ray * 0.18 * (1.0 - 0.5 * nearMask);
+            col = mix(col, uSunC * lc * 1.5, 0.55 * ray);
+            col += uSunC * ray * 0.3 * (1.0 - 0.4 * nearMask);
+            col += uSunC * uWarm * exp(-rs * 0.16) * 0.35;
         }
     }
     // the HUD's columns: the ice a little quieter and deeper behind them
@@ -425,8 +461,9 @@ void main() {
 )";
 
 // ------------------------------------------------------------------------------------------------ the case
-// The well: a clear glass case, a dark blue back with a fine grid of the cells, a thick bevelled glass rim with a
-// sheen down its top left; the previews in frosted ice frames (the cave blurred through them, frost at the rims).
+// The well: a case of frosted ice, a back of dark smoked glass with a fine grid of the cells and rime creeping in from
+// the edges, a thick white rim of frosted ice bright at its bevels; the previews on frosted ice panels (the cave
+// blurred through them, rime at the rims).
 inline const char* CASE_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
@@ -440,37 +477,44 @@ void main() {
     vec4 o = vec4(0.0);
     // the well
     float dw = rbox(p, vec2(5.0, 10.0), 0.02);
-    float dr = rbox(p, vec2(5.32, 10.3), 0.3);
+    float dr = rbox(p, vec2(5.36, 10.34), 0.3);
+    float fr = vnoise(p * 9.0) * 0.6 + vnoise(p * 23.0) * 0.4;
     if (dr < uPx * 2.0) {
         float aRim = 1.0 - smoothstep(-uPx, uPx, dr);
         if (dw < 0.0) {
-            // the back: dark blue, a fine grid, a soft sheen at the top
-            vec3 c = uWell * (0.8 + 0.35 * smoothstep(-10.0, 10.0, p.y));
+            // the back: dark smoked glass (the cave dim through it), a fine grid, frost creeping in from the rim
+            vec3 behind = textureLod(uCave, vUv, 3.5).rgb * mix(vec3(1.0), uFrame, 0.5);
+            vec3 c = uWell * (0.8 + 0.35 * smoothstep(-10.0, 10.0, p.y)) + behind * 0.035;
             vec2 g = abs(fract(p + 0.5) - 0.5);
             float line = 1.0 - smoothstep(uPx * 0.4, uPx * 1.4, min(g.x, g.y));
-            c += uGrid * line * 0.22;
-            c += uEdge * exp(-(-dw) * 2.5) * 0.08;
+            c += uGrid * line * 0.3;
+            float e = -dw;
+            float grain = vnoise(p * 41.0) * 0.5 + vnoise(p * 13.0) * 0.5;
+            float frost = exp(-e / 0.22) * smoothstep(0.45, 0.75, grain + 0.4 * exp(-e / 0.08));
+            c = mix(c, uFrame * 0.85, frost * 0.65);
+            c += uEdge * exp(-e * 2.5) * 0.06;
             // the glass in front: a long diagonal reflection
             float sheen = exp(-sq((p.x + p.y * 0.35 - 1.2) / 0.9)) * smoothstep(-6.0, 8.0, p.y) * 0.05;
             c += vec3(sheen);
-            float a = 0.96;
+            float a = 0.94;
             o = vec4(c * a, a);
         } else {
-            // the rim: thick clear glass, bright at its bevels
+            // the rim: thick frosted ice, white with rime, bright at its bevels
             float e = -dr;
-            vec3 base = textureLod(uCave, vUv, 2.5).rgb;
-            vec3 c = mix(base * 0.7, uFrame, 0.22);
-            float bev = exp(-e / (uPx * 1.5)) + exp(-abs(dw) / (uPx * 1.5)) * 0.8;
+            vec3 base = textureLod(uCave, vUv, 3.0).rgb;
+            vec3 c = mix(base * 0.8, uFrame, 0.32 + 0.2 * fr);
+            float bev = exp(-e / (uPx * 1.5)) + exp(-abs(dw) / (uPx * 1.5)) * 0.9;
             vec2 ax = abs(p) - vec2(5.0, 10.0);
             vec2 side = ax.x > ax.y ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y));
-            float lit = 0.6 + 0.4 * dot(vec2(-0.6, 0.8), side);
-            c += uFrame * bev * 0.55 * lit;
-            c += uFrame * 0.1 * (1.0 - smoothstep(0.0, 0.3, e));
-            float a = aRim * 0.85;
+            float lit = 0.65 + 0.35 * dot(vec2(-0.6, 0.8), side);
+            c += uFrame * bev * 0.6 * lit;
+            c += uFrame * 0.14 * (1.0 - smoothstep(0.0, 0.3, e));
+            c += uFrame * smoothstep(0.62, 0.9, vnoise(p * 31.0)) * 0.25;
+            float a = aRim * (0.82 + 0.12 * fr);
             o = vec4(c * a, a);
         }
     }
-    // the frosted frames of the previews
+    // the previews: frosted ice panels (the cave blurred through them, rime thick at the rims)
     for (int i = 0; i < 2; i++) {
         vec4 b = i == 0 ? uBoxH : uBoxN;
         float d = rbox(p - b.xy, b.zw, 0.22);
@@ -478,12 +522,13 @@ void main() {
         float a = 1.0 - smoothstep(-uPx, uPx, d);
         float e = -d;
         vec3 blur = textureLod(uCave, vUv, 4.0).rgb;
-        float fr = vnoise(p * 9.0) * 0.6 + vnoise(p * 23.0) * 0.4;
-        float rim = exp(-e / 0.18);
-        vec3 c = blur * 0.55 + uFrame * (0.07 + 0.25 * rim * (0.6 + 0.6 * fr));
-        c += uFrame * exp(-e / (uPx * 1.2)) * 0.45;
+        float rim = exp(-e / 0.2);
+        float rime = smoothstep(0.3, 0.8, fr + 0.4 * rim);
+        vec3 c = blur * 0.6 + uFrame * (0.1 + 0.3 * rim * (0.6 + 0.6 * fr) + 0.12 * rime);
+        c += uFrame * exp(-e / (uPx * 1.2)) * 0.55;
+        c += uFrame * smoothstep(0.65, 0.9, vnoise(p * 31.0)) * 0.12 * (0.4 + rim);
         c *= 0.85 + 0.15 * fr;
-        float al = a * (0.8 + 0.15 * rim) * uFrameA;
+        float al = a * (0.78 + 0.17 * rim) * uFrameA;
         o = o * (1.0 - al) + vec4(c * al, al);
     }
     frag = o * uA;
@@ -491,11 +536,11 @@ void main() {
 )";
 
 // ------------------------------------------------------------------------------------------------ the ice cubes
-// One thick cube of clear ice per cell, seen a little from the front: rounded edges and corners frosted almost white
-// (a cap of rime along the top), a glossy translucent body that lets the eye in deep: the colour deepening toward the
-// centre, the cube's back faces refracted into four facets meeting near its middle, a few fracture planes, tiny
-// trapped bubbles, caustic filaments of focused light, a soft highlight at the top left. Under the water a cube goes a
-// deeper, more saturated teal. The ghost is a frosted outline. A cleared cube melts (mode 2: its progress 0..1, the
+// One chunky cube of glossy ice per cell: rounded edges and corners frosted almost white, a top cut into a pyramid of
+// four facets meeting at the middle (the upper one lit, the lower one in shade, bright ridges, a frosted bevel all
+// round), a translucent body: the colour deepening toward the centre, cloudy inner frost, a fine grain of rime, a few
+// scratches, tiny trapped bubbles, a glossy highlight at the top left; in the drop the sun's warm light on it (its
+// tint turned to the sun's pastels by the caller). Under the water a cube goes a deeper, more saturated teal. The ghost is a frosted outline. A cleared cube melts (mode 2: its progress 0..1, the
 // height left free above it, where its drip hangs): wet at once (clear, glossy, a bright rim, water running down its
 // faces), it softens, rounds off and slumps from the top, its foot spreading into a puddle, its top wobbling; drips
 // swell at its foot and let go; down to a thin film that fades.
@@ -527,7 +572,7 @@ flat in vec4 vB;
 flat in vec4 vC;
 out vec4 frag;
 uniform float uTime, uBridge, uDrop, uLevel, uWaterA;
-uniform vec3 uBridgeInk, uGlow, uDeepTint;
+uniform vec3 uBridgeInk, uSunC, uDeepTint;
 void main() {
     int mode = int(vC.x + 0.5);
     vec2 p = vLocal;
@@ -579,34 +624,42 @@ void main() {
         return;
     }
     vec2 n = q / hs; // -1..1 over the cube, whatever its height
-    // the body: bright and clear near the faces, the colour deepening toward the centre
+    // a chunky cube of glossy ice: bright and clear near the faces, the colour deepening toward the centre
     float depth = smoothstep(0.0, 0.3, e);
     float centre = 1.0 - smoothstep(0.0, 1.0, length(n));
-    vec3 col = mix(mix(tint, vec3(1.0), 0.14) * 1.1, tint * 0.8, depth * 0.38 + centre * 0.26);
-    // the ice's inside: cloudy, warped, lighter frosty clouds and deeper refractions
+    vec3 col = mix(mix(tint, vec3(1.0), 0.12) * 1.06, tint * 0.8, depth * 0.32 + centre * 0.2);
+    // inner frost: cloudy, warped, lighter frosty clouds
     vec2 w = n * 1.25 + seed * 2.13;
     float cloud = fbm3(w + 1.4 * vec2(fbm3(w * 1.7 + 3.1), fbm3(w * 1.7 + 7.3)));
-    col *= mix(1.0, 0.74 + 0.5 * cloud, depth * (1.0 - 0.7 * gloss));
-    col += vec3(0.9, 0.97, 1.0) * smoothstep(0.55, 0.82, cloud) * 0.16 * depth * (1.0 - gloss);
-    // the back faces refracted: four facets meeting near the middle, the top and left ones lit
-    vec2 m = n - (hash2(vec2(seed, 2.7)) - 0.5) * 0.3;
-    float facet = abs(m.x) > abs(m.y) ? (m.x < 0.0 ? 0.1 : -0.12) : (m.y > 0.0 ? 0.14 : -0.16);
-    float inner = smoothstep(0.95, 0.72, max(abs(n.x), abs(n.y)));
-    col *= 1.0 + facet * inner * (1.0 - gloss * 0.6);
-    float diag = abs(abs(m.x) - abs(m.y));
-    col += light * exp(-diag / 0.05) * 0.1 * inner * (1.0 - 0.6 * centre) * (1.0 - gloss);
-    col += light * exp(-abs(max(abs(n.x), abs(n.y)) - 0.66) / 0.025) * 0.09 * (1.0 - gloss);
-    // fracture planes: one or two thin bright sheets inside (not in every cube)
+    col *= mix(1.0, 0.8 + 0.42 * cloud, depth * (1.0 - 0.7 * gloss));
+    col += vec3(0.92, 0.97, 1.0) * smoothstep(0.5, 0.85, cloud) * 0.2 * depth * (1.0 - gloss);
+    // the top: a pyramid of four facets meeting at the middle (the upper one lit, the lower one in shade), inside a
+    // frosted bevel all round
+    vec2 m = n - (hash2(vec2(seed, 2.7)) - 0.5) * 0.06;
+    float ax = abs(m.x), ay = abs(m.y), mxa = max(ax, ay);
+    float pyr = smoothstep(0.8, 0.7, mxa) * (1.0 - 0.6 * gloss);
+    float tb = smoothstep(-0.025, 0.025, ay - ax);
+    float facet = mix(mix(0.05, -0.08, smoothstep(-0.02, 0.02, m.x)), mix(-0.16, 0.17, smoothstep(-0.02, 0.02, m.y)), tb);
+    col *= 1.0 + facet * pyr;
+    float ridge = exp(-abs(ax - ay) / 0.03) * smoothstep(0.76, 0.6, mxa);
+    col += light * ridge * (0.06 + 0.14 * smoothstep(-0.1, 0.1, m.y)) * (1.0 - 0.6 * gloss);
+    col += vec3(1.0) * exp(-dot(m, m) / 0.006) * 0.22 * (1.0 - 0.6 * gloss);
+    col += light * exp(-abs(mxa - 0.73) / 0.018) * 0.13 * (1.0 - gloss);
+    col *= 1.0 - 0.1 * exp(-abs(mxa - 0.79) / 0.03) * (1.0 - gloss);
+    float frost = vnoise(q * 28.0 + seed * 7.0) * 0.5 + vnoise(q * 10.0 + seed) * 0.5;
+    col = mix(col, mix(light, vec3(1.0), 0.45 + 0.3 * frost), smoothstep(0.72, 0.84, mxa) * 0.32 * (1.0 - 0.8 * gloss));
+    // a fine frost grain all over, rime clouding the middle a little
+    float grain = vnoise(q * 70.0 + seed * 11.0);
+    col *= 0.93 + 0.14 * grain * (1.0 - 0.7 * gloss);
+    col += vec3(0.9, 0.96, 1.0) * smoothstep(0.7, 0.95, grain) * 0.08 * (1.0 - gloss);
+    // scratches: one or two thin bright lines inside (not in every cube)
     for (int i = 0; i < 2; i++) {
         vec2 cd = normalize(hash2(vec2(seed * 3.7, 1.3 + float(i) * 5.1)) - 0.5);
         vec2 co = (hash2(vec2(seed * 5.9, 2.1 + float(i) * 3.3)) - 0.5) * 0.7;
         float cl = abs(dot(n - co, cd));
-        float k = step(0.35 + 0.3 * float(i), hash(vec2(seed, 9.1 + float(i)))) * smoothstep(0.6, 0.1, length(n - co));
-        col += vec3(0.9, 0.97, 1.0) * (exp(-cl / 0.035) * 0.16 + exp(-cl / 0.16) * 0.07) * k * depth * (1.0 - gloss);
+        float k = step(0.2 + 0.35 * float(i), hash(vec2(seed, 9.1 + float(i)))) * smoothstep(0.5, 0.05, length(n - co));
+        col += vec3(0.92, 0.98, 1.0) * (exp(-cl / 0.02) * 0.22 + exp(-cl / 0.12) * 0.04) * k * depth * (1.0 - gloss);
     }
-    // caustics: filaments of light focused through the ice, drifting slowly
-    float ca = exp(-vorEdge(n * 1.4 + seed * 3.1 + vec2(0.0, uTime * 0.04)) / 0.06) * smoothstep(0.35, 0.75, vnoise(n * 1.7 + seed * 1.3));
-    col += mix(light, vec3(1.0), 0.5) * ca * 0.2 * depth;
     // tiny trapped bubbles
     for (int i = 0; i < 4; i++) {
         vec2 h = hash2(vec2(seed * 13.7, float(i) * 3.3));
@@ -615,29 +668,25 @@ void main() {
         float br = (0.014 + 0.014 * h.y) / hs.x;
         float bd = length((n - bc) * hs / 0.47);
         float ring = smoothstep(br + aa * 2.0, br, bd) * (0.4 + 0.6 * smoothstep(br * 0.3, br, bd));
-        col += vec3(0.92, 0.98, 1.0) * ring * 0.35 * depth;
+        col += vec3(0.92, 0.98, 1.0) * ring * 0.2 * depth;
     }
-    // the rounded edges, frosted almost white, a cap of rime along the top, lit from the top left
+    // the rounded edges, frosted almost white, lit from the top left
     vec2 kq = abs(q) - (hs - r);
     vec2 nb = kq.x > 0.0 && kq.y > 0.0 ? normalize(kq) * sign(q) : (kq.x > kq.y ? vec2(sign(q.x), 0.0) : vec2(0.0, sign(q.y)));
     float lit = dot(nb, vec2(-0.6, 0.8));
-    float frost = vnoise(q * 28.0 + seed * 7.0) * 0.5 + vnoise(q * 10.0 + seed) * 0.5;
-    float rimW = 0.07 + 0.05 * max(nb.y, 0.0);
+    float rimW = 0.075 + 0.04 * max(nb.y, 0.0);
     float rim = exp(-e / rimW);
-    vec3 rimC = mix(light, vec3(1.0), 0.62 + 0.25 * frost + 0.12 * lit) * (0.95 + 0.15 * lit);
+    vec3 rimC = mix(light, vec3(1.0), 0.6 + 0.25 * frost + 0.12 * lit) * (0.95 + 0.15 * lit);
     col = mix(col, rimC, sat(rim * (0.85 + 0.35 * frost)) * (1.0 - 0.75 * gloss));
-    // seen a little from the front: the top face shows as a frosted band, rime grains on it
-    float topFace = smoothstep(0.62, 0.82, n.y) * smoothstep(1.02, 0.9, abs(n.x));
-    col = mix(col, mix(light, vec3(1.0), 0.7 + 0.2 * frost), topFace * 0.55 * (1.0 - 0.8 * gloss));
-    float speck = smoothstep(0.66, 0.86, vnoise(q * 26.0 + seed * 5.0));
-    col += vec3(1.0) * speck * sat(rim * 1.2) * (0.3 + 0.7 * max(nb.y, 0.0)) * 0.2 * (1.0 - gloss);
+    float speck = smoothstep(0.62, 0.86, vnoise(q * 30.0 + seed * 5.0));
+    col += vec3(1.0) * speck * (0.25 * sat(rim * 1.2) + 0.1 * depth) * (0.4 + 0.6 * max(nb.y, 0.0)) * (1.0 - gloss);
     col += vec3(0.9, 0.97, 1.0) * smoothstep(0.02, 0.0, e) * 0.2 * (1.0 - gloss);
-    // a soft highlight at the top left, sharper and brighter as the cube melts into gloss
-    vec2 hp = n - vec2(-0.42, 0.48);
-    col += vec3(1.0) * exp(-dot(hp, hp) / mix(0.06, 0.02, gloss)) * mix(0.28, 0.45, gloss);
-    col += vec3(0.9, 0.97, 1.0) * exp(-sq((n.x + n.y * 0.8 - 0.25) / 0.12)) * 0.05 * (1.0 - centre);
-    // the drop: a cold light caught inside
-    col += uGlow * uDrop * (0.05 + 0.12 * centre + 0.15 * ca);
+    // a glossy highlight at the top left, sharper and brighter as the cube melts into gloss
+    vec2 hp = n - vec2(-0.5, 0.55);
+    col += vec3(1.0) * exp(-dot(hp, hp) / mix(0.03, 0.02, gloss)) * mix(0.3, 0.45, gloss);
+    // the drop: the sun's warm light on it, its upper facet golden, a warm glow inside
+    float upper = tb * smoothstep(-0.02, 0.02, m.y) * pyr;
+    col += uSunC * uDrop * (0.05 + 0.1 * centre + 0.16 * upper + 0.12 * ridge + 0.1 * rim);
     // a fresh lock frosts it white for a moment; game over: rime creeps over it
     col = mix(col, mix(tint, vec3(1.0), 0.75), (mode == 2 ? 0.0 : vC.z) * 0.4);
     col = mix(col, vec3(0.86, 0.91, 0.95) * (0.78 + 0.22 * frost), (mode == 2 ? 0.0 : vC.w) * 0.8);
@@ -657,7 +706,7 @@ void main() {
     col = mix(col, sat2, under * 0.75);
     col = mix(col, uBridgeInk, uBridge);
     // translucent: the well's grid shows faintly through the clear middle
-    float a = inside * vB.a * (0.86 + 0.12 * sat(rim + topFace) - 0.32 * gloss + 0.3 * gloss * exp(-e / 0.03)) * (1.0 - smoothstep(0.8, 1.0, u));
+    float a = inside * vB.a * (0.86 + 0.12 * sat(rim) - 0.32 * gloss + 0.3 * gloss * exp(-e / 0.03)) * (1.0 - smoothstep(0.8, 1.0, u));
     frag = vec4(col * a, a);
 }
 )";
@@ -677,7 +726,6 @@ void main() {
     vLocal = aPos;
     vA = aA; vB = aB; vC = aC;
     vec2 off = aPos * vec2(aA.z, aA.z * aC.x);
-    if (int(aA.w + 0.5) == 2) off.y += aA.z * aC.x; // a streak rises from its foot
     gl_Position = uVP * vec4(aA.xy + off, 0.0, 1.0);
 }
 )";
@@ -708,7 +756,7 @@ void main() {
         return;
     }
     if (mode == 5) {
-        // the melt's water running down (a rivulet, or a sheet down the glass): a meandering thread, clear with bright
+        // the melt's water running down (a sheet down the outside of the glass): a meandering thread, clear with bright
         // refracting edges and a specular line, swellings running down it; a rounded head, a tapering top
         float hw = vA.z * 0.5 * (vC.w > 0.5 ? 1.4 : 1.0), len = vC.z;
         float wy = vA.y + q.y * len;
@@ -738,14 +786,6 @@ void main() {
         float rr = length(e);
         v = exp(-sq((rr - 0.65) / 0.16)) * (q.y > 0.0 ? 1.0 : 0.35) + exp(-rr * rr * 8.0) * 0.4;
         frag = vec4((c * 0.6 + 0.5) * v * vB.a, v * vB.a * 0.6);
-        return;
-    }
-    if (mode == 2) {
-        // a streak of cold light, rising from its foot and fading up
-        float x = exp(-q.x * q.x * 5.0);
-        float y = (1.0 - smoothstep(-1.0, 1.0, q.y)) * smoothstep(-1.0, -0.8, q.y);
-        v = x * y;
-        frag = vec4(c * v * vB.a, 0.0);
         return;
     }
     if (mode == 0) {
@@ -792,8 +832,9 @@ in vec2 vUv;
 out vec4 frag;
 uniform sampler2D uScene;
 uniform vec2 uViewC, uViewH, uRes;
-uniform float uFade, uDim, uWaterA, uSunK;
-uniform vec3 uTint, uLine;
+uniform float uFade, uDim, uWaterA, uSunK, uFlare;
+uniform vec3 uTint, uLine, uSunC;
+uniform vec2 uSunP;
 uniform vec4 uBox[24];
 uniform int uBoxN;
 void main() {
@@ -825,6 +866,15 @@ void main() {
     float l0 = dot(c, vec3(0.2126, 0.7152, 0.0722));
     float lit = smoothstep(0.12, 0.5, l0);
     c *= mix(1.0 - 0.45 * k, 1.0 + 0.18 * uSunK, lit);
+    // (the outer cave kept cold in the drop: deeper and bluer toward the screen's sides)
+    c = mix(c, c * vec3(0.5, 0.74, 1.0), k * smoothstep(7.0, 15.0, abs(p.x - uViewC.x)));
+    // the sun bursting past the well's edge: a hot core, a soft halo, a few thin spikes (light, over the stack)
+    if (uFlare > 0.002) {
+        vec2 fs = (p - uSunP) * vec2(1.0, 1.1);
+        float rf = length(fs), an = atan(fs.y, fs.x) + 0.25;
+        float star = pow(abs(cos(an * 3.0)), 90.0) + 0.6 * pow(abs(cos(an * 4.0 + 0.9)), 120.0);
+        c += uFlare * (mix(uSunC, vec3(1.0, 0.95, 0.85), 0.5) * exp(-rf * rf * 0.7) * 1.6 + uSunC * (exp(-rf * 0.4) * 0.22 + star * exp(-rf * 0.3) * 0.5));
+    }
     c *= (1.0 - uDim * 0.5) * uFade;
     vec2 q = vUv - 0.5;
     c *= 1.0 - 0.3 * (1.0 + 0.4 * k) * dot(q, q) * 2.0;
