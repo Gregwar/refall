@@ -75,6 +75,8 @@ uniform vec2 uViewC, uViewH;
 uniform float uTime, uBreath, uDrop, uShaft, uSlow, uAurora, uNight, uGlint, uWorldA, uPx;
 uniform vec4 uReveal; // the light reached: the opening, the far arch, the middle one, the near one
 uniform vec3 uDeep, uEdge, uFar, uOpen, uFloor, uShaftC, uGlowA, uGlowB, uBridgeCol;
+uniform float uWarm;   // the drop's low sun: warm rays through the cave (0 none)
+uniform vec3 uWarmC;
 uniform vec4 uColL, uColR;
 uniform int uSamples;
 
@@ -327,6 +329,15 @@ void main() {
         float n = vnoise(vec2(ang * 15.0, uTime * 0.05)) * 0.65 + vnoise(vec2(ang * 37.0, uTime * 0.08 + 5.0)) * 0.35;
         float sh = smoothstep(0.45, 0.95, n) * exp(-rr * 0.045) * smoothstep(3.0, 9.0, rr);
         col += uShaftC * sh * uShaft * (1.0 - 0.65 * nearMask);
+        // the drop: a low sun's warm rays, wider and slower, across the ice they cross (the rest of the cave stays
+        // cold): the ice in them turned orange-red, a warm haze along them
+        if (uWarm > 0.002) {
+            float nw = vnoise(vec2(ang * 7.0, uTime * 0.03 + 11.0)) * 0.7 + vnoise(vec2(ang * 19.0, uTime * 0.05 + 3.0)) * 0.3;
+            float ray = smoothstep(0.42, 0.85, nw) * exp(-rr * 0.03) * smoothstep(2.0, 7.0, rr) * uWarm;
+            float lc = dot(col, vec3(0.2126, 0.7152, 0.0722));
+            col = mix(col, uWarmC * lc * 1.6, 0.75 * ray);
+            col += uWarmC * ray * 0.18 * (1.0 - 0.5 * nearMask);
+        }
     }
     // the HUD's columns: the ice a little quieter and deeper behind them
     {
@@ -717,7 +728,7 @@ out vec4 frag;
 uniform sampler2D uScene;
 uniform vec2 uViewC, uViewH, uRes;
 uniform float uFade, uDim, uWaterA, uSunK;
-uniform vec3 uTint, uLine, uSun;
+uniform vec3 uTint, uLine;
 uniform vec4 uBox[24];
 uniform int uBoxN;
 void main() {
@@ -742,15 +753,11 @@ void main() {
     float line = exp(-sq(depth / (px * 1.0))) * 0.75 + exp(-abs(depth) / (px * 5.0)) * 0.12;
     line += step(0.0, depth) * exp(-depth / (px * 16.0)) * 0.06;
     c += uLine * line * (1.0 - 0.9 * hide) * uWaterA;
-    // the cave a little darker at rest; the drop's light: the hues turned toward the light's colour (the brightness
-    // kept), a modest lift on the lit ice, and the shadows behind deeper: light and shade, not a white-out
-    vec3 sunN = uSun / max(max(uSun.r, max(uSun.g, uSun.b)), 1e-3);
+    // the cave a little darker at rest; the drop (its warm rays are the cave's): a modest lift on the lit ice and the
+    // shadows behind deeper: light and shade, not a white-out
     float k = min(uSunK, 1.0);
     c *= 0.86;
     float l0 = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    vec3 hue = sunN * l0 / max(dot(sunN, vec3(0.2126, 0.7152, 0.0722)), 1e-3);
-    c = mix(c, hue, 0.72 * k);
-    c *= mix(vec3(1.0), vec3(1.25, 0.78, 0.52), k); // (a warm balance: the blue of the ice gives way to orange and red)
     float lit = smoothstep(0.12, 0.5, l0);
     c *= mix(1.0 - 0.45 * k, 1.0 + 0.18 * uSunK, lit);
     c *= (1.0 - uDim * 0.5) * uFade;
