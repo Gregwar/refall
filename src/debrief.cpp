@@ -101,6 +101,7 @@ void Menu::drawDebrief(int w, int h) {
     p.begin(w, h);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT);
+    if (portrait_) place(960, 570, 540, 0.5f * (pTop_ + pBottom_), std::min(0.88f, (pBottom_ - pTop_) / 920.f)); // (larger: its widest line across the column)
     const float u = u_, t = debT_, out = leaveT_ >= 0 ? 1.f - sstep(leaveT_ / LEAVE) : 1.f;
     // the frozen game, darkening (cover-fitted, should the window have changed)
     if (backdrop_) {

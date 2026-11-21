@@ -466,9 +466,12 @@ void main() {
         for (int i = 0; i < 5; i++) { fb += amp * vn(ww * frq); frq *= 2.07; amp *= 0.5; }
         // filaments: the ridges of a finer warped noise
         float rg = 0.0; amp = 0.55; frq = 3.0;
-        for (int i = 0; i < 4; i++) { float n = vn(ww * frq + 3.3); rg += amp * pow(1.0 - abs(2.0 * n - 1.0), 3.0); frq *= 2.1; amp *= 0.5; }
+        for (int i = 0; i < 4; i++) { float n = vn(ww * frq + 3.3); rg += amp * pow(max(1.0 - abs(2.0 * n - 1.0), 0.0), 3.0); frq *= 2.1; amp *= 0.5; }
         // where the clouds are: a broad sweep across from the lower left to the upper right, thicker at both ends
-        float band = exp(-pow((sp.y - (0.62 - 0.32 * sp.x / asp + 0.08 * sin(sp.x * 2.3 + seedOff))) / 0.33, 2.0));
+        // (squared by hand: pow() of a negative base is undefined, NaN on WebGL and phones, the nebula then cut in
+        // hard-edged sheets)
+        float bd = (sp.y - (0.62 - 0.32 * sp.x / asp + 0.08 * sin(sp.x * 2.3 + seedOff))) / 0.33;
+        float band = exp(-bd * bd);
         float leftC = exp(-dot((sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42), (sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42)));
         float rightC = exp(-dot((sp - vec2(0.8 * asp, 0.3)) / vec2(0.5, 0.45), (sp - vec2(0.8 * asp, 0.3)) / vec2(0.5, 0.45)));
         float dens = clamp((band * 0.7 + leftC * 0.8 + rightC * 0.7) * (1.12 + 0.12 * (0.5 + 0.5 * sin(uMorph * 2.3))), 0.0, 1.4);

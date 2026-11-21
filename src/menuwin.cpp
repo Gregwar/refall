@@ -55,10 +55,25 @@ float seedOf(uint64_t h) { return (float)((h >> 20) % 4096) + 0.5f; }
 struct Worlds {
     Menu& m;
     Painter& p;
-    float u, t;
+    const float& u; // (the menu's: a portrait layout changes it piece by piece)
+    float t;
     Worlds(Menu& mm) : m(mm), p(mm.paint_), u(mm.u_), t(mm.time_) {}
     float X(float v) const { return m.X(v); }
     float Y(float v) const { return m.Y(v); }
+    // Portrait (Menu::portrait_): a screen's pieces, each a box of the 1920x1080 layout (x, y, w, h) at a scale `s`
+    // (column units per layout unit), stacked down the column, centred across it, `gap` apart; all scaled down
+    // together if they don't fit its height, and centred in it. pAt(i) then draws in piece i's place.
+    struct PBlock { float x, y, w, h, s, py = 0; };
+    std::vector<PBlock> pb;
+    void pLayout(std::initializer_list<PBlock> blocks, float gap) {
+        pb.assign(blocks);
+        float need = gap * (float)(pb.size() - 1);
+        for (const PBlock& b : pb) need += b.h * b.s;
+        const float room = m.pBottom_ - m.pTop_, k = std::min(1.f, room / need);
+        float y = m.pTop_ + (room - need * k) * 0.5f;
+        for (PBlock& b : pb) { b.py = y; y += (b.h * b.s + gap) * k; b.s *= k; }
+    }
+    void pAt(int i) { const PBlock& b = pb[i]; m.place(b.x + b.w * 0.5f, b.y, 540.f, b.py, b.s); }
     int nStages() const { return m.camp_ ? m.camp_->size() : 0; }
     int nSongs(int s) const { return (int)m.camp_->stages()[s].songs.size(); }
     std::string spec(int s, int k) const {
@@ -130,6 +145,7 @@ struct Worlds {
     void draw();
     // pieces
     void info(F head, F body, Col ink, Col dim, Col accent, int card);
+    void infoPortrait(F head, F body, Col ink, Col dim);
     void tabs(F f, Col ink, Col accent, float track);
     void menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track, float alpha = 1.f);
     void kalBackground(const std::string& cur);
@@ -174,19 +190,23 @@ void Worlds::draw() {
 // shared pieces
 
 void Worlds::tabs(F f, Col ink, Col accent, float track) {
+    // (portrait: the name centred over the difficulties, the lettering larger)
+    const bool pt = m.portrait_;
+    const float T = pt ? 1.25f : 1.f;
     std::string name = m.voyageTitle_.empty() ? std::string("VOYAGE") : upper(asciiFold(m.voyageTitle_));
-    while (name.size() > 4 && p.width(f, name, 22 * u, track + 0.2f) > 700 * u) name.pop_back();
+    while (name.size() > 4 && p.width(f, name, 22 * T * u, track + 0.2f) > 700 * u) name.pop_back();
     // the difficulties, centred on cx (four of them, EASY .. EXPERT)
-    const float cx = X(1250), sp = 195 * u, y = Y(90), on = 1.f - std::min(1.f, m.aRow_), mid = 0.5f * (DIFF_COUNT - 1);
+    const float cx = X(pt ? 960 : 1250), sp = 195 * u, y = Y(pt ? 150 : 90), on = 1.f - std::min(1.f, m.aRow_), mid = 0.5f * (DIFF_COUNT - 1);
+    const float nw = p.width(f, name, 22 * T * u, track + 0.2f), nx = pt ? X(960) - nw * 0.5f : X(80), ny = Y(pt ? 62 : 92);
     // a soft shade under the title and the tabs, so they read over a bright crystal
-    p.rrect(X(40), y - 40 * u, p.width(f, name, 22 * u, track + 0.2f) + 80 * u, 64 * u, 32 * u, hex(0x02040c, 0.22f), 50 * u);
+    p.rrect(nx - 40 * u, ny - 42 * u, nw + 80 * u, 64 * u, 32 * u, hex(0x02040c, 0.22f), 50 * u);
     p.rrect(cx - mid * sp - 110 * u, y - 40 * u, 2 * mid * sp + 220 * u, 70 * u, 35 * u, hex(0x02040c, 0.22f), 50 * u);
-    p.text(f, name, X(80), Y(92), 22 * u, withA(ink, 0.8f), -1, track + 0.2f);
+    p.text(f, name, nx, ny, 22 * T * u, withA(ink, 0.8f), -1, track + 0.2f);
     const float hx = cx + (m.aDiff_ - mid) * sp;
     p.line(hx - 56 * u, y + 16 * u, hx + 56 * u, y + 16 * u, (1.5f + 1.5f * on) * u, withA(accent, 0.6f + 0.4f * on));
     if (on > 0.05f) { p.setAdditive(true); p.glow(hx, y + 16 * u, 80 * u, withA(accent, 0.25f * on)); p.setAdditive(false); }
     for (int d = 0; d < DIFF_COUNT; d++)
-        p.text(f, difficultyName(d), cx + (d - mid) * sp, y, 21 * u, withA(ink, 0.45f + 0.55f * near1(m.aDiff_, d)), 0, track);
+        p.text(f, difficultyName(d), cx + (d - mid) * sp, y, 21 * T * u, withA(ink, 0.45f + 0.55f * near1(m.aDiff_, d)), 0, track);
 }
 
 void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track, float alpha) {
@@ -212,6 +232,7 @@ void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accen
 }
 
 void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
+    if (m.portrait_) { infoPortrait(head, body, ink, dim); return; }
     const float x0 = X(60), y0 = Y(838), w = 1800 * u, h = 212 * u;
     if (card == 0) {
         p.rrect(x0 - 60 * u, y0 + 10 * u, w + 120 * u, h + 80 * u, 0, hex(0x000000, 0.6f), 60 * u);
@@ -249,6 +270,44 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
             p.text(body, b, rx, y0 + 46 * u, 18 * u, hex(0xffd27a), 1, 0.3f);
         }
         return;
+    }
+}
+
+// The info in portrait: a narrower card (under the stage's panel), in larger letters, its lines one under the other
+// (the song's place and velocity, its title, its universe, how it went; or the stage's).
+void Worlds::infoPortrait(F head, F body, Col ink, Col dim) {
+    constexpr float T = 1.2f;
+    const float x0 = X(640), y0 = Y(838), w = 640 * u, h = 250 * u;
+    p.glass(x0, y0, w, h, 22 * u, u, 0.f, 0.55f);
+    const Menu::SongView v = m.songView();
+    const float lx = x0 + 44 * u, rx = x0 + w - 44 * u, tw = w - 88 * u;
+    char b[160];
+    if (v.has) {
+        std::snprintf(b, sizeof(b), "SONG %d OF %d", v.song + 1, v.songs);
+        p.text(body, b, lx, y0 + 46 * u, 17 * T * u, dim, -1, 0.3f);
+        p.text(body, "VELOCITY " + fmt1(v.velocity), rx, y0 + 46 * u, 17 * T * u, dim, 1, 0.3f);
+        std::string title = v.title, uni = upper(v.universe);
+        while (p.width(head, title, 42 * u) > tw && title.size() > 4) title.pop_back();
+        while (p.width(body, uni, 18 * T * u, 0.3f) > tw && uni.size() > 4) uni.pop_back();
+        p.text(head, title, lx, y0 + 110 * u, 42 * u, ink, -1, 0.01f);
+        p.text(body, uni, lx, y0 + 165 * u, 18 * T * u, mixc(songCol(v.stage, v.song), hex(0xffffff), 0.2f), -1, 0.3f);
+        if (v.beaten) std::snprintf(b, sizeof(b), "BEATEN    BEST %d    %s LINES", v.best, linesStr(v.lines).c_str());
+        else std::snprintf(b, sizeof(b), "NOT BEATEN ON %s", difficultyName(m.diff_));
+        p.text(body, b, lx, y0 + 216 * u, 17 * T * u, v.beaten ? hex(0xffd27a) : dim, -1, 0.3f);
+    } else if (m.screen_ == Menu::CAMPAIGN && m.row_ == 1 && nStages() > 0) { // a petal, closed
+        const int fs = focusedStage();
+        std::snprintf(b, sizeof(b), "STAGE %d OF %d   /   %d SONGS", fs + 1, nStages(), nSongs(fs));
+        p.text(body, b, lx, y0 + 46 * u, 17 * T * u, dim, -1, 0.3f);
+        if (!open(fs)) p.text(head, "Locked", lx, y0 + 110 * u, 38 * u, ink, -1, 0.01f);
+        int beat = 0;
+        for (int k = 0; k < nSongs(fs); k++) beat += beaten(fs, k);
+        std::snprintf(b, sizeof(b), "%d / %d SONGS BEATEN ON %s", beat, nSongs(fs), difficultyName(m.diff_));
+        p.text(body, b, lx, y0 + 165 * u, 17 * T * u, dim, -1, 0.3f);
+        if (cleared(fs)) {
+            std::snprintf(b, sizeof(b), "CLEARED    BEST %d    %s LINES", m.progress_->stageBest(fs, m.diff_),
+                          linesStr(m.progress_->stageLines(fs, m.diff_)).c_str());
+            p.text(body, b, lx, y0 + 216 * u, 17 * T * u, hex(0xffd27a), -1, 0.3f);
+        }
     }
 }
 
@@ -473,6 +532,10 @@ static float fanStep(int songs) { return std::min(0.19f, 0.56f / std::max(1, son
 void Worlds::kalCampaign() {
     const int fs = focusedStage();
     const float ao = sstep(m.aOpen_); // the opened petal, 0 closed .. 1 open
+    if (m.portrait_) { // the tabs, the wheel, the stage's panel and the info, one under the other
+        pLayout({{560, 30, 800, 145, 1.25f}, {450, 170, 670, 540, 0.9f}, {1178, 160, 654, 580, 1.3f}, {640, 838, 640, 250, 1.4f}}, 18);
+        pAt(1);
+    }
     kalBackground(spec(fs, m.petal_ ? m.song_ : 0));
     const int n = nStages();
     const float cx = X(720), cy = Y(440);
@@ -768,20 +831,21 @@ void Worlds::kalCampaign() {
     medallion(cx, cy, 124 * u, open(fs) ? songCol(fs, m.petal_ ? m.song_ : 0) : hex(0x5a5c66), 1.f);
     p.text(F::JOSEFIN_LIGHT, std::to_string(fs + 1), cx, cy + 30 * u, 84 * u, hex(0xffffff, 0.9f), 0, 0.02f);
     // the focused stage, on the right
+    if (m.portrait_) pAt(2);
     {
-        const float x = X(1240);
+        const float x = X(1240), T = m.portrait_ ? 1.2f : 1.f; // (T: portrait's larger lettering)
         const bool o = open(fs);
         const int ns = nSongs(fs);
         const float rowH = ns > 0 ? std::min(70.f, 350.f / ns) : 70.f;
         p.glass(X(1198), Y(160), 614 * u, (350 + std::max(0, ns - 1) * rowH + 20 + 32 - 160) * u, 26 * u, u, 0.f, 0.42f);
         p.text(F::JOSEFIN_LIGHT, "STAGE " + std::to_string(fs + 1), x, Y(250), 64 * u, hex(0xffffff), -1, 0.15f);
         const char* st = !o ? "LOCKED" : cleared(fs) ? "CLEARED" : "OPEN";
-        p.text(F::JOSEFIN, st, x, Y(292), 18 * u, !o ? hex(0xb0b0b8) : cleared(fs) ? hex(0x86e8a8) : hex(0xffffff, 0.9f), -1, 0.4f);
+        p.text(F::JOSEFIN, st, x, Y(292), 18 * T * u, !o ? hex(0xb0b0b8) : cleared(fs) ? hex(0x86e8a8) : hex(0xffffff, 0.9f), -1, 0.4f);
         // the scores and lines in two right-aligned columns (lines dimmer): the stage's on the header line
         const float colS = x + 430 * u, colL = x + 528 * u;
         if (o && cleared(fs)) {
-            p.text(F::JOSEFIN, "BEST " + std::to_string(m.progress_->stageBest(fs, m.diff_)), colS, Y(292), 18 * u, hex(0xffd27a), 1, 0.3f);
-            p.text(F::JOSEFIN, linesStr(m.progress_->stageLines(fs, m.diff_)) + " L", colL, Y(292), 18 * u, hex(0xffd27a, 0.7f), 1, 0.3f);
+            p.text(F::JOSEFIN, "BEST " + std::to_string(m.progress_->stageBest(fs, m.diff_)), colS, Y(292), 18 * T * u, hex(0xffd27a), 1, 0.3f);
+            p.text(F::JOSEFIN, linesStr(m.progress_->stageLines(fs, m.diff_)) + " L", colL, Y(292), 18 * T * u, hex(0xffd27a, 0.7f), 1, 0.3f);
         }
         // the list of songs, spread over the room five rows took
         for (int k = 0; k < ns; k++) {
@@ -796,20 +860,22 @@ void Worlds::kalCampaign() {
             int vi = 0;
             const int idx = universes::parse(spec(fs, k), &vi);
             std::string name = idx >= 0 ? universes::entry(idx).name : spec(fs, k);
-            p.text(F::JOSEFIN, name, x + 52 * u, y, 20 * u, hex(0xffffff, 0.85f + 0.15f * g), -1, 0.25f);
+            p.text(F::JOSEFIN, name, x + 52 * u, y, 20 * T * u, hex(0xffffff, 0.85f + 0.15f * g), -1, 0.25f);
             if (o && beaten(fs, k)) {
-                p.text(F::JOSEFIN, text::thousands(m.progress_->best(fs, k, m.diff_)), colS, y, 18 * u, hex(0xffd27a), 1, 0.15f);
-                p.text(F::JOSEFIN, linesStr(m.progress_->lines(fs, k, m.diff_)) + " L", colL, y, 18 * u, hex(0xffd27a, 0.7f), 1, 0.15f);
+                p.text(F::JOSEFIN, text::thousands(m.progress_->best(fs, k, m.diff_)), colS, y, 18 * T * u, hex(0xffd27a), 1, 0.15f);
+                p.text(F::JOSEFIN, linesStr(m.progress_->lines(fs, k, m.diff_)) + " L", colL, y, 18 * T * u, hex(0xffd27a, 0.7f), 1, 0.15f);
             }
         }
         std::string prompt;
         if (!o) prompt = "LOCKED";
         else if (!m.petal_) prompt = "SPACE  SONGS"; // the one key Enter doesn't explain: the petal's songs
         if (!prompt.empty()) // (on a soft shade, as the tabs)
-            p.rrect(x - 30 * u, Y(690), p.width(F::JOSEFIN, prompt, 17 * u, 0.35f) + 60 * u, 44 * u, 22 * u, hex(0x02040c, 0.22f), 40 * u);
-        p.text(F::JOSEFIN, prompt, x, Y(720), 17 * u, hex(0xffffff, 0.85f), -1, 0.35f);
+            p.rrect(x - 30 * u, Y(690), p.width(F::JOSEFIN, prompt, 17 * T * u, 0.35f) + 60 * u, 44 * u, 22 * u, hex(0x02040c, 0.22f), 40 * u);
+        p.text(F::JOSEFIN, prompt, x, Y(720), 17 * T * u, hex(0xffffff, 0.85f), -1, 0.35f);
     }
+    if (m.portrait_) pAt(0);
     tabs(F::JOSEFIN, hex(0xffffff), hex(0xffffff), 0.35f);
+    if (m.portrait_) pAt(3);
     info(F::JOSEFIN_LIGHT, F::JOSEFIN, hex(0xffffff), hex(0xe0e0f0, 0.65f), hex(0xffffff), 1);
 }
 
@@ -817,6 +883,7 @@ void Worlds::kalTitle() {
     std::string cur, next;
     float mix;
     tourAt(11.f, cur, next, mix);
+    if (m.portrait_) { pLayout({{600, 190, 720, 800, 1.5f}}, 0); pAt(0); } // (the logo and the entries, larger)
     kalBackground(mix > 0.5f ? next : cur);
     // the opening (Menu::startIntro), out of the black: the planet, its gold ring sweeping round, the name, the pieces
     // taking their orbits one by one, then the world and the menu
@@ -843,6 +910,7 @@ void Worlds::optionPanel(const char* title, int n) {
     std::string cur, next;
     float mix;
     tourAt(11.f, cur, next, mix);
+    if (m.portrait_) { pLayout({{560, 90, 800, 820, 1.3f}}, 0); pAt(0); } // (the panels across the column)
     kalBackground(mix > 0.5f ? next : cur);
     p.frostSource();
     p.glass(X(660), Y(90), 600 * u, 130 * u, 24 * u, u, 0.f, 0.45f);
@@ -933,16 +1001,27 @@ void Worlds::kalFree() {
     std::string cur, next;
     float mix;
     tourAt(11.f, cur, next, mix);
+    // portrait: the title, the difficulties two by two, the playlists and the starting level, one under the other
+    // (the playlists' and the level's panels narrower: PW across, from PL)
+    const bool pt = m.portrait_;
+    constexpr float PW = 800, PL = 960 - PW / 2;
+    if (pt) {
+        pLayout({{560, 90, 800, 130, 1.3f}, {590, 225, 740, 850, 1.1f}, {PL, 680, PW, 262, 1.3f}, {PL, 950, PW, 120, 1.3f}}, 28);
+        pAt(0);
+    }
     kalBackground(mix > 0.5f ? next : cur);
     p.frostSource();
     p.glass(X(560), Y(90), 800 * u, 130 * u, 24 * u, u, 0.f, 0.45f);
     p.text(F::JOSEFIN_LIGHT, "FREE PLAY", X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
     const bool rows = m.playlists_ != nullptr;
+    const float L = pt ? PL : 120, W = pt ? PW : 1680; // the lower panels' left and width
     const float onDiff = rows ? 1.f - std::min(1.f, m.aFreeRow_) : 1.f;
     // the difficulties' gems: teal, violet, rose, and EXPERT an ember orange
     static const uint32_t C[DIFF_COUNT] = {0x6fd8c0, 0x9c86ff, 0xff6f9c, 0xff8a3d};
+    if (pt) pAt(1);
     for (int d = 0; d < DIFF_COUNT; d++) {
-        const float f = sstep(near1(m.aFree_, d)), x = X(960 + (d - 0.5f * (DIFF_COUNT - 1)) * 400.f), y = Y(405);
+        const float f = sstep(near1(m.aFree_, d));
+        const float x = pt ? X(960 + ((d % 2) - 0.5f) * 380.f) : X(960 + (d - 0.5f * (DIFF_COUNT - 1)) * 400.f), y = Y(pt ? 405 + (d / 2) * 420.f : 405);
         const float R = (108 + 20 * f * onDiff) * u;
         // a setting round it: a bronze ring and a blue orbit, gold when chosen
         p.circle(x, y, R + 30 * u, hex(0x0a1020, 0.35f), 30 * u);
@@ -966,10 +1045,11 @@ void Worlds::kalFree() {
         // the playlists as glass cards: the game's own first (featured: larger, a gold rim, the stages' hues), then the
         // player's, each with a hue and a small rosette of its own (seeded from its playlist ID), then "add one"
         const float onPl = near1(m.aFreeRow_, 1);
-        p.glass(X(120), Y(680), 1680 * u, 262 * u, 24 * u, u, 0.4f * onPl, 0.55f);
-        p.text(F::JOSEFIN, "PLAYLIST", X(160), Y(714), 16 * u, hex(0xffffff, 0.55f + 0.45f * onPl), -1, 0.45f);
+        if (pt) pAt(2);
+        p.glass(X(L), Y(680), W * u, 262 * u, 24 * u, u, 0.4f * onPl, 0.55f);
+        p.text(F::JOSEFIN, "PLAYLIST", X(L + 40), Y(714), 16 * u, hex(0xffffff, 0.55f + 0.45f * onPl), -1, 0.45f);
         if (m.editing_) {
-            const float fx = X(160), fy = Y(760), fw = 1600 * u, fh = 62 * u;
+            const float fx = X(L + 40), fy = Y(760), fw = (W - 80) * u, fh = 62 * u;
             p.rrect(fx, fy, fw, fh, 12 * u, hex(0xffffff, 0.08f));
             p.rrectLine(fx, fy, fw, fh, 12 * u, 2 * u, hex(0xffffff, 0.85f));
             std::string shown = m.editText_;
@@ -989,9 +1069,9 @@ void Worlds::kalFree() {
             float total = 0, selX = 0;
             for (int i = 0; i < nc; i++) { if (i == m.plSel_) selX = total + cardW(i) / 2; total += cardW(i) + gap; }
             total -= gap;
-            const float avail = 1600 * u;
-            float x = X(160);
-            if (total > avail) x = X(960) - std::clamp(selX, avail / 2, total - avail / 2);
+            const float avail = (W - 80) * u;
+            float x = X(L + 40);
+            if (total > avail) x = X(L + W / 2) - std::clamp(selX, avail / 2, total - avail / 2);
             auto hueCol = [](float h, float s, float v) {
                 auto f = [&](float n) { const float k2 = std::fmod(n + h * 6.f, 6.f); return v - v * s * std::max(0.f, std::min({k2, 4.f - k2, 1.f})); };
                 return Col{f(5), f(3), f(1), 1.f};
@@ -1000,7 +1080,9 @@ void Worlds::kalFree() {
                 const float w = cardW(i), h = cardH(i);
                 const float g = sstep(near1(m.aPl_, i)) * onPl;
                 const float y = Y(i == 0 ? 728 : 744) - 10 * u * g;
-                if (x + w < X(120) || x > X(1800)) { x += w + gap; continue; }
+                if (x + w < X(L) || x > X(L + W)) { x += w + gap; continue; }
+                // (portrait: a card past the panel's edge fades out, the panel showing one or two)
+                if (pt) p.setFade(std::clamp(1.f - std::max(X(L + 10) - x, x + w - X(L + W - 10)) / (0.4f * w), 0.f, 1.f));
                 const bool featured = i == 0, add = i == nc - 1;
                 // the identity: a hue and a seed from the playlist's ID
                 uint32_t seed = 2166136261u;
@@ -1024,6 +1106,7 @@ void Worlds::kalFree() {
                     p.text(F::JOSEFIN, "ADD A", x + 122 * u, my - 4 * u, 17 * u, hex(0xffffff, 0.6f + 0.4f * g), -1, 0.3f);
                     p.text(F::JOSEFIN, "PLAYLIST", x + 122 * u, my + 20 * u, 17 * u, hex(0xffffff, 0.6f + 0.4f * g), -1, 0.3f);
                     x += w + gap;
+                    p.setFade(1.f);
                     continue;
                 }
                 // the motif: a small rosette of glass, turning slowly
@@ -1052,15 +1135,18 @@ void Worlds::kalFree() {
                 if (ch[i].count > 0)
                     p.text(F::JOSEFIN, std::to_string(ch[i].count) + " SONGS", tx, ty + (featured ? 34.f : 28.f) * u, 14 * u, withA(featured ? hex(0xe8c06a) : hue, 0.85f), -1, 0.35f);
                 x += w + gap;
+                p.setFade(1.f);
             }
         }
         if (!m.plMsg_.empty())
-            p.text(F::JOSEFIN, upper(m.plMsg_), X(160), Y(930), 16 * u, m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), -1, 0.3f);
+            p.text(F::JOSEFIN, upper(m.plMsg_), X(L + 40), Y(930), 16 * u, m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), -1, 0.3f);
         // the starting level: a strip of coarse steps along the bottom (HARD's and EXPERT's hyperdrop levels in its colour)
+        // (portrait: its name over it, the steps across it)
         const float onLvl = std::clamp(m.aFreeRow_ - 1.f, 0.f, 1.f);
-        const float ly = Y(962), lh = 78 * u, cw = 120 * u, lx = X(440);
-        p.glass(X(120), ly, 1680 * u, lh, 24 * u, u, 0.4f * onLvl, 0.55f);
-        p.text(F::JOSEFIN, "STARTING LEVEL", X(160), ly + lh / 2 + 6 * u, 16 * u, hex(0xffffff, 0.55f + 0.45f * onLvl), -1, 0.45f);
+        if (pt) pAt(3);
+        const float ly = Y(pt ? 990 : 962), lh = 78 * u, cw = (pt ? (W - 80) / Menu::FREE_LEVEL_COUNT : 120) * u, lx = X(pt ? L + 40 : 440);
+        p.glass(X(L), ly, W * u, lh, 24 * u, u, 0.4f * onLvl, 0.55f);
+        p.text(F::JOSEFIN, "STARTING LEVEL", X(L + 40), pt ? ly - 14 * u : ly + lh / 2 + 6 * u, 16 * u, hex(0xffffff, 0.55f + 0.45f * onLvl), -1, 0.45f);
         const float sx = lx + (m.aLvl_ + 0.5f) * cw; // the selection, sliding under the numbers
         p.rrect(sx - cw / 2 + 8 * u, ly + 10 * u, cw - 16 * u, lh - 20 * u, 14 * u, hex(0xffffff, 0.08f + 0.08f * onLvl));
         p.rrectLine(sx - cw / 2 + 8 * u, ly + 10 * u, cw - 16 * u, lh - 20 * u, 14 * u, (1.4f + 1.2f * onLvl) * u, hex(0xffffff, 0.45f + 0.5f * onLvl));
@@ -1079,7 +1165,8 @@ void Worlds::kalFree() {
     // (the built-in playlists can't be removed: no hint on them)
     const bool removable = rows && m.freeRow_ == 1 && m.plSel_ >= 2 && m.plSel_ < (int)m.plChoices().size();
     const char* hint = m.editing_ ? "CTRL+V  PASTE" : removable ? "DEL  REMOVE" : "";
-    if (*hint) p.text(F::JOSEFIN, hint, X(1760), Y(714), 15 * u, hex(0xffffff, 0.55f), 1, 0.3f);
+    if (pt) pAt(2);
+    if (*hint) p.text(F::JOSEFIN, hint, X(L + W - 40), Y(714), 15 * u, hex(0xffffff, 0.55f), 1, 0.3f);
 }
 
 // A text field being typed into: its frame, the text (its end kept in view), a placeholder while empty, the caret.
@@ -1104,13 +1191,16 @@ void Worlds::kalVoyages() {
     std::string cur, next;
     float mix;
     tourAt(11.f, cur, next, mix);
+    // portrait: one column of cards (Menu::voyageCols), five rows in view, larger
+    const bool pt = m.portrait_;
+    if (pt) { pLayout({{600, 90, 720, 1330, 1.4f}}, 0); pAt(0); }
     kalBackground(mix > 0.5f ? next : cur);
     p.frostSource();
     p.glass(X(660), Y(90), 600 * u, 130 * u, 24 * u, u, 0.f, 0.45f);
     p.text(F::JOSEFIN_LIGHT, "VOYAGE", X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
     if (!m.voyages_) return;
     const auto& vs = m.voyages_->list();
-    const int nc = (int)vs.size() + 2, cols = Menu::VOYAGE_COLS, rows = (nc + cols - 1) / cols;
+    const int nc = (int)vs.size() + 2, cols = m.voyageCols(), rows = (nc + cols - 1) / cols;
     const bool making = m.vStep_ > 0;
     struct Spin { float angle = 0, speed = 0; };
     static std::map<uint32_t, Spin> spins; // the cards' rosettes, by card
@@ -1118,7 +1208,7 @@ void Worlds::kalVoyages() {
     const float dt = (float)std::clamp(t - lastT, 0.0, 0.1);
     lastT = t;
     constexpr float CW = 660, CH = 190, GAP = 40, STEP = CH + 44, TOP = 290;
-    constexpr int SHOWN = 3; // rows in view
+    const int SHOWN = pt ? 5 : 3; // rows in view
     const float scroll = std::clamp(m.aVRow_ - 1.f, 0.f, (float)std::max(0, rows - SHOWN));
     const float x0 = 960 - (cols * CW + (cols - 1) * GAP) / 2;
     const float w = CW * u, h = CH * u;
@@ -1211,18 +1301,20 @@ void Worlds::kalVoyages() {
         const float kh = th * SHOWN / rows, ky = ty + (th - kh) * scroll / (float)(rows - SHOWN);
         p.rrect(tx - 2 * u, ky, 4 * u, kh, 2 * u, hex(0xffffff, 0.7f));
     }
+    // (portrait: the panel as wide as the cards, the message and the hint under the rows in view)
+    const float ml = pt ? x0 - 20 : 120, mw = pt ? CW + 40 : 1680, below = pt ? TOP + SHOWN * STEP - 44 : 1080;
     if (making) {
-        p.glass(X(120), Y(650), 1680 * u, 230 * u, 24 * u, u, 0.5f, 0.85f);
-        p.text(F::JOSEFIN, m.vStep_ == 1 ? "PLAYLIST" : "NAME", X(160), Y(686), 16 * u, hex(0xffffff), -1, 0.45f);
-        textField(X(160), Y(712), 1600 * u, 62 * u, m.editText_,
-                  m.vStep_ == 1 ? "Type or paste (Ctrl+V) a YouTube playlist link or ID" : nullptr);
+        p.glass(X(ml), Y(650), mw * u, 230 * u, 24 * u, u, 0.5f, 0.85f);
+        p.text(F::JOSEFIN, m.vStep_ == 1 ? "PLAYLIST" : "NAME", X(ml + 40), Y(686), 16 * u, hex(0xffffff), -1, 0.45f);
+        textField(X(ml + 40), Y(712), (mw - 80) * u, 62 * u, m.editText_,
+                  m.vStep_ == 1 ? (pt ? "Paste (Ctrl+V) a playlist link or ID" : "Type or paste (Ctrl+V) a YouTube playlist link or ID") : nullptr);
     }
     if (!m.plMsg_.empty())
-        p.text(F::JOSEFIN, upper(m.plMsg_), making ? X(160) : X(960), Y(making ? 830 : 1000), 16 * u,
+        p.text(F::JOSEFIN, upper(m.plMsg_), making ? X(ml + 40) : X(960), Y(making ? 830 : below - 80), 16 * u,
                m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), making ? -1 : 0, 0.3f);
     // only the keys a player wouldn't guess (paste, delete)
     const char* hint = m.vStep_ == 1 ? "CTRL+V  PASTE" : !making && m.vSel_ >= 1 && m.vSel_ <= (int)vs.size() ? "DEL  DELETE" : "";
-    if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(1050), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
+    if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(below - 30), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
 }
 
 // The game's logo (the title, the debriefs): a planet turning slowly under a light from the top left, banded in blues and violets, a thin sky
