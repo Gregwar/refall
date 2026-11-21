@@ -1,19 +1,23 @@
 #pragma once
 // The web build (Emscripten, REFALL_WEB): what the browser does differently. The game runs on the page's main
-// thread, its loop handing a frame back to the browser at each swap (ASYNCIFY); the player's files (campaign progress,
-// the menu's place) live in the browser's IndexedDB.
+// thread, which never waits: the browser calls the game's loop a frame at a time (requestAnimationFrame); the player's
+// files (campaign progress, the menu's place) live in the browser's IndexedDB.
 #ifdef REFALL_WEB
+#include <functional>
+
 struct GLFWwindow;
 
 namespace web {
 
-// Before anything reads them: the player's folders (<data>/refall) mounted from IndexedDB
-// and filled from it (waits for the browser).
-void mountStorage();
+// Before anything reads them: the player's folders (<data>/refall) mounted from IndexedDB and filled from it, in the
+// background: `then` once they are.
+void mountStorage(std::function<void()> then);
 // Writes changed files back to IndexedDB (every few seconds at most; `force`: now, e.g. after a run's progress).
 void persist(double now, bool force = false);
-// Hands the frame to the browser and waits for its next one (requestAnimationFrame).
-void waitFrame();
+// The game's loop: `frame` called at each of the browser's frames (requestAnimationFrame), until it returns false.
+void runFrames(std::function<bool()> frame);
+// The frame drawn (the browser shows it once `frame` returns): its cost sampled for adaptResolution.
+void endFrame();
 // The WebGL extensions the game uses where the browser has them (float render targets, dual-source blending, clip
 // distances), and the canvas following the page's size.
 void setupContext(GLFWwindow* win);

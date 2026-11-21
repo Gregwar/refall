@@ -3,7 +3,9 @@
 #ifdef REFALL_WEB
 #include <algorithm>
 #include <cstdio>
+#include <functional>
 #include <map>
+#include <utility>
 #include <vector>
 
 #include <GLFW/glfw3.h>
@@ -15,14 +17,14 @@
 #include "ugl.hpp"
 
 
-EM_ASYNC_JS(void, refall_mount, (const char* dir), {
+EM_JS(void, refall_mount, (const char* dir), {
     const d = UTF8ToString(dir);
     FS.mkdirTree(d);
     FS.mount(IDBFS, {}, d);
-    await new Promise((resolve) => FS.syncfs(true, (err) => {
+    FS.syncfs(true, (err) => {
         if (err) console.warn("[web] storage:", err);
-        resolve();
-    }));
+        _refall_mounted();
+    });
 });
 
 EM_JS(void, refall_sync, (), {
@@ -37,9 +39,15 @@ EM_JS(void, refall_sync, (), {
 
 extern "C" EMSCRIPTEN_KEEPALIVE void refall_sync_again() { refall_sync(); }
 
-EM_ASYNC_JS(void, refall_wait_frame, (), {
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-});
+namespace {
+std::function<void()> g_mounted;
+std::function<bool()> g_frame;
+double g_resumed = 0; // when the browser handed the frame over (ms)
+} // namespace
+
+extern "C" EMSCRIPTEN_KEEPALIVE void refall_mounted() {
+    if (g_mounted) std::exchange(g_mounted, nullptr)();
+}
 
 EM_JS(int, refall_extension, (const char* name), {
     const gl = GL.currentContext && GL.currentContext.GLctx;
@@ -85,7 +93,7 @@ int g_level = 0, g_scene = -1000000, g_frames = 0, g_slow = 0;
 double g_last = 0, g_changed = -1e9, g_calm = 0, g_up = -1e9, g_window = 0;
 // what a frame costs, all told: sampled twice a second while a step up is possible (the frame's time from the browser
 // handing it over to its drawing finished, glFinish waiting for the GPU), the most of the half second's samples (ms)
-double g_resumed = 0, g_cost = -1;
+double g_cost = -1;
 bool g_sample = false;
 
 void applyLevel(int level, double now) {
@@ -157,7 +165,8 @@ void adaptResolution(int scene) {
 }
 
 
-void mountStorage() {
+void mountStorage(std::function<void()> then) {
+    g_mounted = std::move(then);
     refall_mount(platform::appDataDir().string().c_str());
     // (the page saves once more when it is closed or hidden)
     EM_ASM({
@@ -174,15 +183,21 @@ void persist(double now, bool force) {
     refall_sync();
 }
 
-void waitFrame() {
+void runFrames(std::function<bool()> frame) {
+    g_frame = std::move(frame);
+    emscripten_set_main_loop([] {
+        g_resumed = emscripten_get_now();
+        if (!g_frame()) emscripten_cancel_main_loop();
+    }, 0, false);
+}
+
+void endFrame() {
     if (g_sample && g_resumed > 0) {
         g_sample = false;
         glFinish();
         const double ms = emscripten_get_now() - g_resumed;
         if (ms < 1000.0) g_cost = std::max(g_cost, ms);
     }
-    refall_wait_frame();
-    g_resumed = emscripten_get_now();
 }
 
 void setupContext(GLFWwindow* win) {
