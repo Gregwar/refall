@@ -201,7 +201,7 @@ void Worlds::tabs(F f, Col ink, Col accent, float track) {
     const float T = pt ? 1.25f : 1.f;
     std::string name = m.voyageTitle_.empty() ? std::string("VOYAGE") : upper(asciiFold(m.voyageTitle_));
     while (name.size() > 4 && p.width(f, name, 22 * T * u, track + 0.2f) > 700 * u) name.pop_back();
-    // the difficulties, centred on cx (five of them, EASY .. HARDCORE)
+    // the difficulties, centred on cx (five of them, EASY .. MASTER)
     const float cx = X(pt ? 960 : 1300), sp = (pt ? 176 : 190) * u, y = Y(pt ? 150 : 90), on = 1.f - std::min(1.f, m.aRow_), mid = 0.5f * (DIFF_COUNT - 1);
     const float nw = p.width(f, name, 22 * T * u, track + 0.2f), nx = pt ? X(960) - nw * 0.5f : X(80), ny = Y(pt ? 62 : 92);
     // a soft shade under the title and the tabs, so they read over a bright crystal
@@ -1182,7 +1182,7 @@ void Worlds::kalFree() {
     const bool rows = m.playlists_ != nullptr;
     const float L = pt ? PL : 120, W = pt ? PW : 1680; // the lower panels' left and width
     const float onDiff = rows ? 1.f - std::min(1.f, m.aFreeRow_) : 1.f;
-    // the difficulties' gems: teal, violet, rose, EXPERT an ember orange and HARDCORE a blood red
+    // the difficulties' gems: teal, violet, rose, EXPERT an ember orange and MASTER a blood red
     static const uint32_t C[DIFF_COUNT] = {0x6fd8c0, 0x9c86ff, 0xff6f9c, 0xff8a3d, 0xe8283c};
     if (pt) pAt(1);
     for (int d = 0; d < DIFF_COUNT; d++) {
@@ -1203,11 +1203,12 @@ void Worlds::kalFree() {
         for (int i = 0; i < 4; i++)
             kite(x, y, t * 0.05f * freePlayMultiplier(d) + i * TAU / 4, 0, R, 0.55f, hex(C[d]), 0.5f + 0.45f * f, true,
                  f > 0.5f && onDiff > 0.5f ? hex(0xffffff, 0.9f) : hex(0x08080c, 0.9f));
-        const float bw = std::max(220 * u, p.width(F::JOSEFIN, difficultyName(d), 28 * u, 0.35f) + 44 * u); // (HARDCORE: wider)
+        const float bw = std::max(220 * u, p.width(F::JOSEFIN, difficultyName(d), 28 * u, 0.35f) + 44 * u); // (a long name: wider)
         p.glass(x - bw / 2, y + R + 40 * u, bw, 78 * u, 16 * u, u, f * onDiff, 0.5f);
         p.text(F::JOSEFIN, difficultyName(d), x, y + R + 76 * u, (24 + 4 * f) * u, hex(0xffffff, 0.5f + 0.5f * f), 0, 0.35f);
         char b[16];
-        std::snprintf(b, sizeof(b), "x%.1f", freePlayMultiplier(d));
+        const float mul = freePlayMultiplier(d);
+        std::snprintf(b, sizeof(b), std::fabs(mul * 10.f - std::round(mul * 10.f)) < 1e-3f ? "x%.1f" : "x%.2f", mul); // (x0.75)
         p.text(F::JOSEFIN, b, x, y + R + 104 * u, 18 * u, hex(0xffffff, 0.45f + 0.4f * f), 0, 0.1f);
     }
     if (rows) {
@@ -1313,9 +1314,9 @@ void Worlds::kalFree() {
         if (!m.plMsg_.empty())
             p.text(F::JOSEFIN, upper(m.plMsg_), X(L + 40), Y(930), 16 * u, m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), -1, 0.3f);
         // the starting level: a strip of coarse steps along the bottom (HARD's and EXPERT's hyperdrop levels in its colour)
-        // (portrait: its name over it, the steps across it); HARDCORE starts at the top one, the strip dimmed on it
+        // (portrait: its name over it, the steps across it); MASTER starts at the top one, the strip dimmed on it
         const float onLvl = std::clamp(m.aFreeRow_ - 1.f, 0.f, 1.f);
-        const bool fixedTop = m.freeDiff_ == DIFF_HARDCORE;
+        const bool fixedTop = m.freeDiff_ == DIFF_MASTER;
         if (fixedTop) p.setFade(0.55f);
         if (pt) pAt(3);
         const float ly = Y(pt ? 990 : 962), lh = 78 * u, cw = (pt ? (W - 80) / Menu::FREE_LEVEL_COUNT : 120) * u, lx = X(pt ? L + 40 : 440);
