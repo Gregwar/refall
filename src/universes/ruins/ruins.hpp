@@ -120,9 +120,10 @@ private:
     bool snapNext_ = true;
     GLuint meshVao_ = 0, meshVbo_ = 0, figVao_ = 0, figVbo_ = 0, instVbo_ = 0, folVao_ = 0, folVbo_ = 0;
     int folCount_ = 0;
-    // the bushes (instanced blobs, see BUSH_VS): the shells of leaves first, then their cores (they cast shadows)
+    // the bushes and the canopy (instanced blobs, see BUSH_VS): the shells of leaves first, then the bushes' cores
+    // (they cast shadows), then the canopy's
     GLuint bushVao_ = 0, bushVbo_ = 0, bushIbo_ = 0, bushInstVbo_ = 0;
-    int bushIdx_ = 0, bushShells_ = 0, bushCores_ = 0;
+    int bushIdx_ = 0, bushShells_ = 0, bushCores_ = 0, canCores_ = 0;
     void drawBushes(int first, int count);
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0, shadowFbo_ = 0, shadowTex_ = 0, cornerTex_ = 0;
     int msW_ = 1, msH_ = 1, samples_ = 4;
