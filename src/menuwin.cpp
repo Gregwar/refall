@@ -171,7 +171,7 @@ struct Worlds {
     void optionLines(const std::vector<std::pair<std::string, float>>& lines, float size);
     bool optionNote();
     void kalCampaign();
-    void textField(float fx, float fy, float fw, float fh, const std::string& text, const char* placeholder);
+    void textField(float fx, float fy, float fw, float fh, const std::string& text, const char* placeholder, bool focused = true);
 };
 
 void Menu::renderWorlds(int w, int h) {
@@ -1339,15 +1339,16 @@ void Worlds::kalFree() {
 }
 
 // A text field being typed into: its frame, the text (its end kept in view), a placeholder while empty, the caret.
-void Worlds::textField(float fx, float fy, float fw, float fh, const std::string& text, const char* placeholder) {
+void Worlds::textField(float fx, float fy, float fw, float fh, const std::string& text, const char* placeholder, bool focused) {
+    // (not focused: a dim rim, no caret)
     p.rrect(fx, fy, fw, fh, 12 * u, hex(0xffffff, 0.08f));
-    p.rrectLine(fx, fy, fw, fh, 12 * u, 2 * u, hex(0xffffff, 0.85f));
+    p.rrectLine(fx, fy, fw, fh, 12 * u, (focused ? 2.f : 1.2f) * u, hex(0xffffff, focused ? 0.85f : 0.3f));
     std::string shown = text;
     const float ts = 24 * u;
     while (!shown.empty() && p.width(F::JOSEFIN, shown, ts) > fw - 60 * u) shown.erase(0, 1);
     if (shown.empty() && placeholder) p.text(F::JOSEFIN, placeholder, fx + 24 * u, fy + 40 * u, ts, hex(0xffffff, 0.4f));
-    const float tw = p.text(F::JOSEFIN, shown, fx + 24 * u, fy + 40 * u, ts, hex(0xffffff));
-    if (std::fmod(t, 1.f) < 0.6f && !m.fetching())
+    const float tw = p.text(F::JOSEFIN, shown, fx + 24 * u, fy + 40 * u, ts, hex(0xffffff, focused ? 1.f : 0.6f));
+    if (focused && std::fmod(t, 1.f) < 0.6f && !m.fetching())
         p.rrect(fx + 26 * u + tw, fy + 14 * u, 2.5f * u, 34 * u, 1 * u, hex(0xffffff, 0.9f));
 }
 
@@ -1475,10 +1476,17 @@ void Worlds::kalVoyages() {
     if (making) {
         p.glass(X(ml), Y(650), mw * u, 230 * u, 24 * u, u, 0.5f, 0.85f);
         p.text(F::JOSEFIN, m.vStep_ == 1 ? "PLAYLIST" : "NAME", X(ml + 40), Y(686), 16 * u, hex(0xffffff), -1, 0.45f);
+        // (naming: the name's field dimmed while the focus is on the checkbox)
         textField(X(ml + 40), Y(712), (mw - 80) * u, 62 * u, m.editText_,
-                  m.vStep_ == 1 ? (pt ? "Paste (Ctrl+V) a playlist link or ID" : "Type or paste (Ctrl+V) a YouTube playlist link or ID") : nullptr);
-        if (m.vStep_ == 2) { // a checkbox under the name: the songs shuffled (up / down ticks it), else the playlist's order
-            const float bx = X(ml + 40), by = Y(786), bs = 30 * u;
+                  m.vStep_ == 1 ? (pt ? "Paste (Ctrl+V) a playlist link or ID" : "Type or paste (Ctrl+V) a YouTube playlist link or ID") : nullptr,
+                  !(m.vStep_ == 2 && m.vRow_ == 1));
+        if (m.vStep_ == 2) { // a checkbox under the name: the songs shuffled (Space ticks it), else the playlist's order
+            const float bx = X(ml + 50), by = Y(800), bs = 30 * u;
+            if (m.vRow_ == 1) { // focused: a lit pane behind it and its label, underlined
+                const float lw = p.width(F::JOSEFIN, "SHUFFLE SONGS", 18 * u, 0.35f);
+                p.rrect(bx - 10 * u, by - 8 * u, bs + lw + 46 * u, bs + 16 * u, 10 * u, hex(0xa8d0ff, 0.14f));
+                p.rrectLine(bx - 10 * u, by - 8 * u, bs + lw + 46 * u, bs + 16 * u, 10 * u, 1.4f * u, hex(0xffffff, 0.7f));
+            }
             p.rrect(bx, by, bs, bs, 5 * u, m.vShuffle_ ? hex(0xe8c06a) : hex(0xffffff, 0.08f));
             p.rrectLine(bx, by, bs, bs, 5 * u, 1.6f * u, m.vShuffle_ ? hex(0xffe0a0) : hex(0xffffff, 0.6f));
             if (m.vShuffle_) p.check(bx + bs / 2, by + bs / 2, 18 * u, 3 * u, hex(0x1a1408));
@@ -1486,10 +1494,10 @@ void Worlds::kalVoyages() {
         }
     }
     if (!m.plMsg_.empty())
-        p.text(F::JOSEFIN, upper(m.plMsg_), making ? X(ml + 40) : X(960), Y(making ? (m.vStep_ == 2 ? 852 : 830) : below - 80), 16 * u,
+        p.text(F::JOSEFIN, upper(m.plMsg_), making ? X(ml + 40) : X(960), Y(making ? (m.vStep_ == 2 ? 862 : 830) : below - 80), 16 * u,
                m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), making ? -1 : 0, 0.3f);
     // only the keys a player wouldn't guess (paste, delete)
-    const char* hint = m.vStep_ == 1 ? "CTRL+V  PASTE" : m.vStep_ == 2 ? "UP / DOWN  SHUFFLE"
+    const char* hint = m.vStep_ == 1 ? "CTRL+V  PASTE" : m.vStep_ == 2 ? (m.vRow_ == 1 ? "SPACE  TICK" : "DOWN  SHUFFLE SONGS")
                      : !making && m.vSel_ >= 1 && m.vSel_ <= (int)vs.size() ? "DEL  DELETE" : "";
     if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(below - 30), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
 }

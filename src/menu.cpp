@@ -368,6 +368,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             vUrl_ = r.url;
             vEntries_ = r.entries;
             vStep_ = 2;
+            vRow_ = 0; // (the focus on the name)
             editText_ = asciiFold(r.title);
             if (editText_.size() > 60) editText_.resize(60);
             char b[160];
@@ -607,9 +608,10 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             }
             break;
         }
-        if (vStep_ == 2) { // its name, and the songs' order (up / down)
-            type(60);
-            if (dy) vShuffle_ = !vShuffle_;
+        if (vStep_ == 2) { // its name, and the songs' order: up / down the focus, Space ticks the checkbox
+            if (dy) vRow_ = std::clamp(vRow_ + dy, 0, 1);
+            if (vRow_ == 0) type(60);
+            else if (in.pressed(A_UI_ALT)) vShuffle_ = !vShuffle_;
             std::string name = editText_;
             while (!name.empty() && name.back() == ' ') name.pop_back();
             while (!name.empty() && name[0] == ' ') name.erase(0, 1);
