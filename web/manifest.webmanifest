@@ -1,0 +1,19 @@
+{
+  "name": "Refall",
+  "short_name": "Refall",
+  "description": "A falling-block game played on the music: every universe reacts to the song.",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": ["games", "music"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
