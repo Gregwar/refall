@@ -16,8 +16,9 @@
 // strangler fig, a Doric temple), the avenue, the trunks and the ground; the repairs are instance transforms (parts
 // flying back into place) and dissolves (stones and tiers re-forming out of golden dust), the missing blocks holes
 // seen into the walls (shaders.hpp), the wear, the jungle's cover and the prime uniforms of the stone's material. The
-// sun casts a shadow map, dappled by the canopy; the foliage is cards with leafy masks (alpha to coverage), the
-// undergrowth instanced clumps of leafy blobs (alpha to coverage too). Only the
+// sun casts a shadow map, dappled by the canopy; the far jungle's walls and the lianas are cards with leafy masks
+// (alpha to coverage), the undergrowth, the canopy overhead and the crowns instanced clumps of leafy blobs (alpha to
+// coverage too). Only the
 // soft terms are at a reduced resolution: the mist and light shafts along each ray to the depth, and a little
 // ambient occlusion, upsampled with the depth.
 #include "universes/ruins/ruins.hpp"
@@ -1298,7 +1299,7 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
     setScene(progBush_);
     setMat(progBush_, "uVP", vp3_);
     set1f(progBush_, "uLit", 1.f);
-    drawBushes(bushShells_, bushCores_); // (the cores first: the leaves behind them fail the depth test)
+    drawBushes(bushShells_, bushCores_ + canCores_); // (the cores first: the leaves behind them fail the depth test)
     drawBushes(0, bushShells_);
     glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
     glDisable(GL_DEPTH_TEST);
@@ -1396,8 +1397,7 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
 }
 
 // The world's meshes for a variant (world.cpp), uploaded, and its foliage cards (planes whose leafy masks the
-// shader computes where they are: the jungle's walls, the lianas, the canopy's edge)
-// and its bushes (instanced blobs)
+// shader computes where they are: the far jungle's walls, the lianas) and its bushes and canopy (instanced blobs)
 void RuinsUniverse::buildScene(int kind) {
     const auto t0 = std::chrono::steady_clock::now();
     scene_.build(kind);
@@ -1422,8 +1422,6 @@ void RuinsUniverse::buildScene(int kind) {
     qz(-140.f, -320.f, 320.f, -1.f, 80.f, 3.f);
     qz(-2.f, -40.f, 40.f, 0.f, 31.f, 13.f);
     qz(-18.f, -40.f, 40.f, 0.f, 31.f, 14.f);
-    qz(-8.f, -260.f, 260.f, 4.f, 95.f, 15.f);
-    qz(-30.f, -260.f, 260.f, 4.f, 95.f, 16.f);
     glBindBuffer(GL_ARRAY_BUFFER, folVbo_);
     glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
     folCount_ = (int)v.size() / 4;
@@ -1467,9 +1465,96 @@ void RuinsUniverse::buildScene(int kind) {
             if (std::fabs(x) > 3.5f) clump(x, -10.f + (rnd() - 0.5f) * 3.f, 1.1f + 0.5f * rnd(), 0.9f + 0.4f * rnd(), 7);
         for (float x = -60.f; x < 60.f; x += 3.2f + 1.6f * rnd())
             clump(x, -27.f + (rnd() - 0.5f) * 4.f, 2.6f + 1.2f * rnd(), 2.4f + 1.2f * rnd(), 8);
+        // the canopy overhead (not the Mediterranean's): two bands of hanging leaf masses across the court (rows 9
+        // and 10, the farther one open over the court), each a ragged lower edge of hanging clumps in depth under
+        // tiers of broad flattened blobs; its lower edge in iC.w (darker deeper in), its cores cast no shadow
+        std::vector<float> canCores;
+        if (kind != 2) {
+            const float ph[3] = {rnd() * 6.3f, rnd() * 6.3f, rnd() * 6.3f};
+            auto edge = [&](float x, float base) {
+                return base + 1.5f * std::sin(x * 0.11f + ph[0]) + 0.9f * std::sin(x * 0.27f + ph[1]) +
+                       0.5f * std::sin(x * 0.61f + ph[2]);
+            };
+            auto blob = [&](float x, float y, float z, float hx, float hy, int row, float hang, float bot, bool core) {
+                const float b[12] = {x, y, z, hx, hy, rnd() * 64.f, (float)row, 0.f, std::fabs(x), 0.f, hang, bot};
+                shells.insert(shells.end(), b, b + 12);
+                if (core) {
+                    canCores.insert(canCores.end(), b, b + 12);
+                    canCores[canCores.size() - 5] = 1.f;
+                }
+            };
+            for (int band = 0; band < 2; band++) {
+                const float zc = band == 0 ? -8.f : -30.f, x0 = band == 0 ? 0.f : 20.f;
+                const int tiers = band == 0 ? 4 : 6;
+                for (int s = 0; s < 2; s++)
+                    for (float ax = x0 + rnd() * 1.5f; ax < 90.f; ax += 2.1f + 1.3f * rnd()) {
+                        const float x = s ? ax : -ax;
+                        if (band == 1 && ax < 20.f + 6.f * rnd()) continue;
+                        // (over the well, band 0 hangs a little higher)
+                        const float bot = edge(x + 40.f * band, band == 0 ? 15.6f : 24.f) +
+                                          (band == 0 ? 3.6f * (1.f - smoothstepf(6.f, 17.f, ax)) : 0.f) + (rnd() - 0.5f) * 1.4f;
+                        const int row = 9 + band;
+                        if (rnd() < 0.65f) {
+                            const float hx = 0.7f + 0.6f * rnd(), hy = 1.4f + 1.8f * rnd();
+                            blob(x + (rnd() - 0.5f) * 1.2f, bot + hy * 0.4f, zc + (rnd() - 0.5f) * 9.f, hx, hy, row, 1.f, bot, false);
+                        }
+                        for (int t = 0; t < tiers; t++) {
+                            const float hx = 2.3f + 1.4f * rnd() + 0.25f * t, hy = 1.2f + 0.7f * rnd();
+                            blob(x + (rnd() - 0.5f) * 1.5f, bot + 2.0f + t * 2.5f + rnd() * 1.2f, zc + (rnd() - 0.5f) * 9.f - 0.8f * t,
+                                 hx, hy, row, 0.f, bot, rnd() < 0.55f);
+                        }
+                    }
+            }
+        }
+        // the far jungle's crowns (rows 11 and 12): domes of leaves along the tops of its walls (x = -42, 42; z = -96,
+        // -140), over the line where FOL_FS's cards stop (crownLine())
+        if (kind != 2)
+            for (int L = 0; L < 4; L++) {
+                const float base = L == 3 ? 36.f : 24.f, seed = L * 13.7f;
+                const float u0 = L < 2 ? -320.f : (L == 2 ? -220.f : -280.f), u1 = L < 2 ? 120.f : -u0;
+                for (float u = u0 + rnd() * 3.f; u < u1; u += 4.f + 3.f * rnd()) {
+                    const float line = base - 1.f + 3.f * std::sin(u * 0.045f + seed * 1.7f) + 0.8f * std::sin(u * 0.13f + seed);
+                    const float hx = 3.6f + 2.6f * rnd(), hy = 2.6f + 2.2f * rnd(), d = (rnd() - 0.5f) * 3.f;
+                    const vec3 c = L < 2 ? vec3(L == 0 ? -42.f + d : 42.f + d, line + 0.6f + 2.4f * rnd(), u)
+                                         : vec3(u, line + 0.6f + 2.4f * rnd(), (L == 2 ? -96.f : -140.f) + d);
+                    const float row = L < 3 ? 11.f : 12.f;
+                    const float b[12] = {c.x, c.y, c.z, hx, hy, rnd() * 64.f, row, 0.f, 0.f, 0.f, 0.f, 0.f};
+                    shells.insert(shells.end(), b, b + 12);
+                    if (rnd() < 0.4f) {
+                        const float o = (rnd() - 0.5f) * hx, dx = L < 2 ? (L == 0 ? -1.f : 1.f) : o, dz = L < 2 ? o : -1.f;
+                        const float b2[12] = {c.x + dx, c.y + hy * (0.6f + 0.4f * rnd()), c.z + dz, hx * 0.6f, hy * 0.6f,
+                                              rnd() * 64.f, row, 0.f, 0.f, 0.f, 0.f, 0.f};
+                        shells.insert(shells.end(), b2, b2 + 12);
+                    }
+                }
+            }
+        // the Mediterranean's umbrella pines (rows 11 and 12): flattened domes of needles over the trunks FOL_FS draws
+        // on its walls, found as crowns() finds them (a cell of 1 / 0.11 along the wall, a pine where its hash > 0.45)
+        if (kind == 2)
+            for (int L = 0; L < 4; L++) {
+                const float seed = L * 13.7f, H0 = (L == 3 ? 36.f : 24.f) - 10.f;
+                const float u0 = L < 2 ? -320.f : (L == 2 ? -280.f : -320.f), u1 = L < 2 ? 120.f : -u0;
+                for (float ci = std::floor(u0 * 0.11f + seed); ci < u1 * 0.11f + seed; ci += 1.f) {
+                    const float ch = ghash(ci + seed * 7.f, (ci + seed * 7.f) * 0.371f + 17.13f);
+                    if (ch <= 0.45f) continue;
+                    const float w = (0.42f + 0.1f * ghash(ci + 3.f, (ci + 3.f) * 0.371f + 17.13f)) / 0.11f;
+                    const float H = H0 + 8.f * (0.6f + 0.5f * ch) - 8.f * 0.35f;
+                    const float u = (ci + 0.5f - seed + 0.06f * std::sin(H * 0.3f + ci)) / 0.11f;
+                    const float row = L < 3 ? 11.f : 12.f;
+                    for (int k = 0; k < 3; k++) {
+                        const float o = k == 0 ? 0.f : (k == 1 ? -0.45f : 0.45f) * w, d = (rnd() - 0.5f) * (k == 0 ? 0.6f : 2.4f);
+                        const float hx = w * (k == 0 ? 0.75f : 0.5f), hy = k == 0 ? 1.3f : 0.95f, y = H + 0.6f + (k == 0 ? 0.f : (rnd() - 0.7f) * 1.f);
+                        const vec3 c = L < 2 ? vec3((L == 0 ? -42.f : 42.f) + d, y, u + o) : vec3(u + o, y, (L == 2 ? -96.f : -140.f) + d);
+                        const float b[12] = {c.x, c.y, c.z, hx, hy, rnd() * 64.f, row, 0.f, 0.f, 0.f, 0.f, 0.f};
+                        shells.insert(shells.end(), b, b + 12);
+                    }
+                }
+            }
         bushShells_ = (int)shells.size() / 12;
         bushCores_ = (int)cores.size() / 12;
+        canCores_ = (int)canCores.size() / 12;
         shells.insert(shells.end(), cores.begin(), cores.end());
+        shells.insert(shells.end(), canCores.begin(), canCores.end());
         glBindBuffer(GL_ARRAY_BUFFER, bushInstVbo_);
         glBufferData(GL_ARRAY_BUFFER, shells.size() * sizeof(float), shells.data(), GL_STATIC_DRAW);
     }
