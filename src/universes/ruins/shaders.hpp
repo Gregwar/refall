@@ -2,8 +2,9 @@
 // RUINS' shaders: the world (ancient ruins in a jungle, as meshes rasterized at the full resolution, 4x
 // multisampled: the stone carved, jointed, weathered and mossy, its missing blocks seen as holes in the walls, its
 // parts re-forming out of golden dust; the sun's shadow map dappled by the canopy, bounce light; the sky; the
-// foliage as cards with leafy masks, alpha to coverage; mist and light shafts integrated along each ray to the depth
-// and a little ambient occlusion, at a reduced resolution, upsampled with the depth), the backing behind the well,
+// foliage as cards with leafy masks and the undergrowth as instanced clumps of leafy blobs, alpha to coverage; mist
+// and light shafts integrated along each ray to the depth and a little ambient occlusion, at a reduced resolution,
+// upsampled with the depth), the backing behind the well,
 // the carved stone pieces, dust, chips, birds, lettering.
 
 namespace ruins_shaders {
@@ -496,7 +497,7 @@ out vec4 frag;
 void main() { frag = vec4(sky(rayDir(vUv)), 1.0); }
 )";
 
-// ---- the foliage: cards (jungle walls, the jungle's mass, undergrowth, ferns, lianas, the canopy's edge), their
+// ---- the foliage: cards (jungle walls, lianas, the canopy's edge), their
 // leafy masks computed where they are, at the full resolution (alpha to coverage)
 inline const char* FOL_VS = R"(#version 330 core
 layout(location = 0) in vec4 aPos; // xyz, layer
@@ -546,19 +547,6 @@ float crowns(vec2 uv, float base, float amp, float seed, float fw, int pine) {
         cov = max(cov, cyp);
     }
     return cov;
-}
-// ferns: arching fronds along u, serrated
-float ferns(vec2 uv, float base, float amp, float seed, float fw) {
-    float u = uv.x * 0.9 + seed;
-    float c = 0.0;
-    for (int k = 0; k < 3; k++) {
-        float uu = u + float(k) * 0.37;
-        float i = floor(uu), f = fract(uu) - 0.5;
-        float h = base + amp * hash1(i + seed * 3.0 + float(k) * 17.0);
-        float top = h * (1.0 - sq(f * 1.9)) + 0.09 * sin(uv.x * 34.0 + i) * (0.4 + 0.6 * sat(uv.y / max(h, 0.1)));
-        c = max(c, 1.0 - smoothstep(-fw, fw, uv.y - top));
-    }
-    return c;
 }
 float lianas(vec2 uv, float seed, float fw) {
     float u = uv.x * 0.7 + seed;
@@ -614,31 +602,6 @@ void main() {
         float base = (L == 3 ? 36.0 : 24.0) + (pine == 1 ? -10.0 : 0.0);
         a = crowns(uv, base, pine == 1 ? 8.0 : 10.0, float(L) * 13.7, fw, pine);
         kind = 1.0; seed = float(L);
-    } else if (L == 4) {
-        if (J <= 0.01) discard;
-        float fw = fwidth(uv.y) * 1.2 + 0.02;
-        a = crowns(uv, -12.0 + 33.0 * smoothstep(0.0, 1.0, J), 7.0, 41.0, fw, 0);
-        kind = 1.0; seed = 7.0;
-    } else if (L == 5) {
-        if (J <= 0.01) discard;
-        float fw = fwidth(uv.y) * 1.2 + 0.01;
-        a = crowns(vec2(p.x * 1.6, p.y), -6.0 + 12.0 * J, 5.0, 13.0, fw, 0) * step(10.0 * (1.0 - J), abs(p.x) + 6.0 * J);
-        kind = 2.0; seed = 8.0;
-    } else if (L <= 10) {
-        int i = L - 6;
-        float jg = i == 0 ? 0.0 : J;   // (the nearest row stays low: the camera stands by it)
-        if (abs(p.x) < 10.2 * (1.0 - jg) || abs(p.x) > 41.0) discard;
-        float fw = fwidth(uv.y) * 1.2 + 0.005;
-        a = pine == 1 ? crowns(uv, 1.1 + 4.0 * jg, 1.2 + 2.0 * jg, float(i) * 5.3, fw, 0)
-                      : ferns(uv, 0.9 + 3.6 * jg, 1.5 + 2.5 * jg, float(i) * 3.1, fw);
-        a *= 1.0 - 0.6 * uPrime * step(abs(p.x), 14.0);
-        kind = 2.0; seed = float(i);
-    } else if (L <= 12) {
-        int i = L - 11;
-        uv = vec2(p.z, p.y);
-        float fw = fwidth(uv.y) * 1.2 + 0.005;
-        a = ferns(uv, 0.5 + 3.0 * J, 1.0 + 2.0 * J, 7.0 + float(i) * 2.3, fw) * (1.0 - uPrime);
-        kind = 2.0; seed = 5.0 + float(i);
     } else if (L <= 14) {
         if (pine == 1) discard;
         int i = L - 13;
@@ -665,6 +628,159 @@ void main() {
     float shade = kind == 4.0 ? 1.0 : mix(1.0, shadowAt(p, -rd), 0.75);
     vec3 c = foliageCol(kind, seed, p, uv, rd, shade);
     frag = vec4(max(c, 0.0), sat(a * 1.15));
+}
+)";
+
+// ---- the bushes: the undergrowth along the court (the hedges of the maquis, the jungle's shrubs and ferns) as
+// clumps of lumpy blobs, instanced: each a shell of leaves (alpha to coverage, its holes showing its inside and its
+// dark core), lit by the sun through the canopy, darker toward its heart and its foot, swaying. The jungle grows
+// them taller and closes the court's middle; as it recedes they sink back from the middle out.
+inline const char* BUSH_VS = R"(#version 330 core
+layout(location = 0) in vec3 aPos;   // a unit icosphere
+layout(location = 1) in vec4 iA;     // the blob's x, its centre's height (in half heights), its z, its half width
+layout(location = 2) in vec4 iB;     // its half height, seed, row, shell (0 the leaves, 1 the core)
+layout(location = 3) in vec4 iC;     // the clump's |x| (where the clearing reaches it), the clearing's jitter
+uniform mat4 uVP;
+uniform float uLit;  // (0 drawing the shadow map)
+out vec3 vW, vN, vQ;
+out float vSh;      // the sun's light there (the shadow map, the canopy), per vertex: the clumps are soft
+flat out vec4 vB;   // seed, row, shell, growth
+float hash3s(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+float vnoise3(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    vec2 e = vec2(1.0, 0.0);
+    return mix(mix(mix(hash3s(i), hash3s(i + e.xyy), f.x), mix(hash3s(i + e.yxy), hash3s(i + e.xxy), f.x), f.y),
+               mix(mix(hash3s(i + e.yyx), hash3s(i + e.xyx), f.x), mix(hash3s(i + e.yxx), hash3s(i + e.xxx), f.x), f.y), f.z);
+}
+// how tall the jungle lets a clump grow (0: sunk into the ground)
+float bushGrow(float ax, float jit, int row) {
+    float J = uJungle;
+    if (row <= 4) {
+        float jg = row == 0 ? 0.0 : J;   // (the nearest row stays low: the camera stands by it)
+        float open = 10.2 * (1.0 - jg) + jit;
+        return smoothstep(open - 0.4, open + 1.8, ax) * (1.0 + 2.0 * jg) * (1.0 - 0.5 * uPrime * (1.0 - smoothstep(12.0, 15.0, ax)));
+    }
+    if (row <= 6) return (0.3 + 1.75 * J) * (1.0 - uPrime);   // (along the court's sides)
+    if (row == 8) return sat((33.0 * smoothstep(0.0, 1.0, J) - 5.5) / 6.5);   // (the thicket across the court, tall)
+    // the jungle's mass before the temple, only while it is thick
+    return smoothstep(0.12, 0.4, J) * 1.5 * smoothstep(-0.5, 1.5, ax - (10.0 * (1.0 - J) - 6.0 * J + jit));
+}
+void main() {
+    int row = int(iB.z + 0.5);
+    float g = bushGrow(iC.x, iC.y, row);
+    float seed = iB.y;
+    vB = vec4(seed, iB.z, iB.w, g);
+    vSh = 0.0;
+    if (g < 0.02) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    float lump = 1.0 + 0.55 * (vnoise3(aPos * 1.9 + seed * 13.0) - 0.5) + 0.25 * (vnoise3(aPos * 4.3 - seed * 7.0) - 0.5);
+    vec3 loc = aPos * lump * (iB.w > 0.5 ? 0.72 : 1.0);
+    float hx = iA.w * sqrt(min(g, 1.0)) * (1.0 + 0.22 * max(g - 1.0, 0.0)), hy = iB.x * g;
+    vec3 sc = vec3(hx, hy, hx * 0.9);
+    vec3 w = vec3(iA.x, iA.y * hy, iA.z) + loc * sc;
+    // the wind: the tops sway, the feet hold
+    float up = sat(w.y / 3.0) * sat(loc.y + 0.6);
+    float ph = uTime * 1.25 + iA.x * 0.37 + iA.z * 0.29 + seed;
+    w.x += uSway * 0.09 * up * (sin(ph) + 0.35 * sin(ph * 2.3 + 1.0));
+    w.z += uSway * 0.05 * up * cos(ph * 0.8 + 2.0);
+    vW = w;
+    vN = loc / sc;
+    if (uLit > 0.5) vSh = shadowAt(w, normalize(vN)) * sunThrough(w + vec3(0.0, 0.5, 0.0));
+    vQ = loc * vec3(iA.w, iB.x, iA.w * 0.9) + vec3(iA.x, 0.0, iA.z);   // (the leaves fixed on it)
+    gl_Position = uVP * vec4(w, 1.0);
+}
+)";
+inline const char* BUSH_SHADOW_FS = R"(#version 330 core
+out vec4 frag;
+void main() { frag = vec4(1.0); }
+)";
+inline const char* BUSH_FS = R"(#version 330 core
+in vec3 vW, vN, vQ;
+in float vSh;
+flat in vec4 vB;
+out vec4 frag;
+vec3 hash33(vec3 p) {
+    p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+    p += dot(p, p.yxz + 33.33);
+    return fract((p.xxy + p.yxx) * p.zyx);
+}
+// the leaves around q (in leaf cells) on a surface facing n: a jittered lattice of pointed leaves lying on it, each
+// turned its own way, drooping a little; their coverage, the outermost one's hash and where across it (along, across)
+float leaves(vec3 q, vec3 n, float fw, float slim, out vec3 lh, out vec2 luv) {
+    vec3 t1 = normalize(abs(n.y) < 0.95 ? cross(n, vec3(0.0, 1.0, 0.0)) : cross(n, vec3(1.0, 0.0, 0.0)));
+    vec3 t2 = cross(n, t1);
+    vec3 b = floor(q - 0.5);
+    float cov = 0.0, best = -1e9;
+    lh = vec3(0.5);
+    luv = vec2(1.0);
+    for (int i = 0; i < 8; i++) {
+        vec3 c = b + vec3(float(i & 1), float((i >> 1) & 1), float((i >> 2) & 1));
+        vec3 h = hash33(c);
+        vec3 d = q - (c + 0.15 + 0.7 * h);
+        float an = mix(-2.6, -0.5, h.x) + (h.z > 0.5 ? 3.1416 : 0.0) * 0.35;
+        vec3 ax = cos(an) * t1 + sin(an) * t2;
+        float L = 0.6 + 0.3 * h.y;
+        float x = dot(d, ax) / L, y = dot(d, cross(n, ax));
+        float wid = L / slim * sqrt(max(1.0 - x * x, 0.0)) * (1.0 - 0.3 * x);
+        float sd = max(abs(y) - wid, abs(x) * L - L);
+        float dn = dot(d, n);
+        sd = max(sd, abs(dn) - 0.75);
+        float a = 1.0 - smoothstep(-fw, fw, sd);
+        if (a > 0.5 && dn > best) {
+            best = dn;
+            lh = h;
+            luv = vec2(x, y / max(wid, 1e-3));
+        }
+        cov = max(cov, a);
+    }
+    return cov;
+}
+void main() {
+    float seed = vB.x, shell = vB.z;
+    vec3 rd = normalize(vW - uEye);
+    vec3 N = normalize(vN);
+    vec3 Nf = gl_FrontFacing ? N : -N;
+    bool core = shell > 0.5, inside = !gl_FrontFacing || core;
+    bool med = uKind == 2;
+    // leaves: small and slim in the maquis (myrtle, lentisk, olive), broader and larger in the jungle
+    float cell = med ? 0.16 : 0.27, slim = med ? 3.2 : 2.3;
+    vec3 q = vQ / cell + seed * 17.0 + shell * 5.3;
+    float fw = length(fwidth(q)) * 0.6 + 0.02;
+    vec3 lh = vec3(vnoise(q.xy * 0.7), vnoise(q.yz * 0.7 + 3.0), vnoise(q.zx * 0.7 + 7.0));
+    vec2 luv = vec2(1.0);
+    float cov = 0.6 + 0.4 * lh.x;   // (the core, mostly hidden: its leaves only hinted)
+    if (!core) cov = leaves(q, N, fw, slim, lh, luv);
+    // (far: sprays of leaves three times their size keep the outline broken)
+    float far = core ? 0.0 : smoothstep(0.2, 0.5, fw);
+    if (far > 0.0) {
+        vec3 lh2;
+        vec2 luv2;
+        float c2 = leaves(q / 3.0 + 7.1, N, fw / 3.0, slim * 0.8, lh2, luv2);
+        cov = mix(cov, max(c2, 0.4 * cov), far);
+        if (far > 0.5) { lh = lh2; luv = luv2; }
+    }
+    float alpha = core ? 1.0 : cov;
+    if (alpha < 0.02) discard;
+    // a leaf's own tilt, its bend across, the sky and the sun on it
+    vec3 Nl = normalize(Nf + (lh - 0.5) * 1.3 + Nf * 0.2 * (1.0 - abs(luv.y)));
+    float hgt = sat(vW.y / 1.5);
+    float occ = mix(0.28, 1.0, hgt) * mix(0.5, 1.0, N.y * 0.5 + 0.5);
+    occ *= core ? 0.36 : (inside ? 0.55 : 1.0);
+    occ *= mix(0.65, 1.0, cov);   // (between the leaves: the deeper ones)
+    float sh = vSh;
+    float dif = sat(dot(Nl, uSunDir));
+    float wrap = sat(dot(N, uSunDir) * 0.5 + 0.5);   // (the clump's side away from the sun stays dark)
+    vec3 alb = uLeaf * (0.6 + 0.75 * lh.z) * (0.85 + 0.3 * hash1(seed * 3.1));
+    alb = mix(alb, uLeafLit * 0.7, step(0.88, lh.x) * 0.4);   // (a few young leaves)
+    alb *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.14, abs(luv.y))) * step(abs(luv.x), 0.85);   // (the midrib)
+    vec3 c = alb * uAmb * occ * (0.75 + 0.35 * Nl.y);
+    c += alb * uSunCol * sh * (0.7 * dif + 0.3) * wrap * (inside ? 0.22 : 1.0) * mix(0.45, 1.0, hgt) * occ;
+    // the sun through the leaves when it is behind them; a glint on the glossy ones
+    float back = pow(sat(dot(rd, uSunDir)), 3.0);
+    c += uLeafLit * uSunCol * sh * back * (inside ? 0.08 : 0.4) * (1.0 - 0.5 * wrap);
+    vec3 hv = normalize(uSunDir - rd);
+    if (!inside) c += uSunCol * sh * pow(sat(dot(Nl, hv)), 30.0) * (med ? 0.05 : 0.14) * wrap;
+    frag = vec4(max(c, 0.0), sat(alpha * 1.2));
 }
 )";
 

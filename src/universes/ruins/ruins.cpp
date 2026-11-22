@@ -16,7 +16,8 @@
 // strangler fig, a Doric temple), the avenue, the trunks and the ground; the repairs are instance transforms (parts
 // flying back into place) and dissolves (stones and tiers re-forming out of golden dust), the missing blocks holes
 // seen into the walls (shaders.hpp), the wear, the jungle's cover and the prime uniforms of the stone's material. The
-// sun casts a shadow map, dappled by the canopy; the foliage is cards with leafy masks (alpha to coverage). Only the
+// sun casts a shadow map, dappled by the canopy; the foliage is cards with leafy masks (alpha to coverage), the
+// undergrowth instanced clumps of leafy blobs (alpha to coverage too). Only the
 // soft terms are at a reduced resolution: the mist and light shafts along each ray to the depth, and a little
 // ambient occlusion, upsampled with the depth.
 #include "universes/ruins/ruins.hpp"
@@ -24,9 +25,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <map>
 
 #include "layout.hpp"
 #include "universes/registry.hpp"
@@ -64,6 +67,31 @@ constexpr int SHADOW_SIZE = 3072;
 constexpr float NEAR = 0.4f, FAR = 900.f;
 
 vec2 V(float x, float y) { return vec2{x, y}; }
+// A unit icosphere, subdivided n times (its vertices shared): the bushes' blobs.
+void icosphere(int n, std::vector<vec3>& v, std::vector<unsigned short>& idx) {
+    const float t = (1.f + std::sqrt(5.f)) * 0.5f;
+    v = {{-1, t, 0}, {1, t, 0}, {-1, -t, 0}, {1, -t, 0}, {0, -1, t}, {0, 1, t},
+         {0, -1, -t}, {0, 1, -t}, {t, 0, -1}, {t, 0, 1}, {-t, 0, -1}, {-t, 0, 1}};
+    for (vec3& p : v) p = normalize(p);
+    idx = {0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6,
+           7, 1, 8, 3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1};
+    for (int k = 0; k < n; k++) {
+        std::map<std::pair<int, int>, int> mid;
+        auto m = [&](int a, int b) {
+            const auto key = std::make_pair(std::min(a, b), std::max(a, b));
+            const auto it = mid.find(key);
+            if (it != mid.end()) return it->second;
+            v.push_back(normalize(v[a] + v[b]));
+            return mid[key] = (int)v.size() - 1;
+        };
+        std::vector<unsigned short> sub;
+        for (size_t i = 0; i < idx.size(); i += 3) {
+            const int a = idx[i], b = idx[i + 1], c = idx[i + 2], ab = m(a, b), bc = m(b, c), ca = m(c, a);
+            for (int j : {a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca}) sub.push_back((unsigned short)j);
+        }
+        idx.swap(sub);
+    }
+}
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 
 // A variant (sRGB): its temple (0 Maya, 1 Khmer, 2 Greek), its stone, its jungle, its light, its seven blocks
@@ -139,6 +167,8 @@ bool RuinsUniverse::init(int width, int height) {
     progCell_ = compile(shaders::CELL_VS, shaders::CELL_FS, "ruins cell");
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "ruins shape");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "ruins post");
+    progBush_ = compile(shaders::BUSH_VS, shaders::BUSH_FS, "ruins bush", true);
+    progBushShadow_ = compile(shaders::BUSH_VS, shaders::BUSH_SHADOW_FS, "ruins bush shadow", true);
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -198,6 +228,28 @@ bool RuinsUniverse::init(int width, int height) {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
     glBindVertexArray(0);
+    {
+        std::vector<vec3> ico;
+        std::vector<unsigned short> idx;
+        icosphere(2, ico, idx);
+        bushIdx_ = (int)idx.size();
+        glGenVertexArrays(1, &bushVao_);
+        glGenBuffers(1, &bushVbo_);
+        glGenBuffers(1, &bushIbo_);
+        glGenBuffers(1, &bushInstVbo_);
+        glBindVertexArray(bushVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, bushVbo_);
+        glBufferData(GL_ARRAY_BUFFER, ico.size() * sizeof(vec3), ico.data(), GL_STATIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bushIbo_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(unsigned short), idx.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 3, nullptr);
+        for (int i = 1; i <= 3; i++) {
+            glEnableVertexAttribArray(i);
+            glVertexAttribDivisor(i, 1);
+        }
+        glBindVertexArray(0);
+    }
 
     // ---- MAYA's corner stones' dissolves (see ruins::Scene::cornerTex)
     glGenTextures(1, &cornerTex_);
@@ -447,10 +499,12 @@ void RuinsUniverse::dustAt(const vec3& w, int n) {
 
 RuinsUniverse::~RuinsUniverse() {
     for (ugl::Target* t : {&worldT_, &volT_, &sceneT_}) t->destroy();
-    for (GLuint p : {progMesh_, progShadow_, progSky_, progFol_, progVol_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_})
+    for (GLuint p : {progMesh_, progShadow_, progSky_, progFol_, progVol_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_,
+                     progBush_, progBushShadow_})
         glDeleteProgram(p);
-    for (GLuint v : {spriteVao_, cellVao_, shapeVao_, meshVao_, figVao_, folVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_, meshVbo_, figVbo_, instVbo_, folVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {spriteVao_, cellVao_, shapeVao_, meshVao_, figVao_, folVao_, bushVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_, meshVbo_, figVbo_, instVbo_, folVbo_, bushVbo_, bushIbo_, bushInstVbo_})
+        glDeleteBuffers(1, &b);
     for (GLuint t : {worldDepth_, auxTex_, shadowTex_, cornerTex_}) glDeleteTextures(1, &t);
     for (GLuint fb : {msFbo_, shadowFbo_}) glDeleteFramebuffers(1, &fb);
     for (GLuint rb : {msColor_, msDepth_}) glDeleteRenderbuffers(1, &rb);
@@ -1209,6 +1263,11 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
     setScene(progShadow_); // (MAYA's corner: its stones' dissolve, its bowl's clip)
     setMat(progShadow_, "uVP", lightVp_);
     drawMeshes(progShadow_);
+    glUseProgram(progBushShadow_);
+    setScene(progBushShadow_);
+    setMat(progBushShadow_, "uVP", lightVp_);
+    set1f(progBushShadow_, "uLit", 0.f);
+    drawBushes(bushShells_, bushCores_);
     glDisable(GL_POLYGON_OFFSET_FILL);
     // ---- the sky, the meshes, the foliage: multisampled, at the full resolution
     glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
@@ -1235,6 +1294,12 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
     setMat(progFol_, "uVP", vp3_);
     glBindVertexArray(folVao_);
     glDrawArrays(GL_TRIANGLES, 0, folCount_);
+    glUseProgram(progBush_);
+    setScene(progBush_);
+    setMat(progBush_, "uVP", vp3_);
+    set1f(progBush_, "uLit", 1.f);
+    drawBushes(bushShells_, bushCores_); // (the cores first: the leaves behind them fail the depth test)
+    drawBushes(0, bushShells_);
     glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
     glDisable(GL_DEPTH_TEST);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, msFbo_);
@@ -1331,8 +1396,8 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
 }
 
 // The world's meshes for a variant (world.cpp), uploaded, and its foliage cards (planes whose leafy masks the
-// shader computes where they are: the jungle's walls, its mass before the temple, the undergrowth, the ferns, the
-// lianas, the canopy's edge)
+// shader computes where they are: the jungle's walls, the lianas, the canopy's edge)
+// and its bushes (instanced blobs)
 void RuinsUniverse::buildScene(int kind) {
     const auto t0 = std::chrono::steady_clock::now();
     scene_.build(kind);
@@ -1355,11 +1420,6 @@ void RuinsUniverse::buildScene(int kind) {
     qx(42.f, -320.f, 120.f, -1.f, 70.f, 1.f);
     qz(-96.f, -280.f, 280.f, -1.f, 70.f, 2.f);
     qz(-140.f, -320.f, 320.f, -1.f, 80.f, 3.f);
-    qz(-27.f, -60.f, 60.f, -1.f, 40.f, 4.f);
-    qz(-10.f, -60.f, 60.f, -1.f, 20.f, 5.f);
-    for (int i = 0; i < 5; i++) qz(10.f - 11.f * i, -41.f, 41.f, -0.5f, 13.f, 6.f + i);
-    qx(-11.f, -34.f, 6.f, -0.5f, 10.f, 11.f);
-    qx(11.f, -34.f, 6.f, -0.5f, 10.f, 12.f);
     qz(-2.f, -40.f, 40.f, 0.f, 31.f, 13.f);
     qz(-18.f, -40.f, 40.f, 0.f, 31.f, 14.f);
     qz(-8.f, -260.f, 260.f, 4.f, 95.f, 15.f);
@@ -1367,10 +1427,68 @@ void RuinsUniverse::buildScene(int kind) {
     glBindBuffer(GL_ARRAY_BUFFER, folVbo_);
     glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
     folCount_ = (int)v.size() / 4;
+    // the bushes: clumps of two or three blobs (a main one, smaller ones beside or over it), scattered in depth about
+    // five rows across the court (rows 0..4, the clearing opening from the middle as the jungle recedes), along its
+    // sides (5, 6), and while the jungle is thick before the temple (7) and in a tall thicket across the court (8)
+    {
+        uint32_t h = 0x9e3779b9u * (uint32_t)(kind + 1);
+        auto rnd = [&]() {
+            h ^= h << 13;
+            h ^= h >> 17;
+            h ^= h << 5;
+            return (float)(h & 0xffffff) / 16777216.f;
+        };
+        std::vector<float> shells, cores;
+        auto clump = [&](float x, float z, float hx, float hy, int row) {
+            const float jit = (rnd() - 0.5f) * 2.5f, ax = std::fabs(x);
+            const int n = rnd() < 0.5f ? 2 : 3;
+            for (int k = 0; k < n; k++) {
+                const bool main = k == 0;
+                const float bhx = hx * (main ? 1.f : 0.5f + 0.3f * rnd()), bhy = hy * (main ? 1.f : 0.5f + 0.4f * rnd());
+                const float bx = x + (main ? 0.f : (rnd() - 0.5f) * 2.3f * hx), bz = z + (main ? 0.f : (rnd() - 0.5f) * 1.5f * hx);
+                const float cy = main ? 0.2f : rnd() * 0.7f - 0.2f, seed = rnd() * 64.f;
+                const float b[12] = {bx, cy, bz, bhx, bhy, seed, (float)row, 0.f, ax, jit, 0.f, 0.f};
+                shells.insert(shells.end(), b, b + 12);
+                if (bhx > 0.55f) {
+                    cores.insert(cores.end(), b, b + 12);
+                    cores[cores.size() - 5] = 1.f;
+                }
+            }
+        };
+        for (int i = 0; i < 5; i++)
+            for (float x = -41.f; x < 41.f; x += 1.5f + 0.8f * rnd()) {
+                if (std::fabs(x) < (i == 0 ? 8.3f : 4.f)) continue;
+                clump(x, 10.f - 11.f * i + (rnd() - 0.5f) * 2.6f, 0.85f + 0.5f * rnd(), (i == 0 ? 0.6f : 0.8f) + 0.6f * rnd(), i);
+            }
+        for (int s = 0; s < 2; s++)
+            for (float z = -34.f; z < 6.f; z += 1.4f + 0.6f * rnd())
+                clump((s ? 1.f : -1.f) * (11.f + (rnd() - 0.3f) * 1.6f), z, 0.9f + 0.5f * rnd(), 0.55f + 0.35f * rnd(), 5 + s);
+        for (float x = -41.f; x < 41.f; x += 1.6f + 0.8f * rnd())
+            if (std::fabs(x) > 3.5f) clump(x, -10.f + (rnd() - 0.5f) * 3.f, 1.1f + 0.5f * rnd(), 0.9f + 0.4f * rnd(), 7);
+        for (float x = -60.f; x < 60.f; x += 3.2f + 1.6f * rnd())
+            clump(x, -27.f + (rnd() - 0.5f) * 4.f, 2.6f + 1.2f * rnd(), 2.4f + 1.2f * rnd(), 8);
+        bushShells_ = (int)shells.size() / 12;
+        bushCores_ = (int)cores.size() / 12;
+        shells.insert(shells.end(), cores.begin(), cores.end());
+        glBindBuffer(GL_ARRAY_BUFFER, bushInstVbo_);
+        glBufferData(GL_ARRAY_BUFFER, shells.size() * sizeof(float), shells.data(), GL_STATIC_DRAW);
+    }
     snapNext_ = true;
     if (std::getenv("REFALL_GPUTIME"))
         std::fprintf(stderr, "[ruins] %s: %d triangles in the mesh buffer, %d drawn (with the instances), built in %.1f ms\n",
                      VARIANTS[wrapV(variant_)].name, scene_.triangles(), scene_.instancedTriangles(), buildMs);
+}
+
+// The bushes' instances [first, first + count) (their shells, then their cores).
+void RuinsUniverse::drawBushes(int first, int count) {
+    if (count <= 0) return;
+    glBindVertexArray(bushVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, bushInstVbo_);
+    const size_t base = (size_t)first * 12 * sizeof(float);
+    for (int i = 0; i < 3; i++)
+        glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, 12 * sizeof(float), (void*)(base + sizeof(float) * 4 * i));
+    glDrawElementsInstanced(GL_TRIANGLES, bushIdx_, GL_UNSIGNED_SHORT, nullptr, count);
+    glBindVertexArray(0);
 }
 
 void RuinsUniverse::drawMeshes(GLuint) {
