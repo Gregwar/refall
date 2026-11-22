@@ -105,7 +105,7 @@ private:
 
     // ---- GL.
     GLuint progMesh_ = 0, progShadow_ = 0, progSky_ = 0, progFol_ = 0, progVol_ = 0, progComp_ = 0, progSprite_ = 0,
-           progVeil_ = 0, progCell_ = 0, progShape_ = 0, progPost_ = 0;
+           progVeil_ = 0, progCell_ = 0, progShape_ = 0, progPost_ = 0, progBush_ = 0, progBushShadow_ = 0;
     GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0,
            textVbo_ = 0;
     ugl::Target worldT_, volT_, sceneT_;
@@ -120,6 +120,10 @@ private:
     bool snapNext_ = true;
     GLuint meshVao_ = 0, meshVbo_ = 0, figVao_ = 0, figVbo_ = 0, instVbo_ = 0, folVao_ = 0, folVbo_ = 0;
     int folCount_ = 0;
+    // the bushes (instanced blobs, see BUSH_VS): the shells of leaves first, then their cores (they cast shadows)
+    GLuint bushVao_ = 0, bushVbo_ = 0, bushIbo_ = 0, bushInstVbo_ = 0;
+    int bushIdx_ = 0, bushShells_ = 0, bushCores_ = 0;
+    void drawBushes(int first, int count);
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0, shadowFbo_ = 0, shadowTex_ = 0, cornerTex_ = 0;
     int msW_ = 1, msH_ = 1, samples_ = 4;
     mat4 vp3_, lightVp_;
