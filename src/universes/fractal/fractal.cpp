@@ -28,9 +28,12 @@
 // barely rounded; seven soft retro colors, one per piece type. The ghost is a faint wash of the piece's color inside
 // a thin line of it.
 //
-// Five palettes (SUNSHINE, APRICOT, SAGE, MIDNIGHT: a deep pastel night, RAINBOW), from the key, mode, brightness and
-// air. Cost: one fullscreen pass (the fractal: under a millisecond of GPU at 1080p; REFALL_GPUTIME=1 prints it), the
-// blocks as instanced quads.
+// Seven palettes (SUNSHINE, APRICOT, SAGE, MIDNIGHT: a deep pastel night, RAINBOW, and two near-black ones, OBSIDIAN:
+// black and graphite bands, pewter lines turning opal in the drop, EMBERS: brown-black and oxblood bands, ember lines
+// that glow like blown coals in the drop), from the key, mode, brightness and air: the darkest minor songs take the
+// near-black one (REFALL_FRACTAL_DARK=OBSIDIAN or EMBERS while both are tried, OBSIDIAN by default). Cost: one
+// fullscreen pass (the fractal: under a millisecond of GPU at 1080p; REFALL_GPUTIME=1 prints it), the blocks as
+// instanced quads.
 #include <algorithm>
 #include <cmath>
 #include <complex>
@@ -66,7 +69,8 @@ vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255
 
 // A palette's colors (sRGB), by slot: the gradient's six stops and its drop colors, the lines between bands, the
 // wash (the contour, too fine to band), the shadows' tint, the well and its line, the accent, the HUD's two inks, the
-// seven pieces.
+// seven pieces. A near-black palette also has drop lines: in the drop, the lines cycle through its three colors
+// (every dropCycle seconds), an opal sheen, or embers breathing.
 enum Slot {
     BAND0, DROP0 = BAND0 + 6, LINE = DROP0 + 6, WASH, SHADE, WELL, WELL_LINE, ACCENT, HUD_PALE, HUD_DEEP, PIECE0,
     SLOTS = PIECE0 + 7
@@ -74,6 +78,8 @@ enum Slot {
 struct VariantDef {
     const char* name;
     unsigned c[SLOTS];
+    unsigned dropLine[3];   // (none: 0, the line stays)
+    float dropCycle;
 };
 const VariantDef VARIANTS[] = {
     // peach, butter, coral, sky, pink; the drop: a sunset, saturated but still pastel
@@ -107,9 +113,34 @@ const VariantDef VARIANTS[] = {
       0xffb48f, 0xf795bb, 0xbb9ef0, 0x92c6f2, 0x99e0c0, 0xffd982,
       0xfff9f2, 0xfff9f2, 0xb8919c, 0xfffaf4, 0xd8b2bd, 0xd0566e, 0xfff7ee, 0x4a3242,
       0x7fb2d3, 0xedae2c, 0xa47aa6, 0x3f9a84, 0xe2553b, 0x3f6c9c, 0xf0893c}},
+    // near black: black, charcoal, graphite (a faint warm / cool shift), pearl lines; the drop: an opal sheen (pink,
+    // green, gold) between black bands, the lines shimmering through it; jewel tones, softened, for the pieces
+    {"OBSIDIAN",
+     {0x0c0c0d, 0x1c1b1a, 0x2b2a2b, 0x111111, 0x232120, 0x1a1b1b,
+      0x0a0a0b, 0x2c2228, 0x0c0c0c, 0x202a26, 0x0b0b0b, 0x2c281e,
+      0x5c5955, 0x1f1e1f, 0x3a3838, 0x0f0f10, 0x8a8682, 0xe6c2cc, 0xf0ece6, 0x0f0f10,
+      0x8fbcc6, 0xdcc488, 0xb79ccb, 0x86bc9e, 0xd98c90, 0x939fd2, 0xe3a77c},
+     {0x9e8290, 0x80a09a, 0xa89c82}, 3.5f},
+    // near black, warm: black, brown-black, oxblood, aubergine-brown, thin ember lines; the drop: the coals blown on
+    // (the bands warm up, the lines brighten and breathe); warm pieces
+    {"EMBERS",
+     {0x0b0807, 0x1d120e, 0x2b1315, 0x140c0b, 0x25151b, 0x1f140f,
+      0x100706, 0x3a1209, 0x170a08, 0x50200b, 0x130807, 0x3a1215,
+      0x6c2c15, 0x26140e, 0x3c2620, 0x100b0a, 0x9a4f2c, 0xf2a04c, 0xf6e4d0, 0x100b0a,
+      0xe6c792, 0xf0b23c, 0xd48ca2, 0xa6b86c, 0xe45e46, 0xa79ac2, 0xf28e4c},
+     {0x8e3c16, 0xb65a1c, 0x6e2a12}, 1.7f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
-constexpr int V_SUNSHINE = 0, V_APRICOT = 1, V_SAGE = 2, V_MIDNIGHT = 3, V_RAINBOW = 4;
+constexpr int V_SUNSHINE = 0, V_APRICOT = 1, V_SAGE = 2, V_MIDNIGHT = 3, V_RAINBOW = 4, V_OBSIDIAN = 5, V_EMBERS = 6;
+bool darkVariant(int v) { return v == V_MIDNIGHT || v >= V_OBSIDIAN; }
+// The near-black palette the darkest songs take (two tried for now: REFALL_FRACTAL_DARK=EMBERS picks the other).
+int nearBlackVariant() {
+    static const int v = [] {
+        const char* e = std::getenv("REFALL_FRACTAL_DARK");
+        return e && std::string(e) == "EMBERS" ? V_EMBERS : V_OBSIDIAN;
+    }();
+    return v;
+}
 
 constexpr float CLEAR_T = 0.4f;   // a cleared cell shrinks away in this long (real time)
 
@@ -216,6 +247,7 @@ private:
     std::vector<CellInst> cells_;
     void cell(float x, float y, int type, float alpha, int mode, float scale, float k);
     void buildBoard(const Game& g);
+    vec3 lineColor() const;
     struct Pop { float x, y; int type; float t; };
     std::vector<Pop> pops_;
 
@@ -339,14 +371,15 @@ void FractalUniverse::setSong(const SongLook& t, float seconds) {
     else {
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
-        if (t.hasSong && t.minor && t.brightness < 0.42f) v = V_MIDNIGHT;            // a dark song: night
+        if (t.hasSong && t.minor && t.brightness < 0.26f) v = nearBlackVariant();    // a very dark one: near black
+        else if (t.hasSong && t.minor && t.brightness < 0.42f) v = V_MIDNIGHT;       // a dark song: night
         else if (t.hasSong && !t.minor && t.brightness > 0.6f) v = V_SUNSHINE;       // a bright, major one
         else if (t.hasSong && t.airWeight > 0.6f) v = V_SAGE;                        // airy
         else {
             static const int BY_HUE[] = {V_SUNSHINE, V_APRICOT, V_RAINBOW, V_SAGE, V_APRICOT, V_RAINBOW};
             v = BY_HUE[(int)(h * 6.f) % 6];
         }
-        if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
+        if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % (V_RAINBOW + 1);   // (never to a near-black one)
     }
     variant_ = v;
     rng_ = Rng((t.seed ? t.seed : 1) ^ 0xF2AC7ull);
@@ -380,9 +413,9 @@ TransitionHints FractalUniverse::hints() const {
     const VariantDef& V = VARIANTS[variant_];
     TransitionHints h;
     h.background = ugl::toLinear(lerp(hex(V.c[WASH]), hex(V.c[BAND0 + 2]), 0.35f));
-    h.ink = ugl::toLinear(hex(V.c[variant_ == V_MIDNIGHT ? HUD_PALE : HUD_DEEP]));
+    h.ink = ugl::toLinear(hex(V.c[darkVariant(variant_) ? HUD_PALE : HUD_DEEP]));
     h.accent = ugl::toLinear(hex(V.c[ACCENT]));
-    h.light = variant_ != V_MIDNIGHT;
+    h.light = !darkVariant(variant_);
     h.styles = TS_RIPPLE | TS_INK;
     return h;
 }
@@ -473,6 +506,17 @@ void FractalUniverse::buildBoard(const Game& g) {
     }
 }
 
+// The lines between bands: the palette's, or in the drop (a near-black palette) cycling through its drop lines.
+vec3 FractalUniverse::lineColor() const {
+    const VariantDef& V = VARIANTS[variant_];
+    const float m = ease(dropMix_);
+    if (!V.dropLine[0] || m <= 0.f) return col_[LINE];
+    const float t = std::fmod(time_ / V.dropCycle, 3.f);
+    const int i = (int)t;
+    const vec3 c = lerp(hex(V.dropLine[i]), hex(V.dropLine[(i + 1) % 3]), ease(t - i));
+    return lerp(col_[LINE], c, m);
+}
+
 void FractalUniverse::solid(float r, float g, float b, float a) {
     if (a <= 0.002f) return;
     glUseProgram(progSolid_);
@@ -507,12 +551,12 @@ HudInk FractalUniverse::hudInk(const HudText& h) {
     return k;
 }
 
-// The universe's own lettering (REFALL_HUD=universe): the deep ink on the pastel bands (cream on MIDNIGHT), a soft
+// The universe's own lettering (REFALL_HUD=universe): the deep ink on the pastel bands (cream on the dark ones), a soft
 // halo; Comfortaa for the labels and numbers, Fraunces' soft italics for the song, the notices and the toasts.
 void FractalUniverse::hudLine(const HudText& h, text::Line& out) {
     text::Font* disp = text::font(FONT_DISPLAY);
     text::Font* round = text::font(FONT_ROUND);
-    const vec3 ink = variant_ == V_MIDNIGHT ? col_[HUD_PALE] : col_[HUD_DEEP];
+    const vec3 ink = darkVariant(variant_) ? col_[HUD_PALE] : col_[HUD_DEEP];
     const vec3 acc = col_[ACCENT];
     const float base = h.scale * 12.f, alpha = saturate(h.alpha);
     auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
@@ -553,7 +597,7 @@ void FractalUniverse::hudLine(const HudText& h, text::Line& out) {
         break;
     default: put(round, h.text, base * 0.85f, base * 0.08f, h.accent ? acc : ink, alpha); break;
     }
-    out.look.halo = variant_ == V_MIDNIGHT ? col_[WELL] : col_[HUD_PALE];
+    out.look.halo = darkVariant(variant_) ? col_[WELL] : col_[HUD_PALE];
     out.look.haloA = 0.6f;
     out.look.haloW = 0.14f;
     out.alpha = saturate(fade_);
@@ -664,7 +708,7 @@ void FractalUniverse::render(const Frame& f, GLuint fbo) {
         glUniform3fv(ugl::U(progBg_, "uBand"), 6, bands);
         glUniform3fv(ugl::U(progBg_, "uDropBand"), 6, bands + 18);
         set1f(progBg_, "uDropMix", ease(dropMix_));
-        set3f(progBg_, "uLine", col_[LINE]);
+        set3f(progBg_, "uLine", lineColor());
         set3f(progBg_, "uWash", col_[WASH]);
         set3f(progBg_, "uShade", col_[SHADE]);
         set3f(progBg_, "uWellFill", col_[WELL]);
@@ -689,7 +733,7 @@ void FractalUniverse::render(const Frame& f, GLuint fbo) {
         glUniform2fv(ugl::U(progBg_, "uCycle"), 8, F.cycle);
         glUniform1i(ugl::U(progBg_, "uPeriod"), F.period);
         set1f(progBg_, "uDesat", 0.45f * slow_ + 0.2f * over_);
-        set1f(progBg_, "uGrain", variant_ == V_MIDNIGHT ? 0.045f : 0.022f);
+        set1f(progBg_, "uGrain", darkVariant(variant_) ? 0.045f : 0.022f);
         set4f(progBg_, "uWell", 5.15f, 10.15f, 0.3f, f.bare ? 0.f : 1.f);
         {
             float pv[16];
