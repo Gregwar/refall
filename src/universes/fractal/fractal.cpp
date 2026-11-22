@@ -32,7 +32,7 @@
 // Seven palettes (SUNSHINE, APRICOT, SAGE, MIDNIGHT: a deep pastel night, RAINBOW, and two near-black ones, OBSIDIAN:
 // black and graphite bands, silver lines turning opal in the drop, EMBERS: brown-black and oxblood bands, ember lines
 // that glow like blown coals in the drop), from the key, mode, brightness and air: the darkest minor songs take the
-// near-black one (REFALL_FRACTAL_DARK=OBSIDIAN or EMBERS while both are tried, OBSIDIAN by default). Cost: one
+// near-black ones (EMBERS for a warm key's hue, OBSIDIAN for a cool one). Cost: one
 // fullscreen pass (the fractal: under a millisecond of GPU at 1080p; REFALL_GPUTIME=1 prints it), the blocks as
 // instanced quads.
 #include <algorithm>
@@ -136,14 +136,9 @@ const VariantDef VARIANTS[] = {
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 constexpr int V_SUNSHINE = 0, V_APRICOT = 1, V_SAGE = 2, V_MIDNIGHT = 3, V_RAINBOW = 4, V_OBSIDIAN = 5, V_EMBERS = 6;
 bool darkVariant(int v) { return v == V_MIDNIGHT || v >= V_OBSIDIAN; }
-// The near-black palette the darkest songs take (two tried for now: REFALL_FRACTAL_DARK=EMBERS picks the other).
-int nearBlackVariant() {
-    static const int v = [] {
-        const char* e = std::getenv("REFALL_FRACTAL_DARK");
-        return e && std::string(e) == "EMBERS" ? V_EMBERS : V_OBSIDIAN;
-    }();
-    return v;
-}
+// The near-black palette the darkest songs take, from the key's hue `h` (0 .. 1): a warm one (reds, oranges, yellows)
+// the embers, a cool one the obsidian.
+int nearBlackVariant(float h) { return h < 0.2f || h > 0.9f ? V_EMBERS : V_OBSIDIAN; }
 
 constexpr float CLEAR_T = 0.4f;   // a cleared cell shrinks away in this long (real time)
 
@@ -378,7 +373,7 @@ void FractalUniverse::setSong(const SongLook& t, float seconds) {
     else {
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
-        if (t.hasSong && t.minor && t.brightness < 0.26f) v = nearBlackVariant();    // a very dark one: near black
+        if (t.hasSong && t.minor && t.brightness < 0.26f) v = nearBlackVariant(h);   // a very dark one: near black
         else if (t.hasSong && t.minor && t.brightness < 0.42f) v = V_MIDNIGHT;       // a dark song: night
         else if (t.hasSong && !t.minor && t.brightness > 0.6f) v = V_SUNSHINE;       // a bright, major one
         else if (t.hasSong && t.airWeight > 0.6f) v = V_SAGE;                        // airy
@@ -386,7 +381,8 @@ void FractalUniverse::setSong(const SongLook& t, float seconds) {
             static const int BY_HUE[] = {V_SUNSHINE, V_APRICOT, V_RAINBOW, V_SAGE, V_APRICOT, V_RAINBOW};
             v = BY_HUE[(int)(h * 6.f) % 6];
         }
-        if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % (V_RAINBOW + 1);   // (never to a near-black one)
+        if (v == t.avoidVariant) // (a near-black one to the other; else never to a near-black one)
+            v = v >= V_OBSIDIAN ? (v == V_OBSIDIAN ? V_EMBERS : V_OBSIDIAN) : (v + 1 + (int)(t.seed % 3)) % (V_RAINBOW + 1);
     }
     variant_ = v;
     rng_ = Rng((t.seed ? t.seed : 1) ^ 0xF2AC7ull);
