@@ -9,7 +9,8 @@
 // drop), reflecting the sky by Fresnel, the sun's or moon's path glittering on it; under it the light dims and turns
 // to the sea's hue with depth, long soft shafts slant down from the surface and caustics play on the sand; far out a
 // haze melts the sea into the sky. Sun or moon light with soft shadows (a shadow map). Boats are low-poly ships
-// sailing across, bigger as the sea deepens; life fills the water in layers (fish, jellyfish, deep glowing life).
+// sailing across, bigger as the sea deepens; life fills the water in layers (fish, jellyfish, deep glowing life), low-poly
+// meshes like the boats, lit by the light from above.
 //
 // The stack stays a clean, readable grid at the layout's pixels in front of it all: every cell its own small solid
 // glass cube full to the brim with the sea's water, under pressure, traced per pixel through the glass and the water
@@ -34,6 +35,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 
 #include "layout.hpp"
 #include "universes/biome/gl.hpp"
@@ -43,6 +45,12 @@ namespace biome {
 using namespace sea;
 
 namespace {
+
+// a school's wander in depth at a time: back and forth, away from the cut face only
+float schoolWander(int school, float t) {
+    const float sp = (float)school * 2.39f;
+    return std::cos(t * (0.42f + 0.05f * std::sin(sp)) + sp) - 1.f;
+}
 
 float hashf(float a, float b) {
     const uint64_t h = splitmix64((uint64_t)(int64_t)std::lround(a * 1000.f) * 73856093ull ^ (uint64_t)(int64_t)std::lround(b * 1000.f) * 19349663ull);
@@ -221,6 +229,8 @@ void SeaWorld::setSong(const SongLook& look, float seconds, bool fresh) {
         parts_.clear();
         std::fill(pud_.begin(), pud_.end(), 0.f);
     }
+    // (testing: REFALL_BIOME_FULL=1 starts every song on a full sea, its life in it: clips of the creatures)
+    if (std::getenv("REFALL_BIOME_FULL")) grown();
 }
 
 void SeaWorld::dropHit() {
@@ -320,6 +330,11 @@ float SeaWorld::critterY(const Critter& c) const {
     const float bed = sandH(c.x, c.z) + 0.45f, surf = seaLevel() - 0.45f;
     return lerpf(bed, surf, c.u + c.du) + c.dartY;
 }
+// A fish swims with its school: they wander together in depth (behind the cut face only), bobbing a little.
+vec3 SeaWorld::critterPos(const Critter& c) const {
+    if (c.kind != L_FISH) return vec3(c.x, critterY(c), c.z);
+    return vec3(c.x, critterY(c) + 0.04f * std::sin(lifeClock_ * 1.3f + c.phase * 3.f), c.z + c.zo);
+}
 
 // Something new comes into the water (or is already there): what the sea's depth asks for and is missing.
 void SeaWorld::spawnLife(bool onScreen) {
@@ -343,6 +358,7 @@ void SeaWorld::spawnLife(bool onScreen) {
     c.phase = ctx.rng.range(0.f, TAU);
     c.seed = ctx.rng.range(0.f, 50.f);
     c.alpha = onScreen ? 1.f : 0.f;
+    c.head = vec3(c.dir, 0.f, 0.f);
     // behind the cut face, near enough to be seen through the water
     c.z = FRONT_Z - ctx.rng.range(0.6f, kind == L_MOTE ? 9.f : 6.5f);
     const float hw = ctx.hwAt(c.z);
@@ -353,11 +369,12 @@ void SeaWorld::spawnLife(bool onScreen) {
     c.x = x0;
     if (kind == L_FISH) {
         // a small school near the surface or in the middle water, now and then one in the accent color
-        const int n = ctx.rng.irange(5, 9);
+        const int n = ctx.rng.irange(6, 11);
         c.speed = ctx.rng.range(0.7f, 1.3f);
-        c.size = ctx.rng.range(0.24f, 0.32f);
+        c.size = ctx.rng.range(0.27f, 0.36f);
         c.u = under(0.9f, std::min(5.f, D * 0.6f));
         c.school = nextSchool_++;
+        c.zo = schoolWander(c.school, lifeClock_);
         const bool accent = ctx.rng.chance(0.25f);
         c.col = accent ? lerp(ctx.pal.baccent, ctx.pal.foam, 0.2f) : lerp(ctx.pal.sea2, ctx.pal.foam, 0.62f);
         for (int i = 0; i < n; i++) {
@@ -416,11 +433,11 @@ void SeaWorld::spawnSub() {
     c.phase = ctx.rng.range(0.f, TAU);
     c.seed = ctx.rng.range(0.f, 50.f);
     c.alpha = 1.f;
-    c.z = FRONT_Z - ctx.rng.range(2.f, 4.f);
+    c.z = FRONT_Z - ctx.rng.range(2.6f, 4.2f);
     c.size = ctx.rng.range(3.6f, 4.4f);
     c.speed = ctx.rng.range(0.7f, 1.f);
     c.u = ctx.rng.range(0.3f, 0.55f);
-    c.col = lerp(ctx.pal.deep * 0.6f, vec3(0.2f, 0.22f, 0.25f), 0.5f);
+    c.col = lerp(ctx.pal.deep * 0.6f, vec3(0.36f, 0.39f, 0.42f), 0.7f);
     c.glow = lerp(ctx.pal.window, vec3(1.f, 0.9f, 0.7f), 0.3f);
     c.x = -c.dir * (ctx.hwAt(c.z) + c.size * 1.2f + 1.f);
     critters_.push_back(c);
@@ -439,12 +456,20 @@ void SeaWorld::simulateLife(float dt, float wdt, float world) {
     }
     glowUp_ = approach(glowUp_, ctx.storm, 1.f, dt);
     const float surf = seaLevel();
+    lifeClock_ += wdt;
     for (Critter& c : critters_) {
+        const vec3 was = critterPos(c);
         c.dart = approach(c.dart, 0.f, 0.6f, dt);
         c.x += c.dir * c.speed * wdt * (1.f + 2.5f * c.dart);
         c.dartY += c.dyv * wdt;
         c.dyv *= std::exp(-2.5f * wdt);
         c.dartY = approach(c.dartY, 0.f, 0.15f, wdt);
+        if (c.kind == L_FISH && wdt > 0.f) {
+            // the school wanders back and forth in depth together; each fish turns smoothly into where it goes
+            c.zo = schoolWander(c.school, lifeClock_);
+            const vec3 v = (critterPos(c) - was) / wdt;
+            if (dot(v, v) > 1e-6f) c.head = normalize(lerp(c.head, normalize(v), 1.f - std::exp(-4.f * wdt)));
+        }
         // out of the water (the sea draining for a new song): it fades away
         const float y = critterY(c);
         const bool wet = y < surf - c.size * 0.6f && y > sandH(c.x, c.z) + 0.1f;
@@ -740,6 +765,15 @@ void SeaWorld::grown() {
     for (int i = 0; i < 6; i++) spawnBoat(true);
     critters_.clear();
     for (int i = 0; i < 30; i++) spawnLife(true);
+    // (testing: REFALL_BIOME_SUB=X puts a submarine in the water at once, at x = X, heading for the middle; with
+    // REFALL_BIOME_FULL, see setSong)
+    if (const char* s = std::getenv("REFALL_BIOME_SUB")) {
+        spawnSub();
+        if (!critters_.empty() && critters_.back().kind == L_SUB) {
+            critters_.back().x = (float)std::atof(s);
+            critters_.back().dir = critters_.back().x < 0.f ? 1.f : -1.f;   // (heading for the middle)
+        }
+    }
 }
 
 // =====================================================================================================

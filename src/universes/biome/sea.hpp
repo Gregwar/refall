@@ -175,18 +175,23 @@ private:
 
     // ---- Life in the sea, in layers: schools of small fish near the surface, jellyfish drifting in the middle
     // water, and in the dark depths an anglerfish and its lure, siphonophores, points of light; once the sea is very
-    // deep, now and then a submarine crossing. Only where there is water, behind the diorama's cut face.
+    // deep, now and then a submarine crossing. Only where there is water, behind the diorama's cut face. The fish, the
+    // jellyfish, the anglerfish and the submarine are low-poly meshes in the water (sea_render.cpp); the lights of
+    // the deep glow.
     enum { L_FISH = 0, L_JELLY = 1, L_ANGLER = 2, L_SIPHON = 3, L_MOTE = 4, L_SUB = 5 };
     struct Critter {
         int kind, school;
         float x, z, u, du, dir, speed, size, phase, seed, alpha, dart, dartY, dyv;
         vec3 col, glow;
+        vec3 head;   // where it heads (a fish: smoothed, it turns into it)
+        float zo;    // a fish: its school's wander in depth, away from the cut face
     };
     std::vector<Critter> critters_;
     int nextSchool_ = 0;
-    float lifeT_ = 0.f, glowUp_ = 0.f, subT_ = 15.f;
+    float lifeT_ = 0.f, glowUp_ = 0.f, subT_ = 15.f, lifeClock_ = 0.f;
     float waterDepth() const;                // the sea's depth at the cut face (board units)
     float critterY(const Critter& c) const;
+    vec3 critterPos(const Critter& c) const; // where it is (a fish: with its school's wander, its bob)
     void spawnLife(bool onScreen);
     void spawnSub();
     void simulateLife(float dt, float wdt, float world);
@@ -206,6 +211,15 @@ private:
     GLuint meshVbo_ = 0, meshInstVbo_ = 0, boatVao_ = 0, boxVao_ = 0;
     int boatFirst_[6] = {}, boatCount_[6] = {}, boxFirst_ = 0, boxCount_ = 0;
     GLuint cubeVao_ = 0, cubeVbo_ = 0, lifeVao_ = 0, lifeVbo_ = 0;
+    // the creatures' meshes (fish, submarine, anglerfish, jellyfish, the submarine's beam), drawn instanced
+    enum { M_FISH = 0, M_SUB = 1, M_ANGLER = 2, M_JELLY = 3, M_BEAM = 4, M_COUNT = 5 };
+    // a frame's creatures: each mesh's instances, the quads of the lights (the deep's, the halos), the submarine's light
+    struct CreatureDraw { std::vector<float> inst[M_COUNT], quads; vec3 subLit{1.f}; };
+    void buildCreatures(std::vector<float>& v);
+    void creatureInstances(CreatureDraw& d) const;
+    void drawCreatures(const CreatureDraw& d, int first, int last);
+    GLuint progCreature_ = 0, creatureVao_ = 0, creatureInstVbo_ = 0;
+    int creatureFirst_[M_COUNT] = {}, creatureCount_[M_COUNT] = {};
 };
 
 } // namespace biome
