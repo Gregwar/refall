@@ -31,6 +31,7 @@ uniform vec4 uView;          // center, half extents (board units)
 uniform vec3 uBand[6], uDropBand[6];  // the gradient's stops, calm and in the drop
 uniform float uDropMix;
 uniform vec3 uLine, uWash, uShade, uWellFill, uWellLine;
+uniform vec3 uInside;        // the petals' inside (the line's color, darker on a near-black palette)
 uniform vec2 uCenter;        // where uFix sits on screen (board units)
 uniform vec2 uC;             // the Julia parameter
 uniform vec2 uFix;           // the view's center in the complex plane
@@ -129,7 +130,7 @@ void main() {
         float edge = 0.8 * (1.0 - smoothstep(0.6, 1.4, min(f, 1.0 - f) / w));
         if (inside) {
             // the petals pale (the line's color over a shaded band), a fine line of the wash between their bands
-            col = mix(col * mix(vec3(1.0), uShade, 0.22), uLine, 0.8);
+            col = mix(col * mix(vec3(1.0), uShade, 0.22), uInside, 0.8);
             col = mix(col, uWash, edge);
         } else {
             // cut paper: the band inside lies over this one (its soft shadow), a fine line between them
