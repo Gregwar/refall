@@ -1,6 +1,7 @@
 <?php
 // Refall, the web version's page. Its threads need a cross-origin isolated page: these headers make it one (the
-// service worker below is the fallback where PHP's headers don't reach, e.g. a host serving only static files).
+// service worker, sw.js, adds them where PHP's headers don't reach, e.g. a host serving only static files; it also
+// keeps the game on the device, so it installs as an app and starts offline).
 header('Cross-Origin-Opener-Policy: same-origin');
 header('Cross-Origin-Embedder-Policy: require-corp');
 // PHP's own server (php -S HOST:PORT -t SITE SITE/index.php) runs this for every request: the other files go out
@@ -11,7 +12,8 @@ if (PHP_SAPI === 'cli-server') {
     if ($path !== '/' && $file !== false && is_file($file) && strpos($file, __DIR__ . DIRECTORY_SEPARATOR) === 0
         && basename($file) !== 'index.php') {
         $types = ['js' => 'text/javascript', 'wasm' => 'application/wasm', 'data' => 'application/octet-stream',
-                  'mp3' => 'audio/mpeg', 'png' => 'image/png', 'html' => 'text/html'];
+                  'mp3' => 'audio/mpeg', 'png' => 'image/png', 'html' => 'text/html',
+                  'webmanifest' => 'application/manifest+json'];
         $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         header('Cross-Origin-Resource-Policy: same-origin');
         header('Content-Type: ' . ($types[$ext] ?? 'application/octet-stream'));
@@ -32,8 +34,34 @@ if (PHP_SAPI === 'cli-server') {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Refall</title>
 <link rel="icon" href="icon.png">
-<!-- the same headers through a service worker, where the server sent none (it reloads the page once) -->
-<script src="coi-serviceworker.min.js"></script>
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script>
+  // The service worker (sw.js): the headers the threads need where the server sent none (the page then reloads once
+  // under it), and the game kept on the device. A new version of the site waits until the next start; caught here
+  // before the game runs, it takes over at once (the page reloads to it).
+  if ("serviceWorker" in navigator && isSecureContext) {
+    const sw = navigator.serviceWorker, had = !!sw.controller;
+    const reload = (why) => { if (sessionStorage.getItem("refall-reload") !== why) { sessionStorage.setItem("refall-reload", why); location.reload(); } };
+    if (crossOriginIsolated) sessionStorage.removeItem("refall-reload");
+    sw.addEventListener("controllerchange", () => {
+      if (!crossOriginIsolated) reload("isolate");
+      else if (had && !window.refallStarted) reload("update");
+    });
+    sw.register("sw.js").then((reg) => {
+      if (!crossOriginIsolated && sw.controller) reload("isolate");
+      const take = (w) => { if (w && !window.refallStarted && sw.controller) w.postMessage("skipWaiting"); };
+      take(reg.waiting);
+      reg.addEventListener("updatefound", () => {
+        const w = reg.installing;
+        w && w.addEventListener("statechange", () => { if (w.state === "installed") take(w); });
+      });
+    }).catch((e) => console.warn("[web] service worker:", e));
+  }
+</script>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   canvas { display: block; position: fixed; inset: 0; width: 100vw; height: 100vh; outline: none; }
@@ -44,6 +72,10 @@ if (PHP_SAPI === 'cli-server') {
   #cover .go { letter-spacing: .3em; font-size: 18px; }
   #cover .note { opacity: .55; max-width: 560px; padding: 0 16px; }
   #cover.loading { cursor: progress; }
+  #cover .install { letter-spacing: .25em; font-size: 13px; padding: 10px 22px; border: 1px solid rgba(255,255,255,.45);
+                    border-radius: 22px; opacity: .8; }
+  #cover .install:hover { opacity: 1; background: rgba(255,255,255,.08); }
+  #cover .install[hidden] { display: none; }
   #cover.hidden { display: none; }
   /* the touch pad: shown on touch screens once the game runs, over the canvas */
   #pad { position: fixed; inset: 0; pointer-events: none; display: none; user-select: none; -webkit-user-select: none;
@@ -72,6 +104,7 @@ if (PHP_SAPI === 'cli-server') {
 <div id="cover">
   <img src="icon.png" alt=""><div class="title">REFALL</div>
   <div class="go" id="status">LOADING...</div>
+  <div class="install" id="install" hidden>INSTALL AS AN APP</div>
   <div class="note">The Voyage, in your browser. Keyboard, gamepad, or the touch pad on a phone; F for full screen.<br>
   Best in Chrome or Edge.</div>
 </div>
@@ -91,8 +124,10 @@ if (PHP_SAPI === 'cli-server') {
   // the browser lets a page play sound only after a click or a key: the game starts on one
   function start() {
     if (!ready || started) return;
-    started = true;
+    started = window.refallStarted = true;
     cover.classList.add("hidden");
+    // (the saves and the songs kept on the device: asked not to be cleared when the browser runs short of space)
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     canvas.focus();
     // (?args=...: the game's command line, for testing, e.g. ?args=--stage 2:1 --universe NOTEPAD)
     const args = new URLSearchParams(location.search).get("args");
@@ -173,6 +208,17 @@ if (PHP_SAPI === 'cli-server') {
     addEventListener("touchstart", () => pad.classList.add("on"), { passive: true, capture: true });
   }
   cover.addEventListener("click", start);
+  // installing as an app (where the browser offers it: Chrome, Edge, Android), from the cover
+  const install = document.getElementById("install");
+  let installPrompt = null;
+  addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; install.hidden = false; });
+  addEventListener("appinstalled", () => { installPrompt = null; install.hidden = true; });
+  install.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    installPrompt.userChoice.finally(() => { installPrompt = null; install.hidden = true; });
+  });
   addEventListener("keydown", (e) => { if (!started) { e.preventDefault(); start(); } });
   var Module = {
     canvas,

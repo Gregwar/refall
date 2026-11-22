@@ -6,4 +6,5 @@
   Header set Cross-Origin-Resource-Policy "same-origin"
 </IfModule>
 AddType application/wasm .wasm
+AddType application/manifest+json .webmanifest
 DirectoryIndex index.php
