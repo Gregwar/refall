@@ -1,10 +1,11 @@
 // FRACTAL: an infinite pastel flower, a Julia set zoomed for ever.
 //
 // The whole screen is the filled Julia set of z -> z^2 + c for c at the center of the Mandelbrot set's 1/4 bulb (a
-// flower of four petals meeting at every pinch point), in flat pastel bands: the convergence count inside the petals
-// (one gradient step a band, every band one flat color), the smooth escape count outside, pale like paper. A fine line
-// between bands and a soft shadow under each, like cut paper; where the bands get finer than a pixel (along the
-// frilled contour) they melt into the wash color, so the endless detail never shimmers.
+// flower of four petals meeting at every pinch point), in flat pastel bands: the smooth convergence count inside the
+// petals (pale, a fine line between them), the smooth escape count outside (one gradient step a band, every band one
+// flat color). A fine line between bands and a soft shadow under each, like cut paper; the bands' edges filtered over
+// their width on screen, and where they get finer than a pixel (along the frilled contour) they melt into the wash
+// color, so the endless detail never shimmers nor frays into dots.
 //
 // The camera zooms for ever into a self-similar point of the set: a repelling periodic point (the alpha fixed point
 // where four petals meet, the beta fixed point, a 2-cycle point) or one of its preimages. Near it the next level of
@@ -135,7 +136,10 @@ struct Target {
 };
 struct Fractal {
     std::vector<Target> targets;
-    float cycle[16] = {};
+    // the attracting cycle (the petals' inside): its point by the critical point 0, where it squares the distance
+    // each period (e -> gain e^2, gain the derivative over the rest of the cycle), and its period
+    float sink[2] = {};
+    float sinkGain = 1.f;
     int period = 0;
 };
 const Fractal& fractal() {
@@ -165,16 +169,17 @@ const Fractal& fractal() {
         // the attracting cycle (the petals' inside)
         cplx z = 0.0;
         for (int i = 0; i < 4000; i++) z = z * z + c;
-        cplx q = z;
-        for (int p = 1; p <= 8; p++) {
-            fr.cycle[(p - 1) * 2] = (float)q.real();
-            fr.cycle[(p - 1) * 2 + 1] = (float)q.imag();
-            q = q * q + c;
-            if (std::abs(q - z) < 1e-7) {
-                fr.period = p;
-                break;
-            }
-        }
+        std::vector<cplx> cyc{z};
+        for (cplx q = z * z + c; std::abs(q - z) > 1e-7 && cyc.size() < 8; q = q * q + c) cyc.push_back(q);
+        fr.period = (int)cyc.size();
+        size_t k0 = 0;
+        for (size_t k = 1; k < cyc.size(); k++)
+            if (std::abs(cyc[k]) < std::abs(cyc[k0])) k0 = k;
+        double gain = 1.0;
+        for (size_t j = 1; j < cyc.size(); j++) gain *= std::abs(2.0 * cyc[(k0 + j) % cyc.size()]);
+        fr.sink[0] = (float)cyc[k0].real();
+        fr.sink[1] = (float)cyc[k0].imag();
+        fr.sinkGain = (float)gain;
         return fr;
     }();
     return F;
@@ -686,7 +691,8 @@ void FractalUniverse::render(const Frame& f, GLuint fbo) {
         }
         set2f(progBg_, "uMul", (float)view.mul.real(), (float)view.mul.imag());
         set1f(progBg_, "uColOff", (float)colOff_);
-        glUniform2fv(ugl::U(progBg_, "uCycle"), 8, F.cycle);
+        set2f(progBg_, "uSink", F.sink[0], F.sink[1]);
+        set1f(progBg_, "uSinkGain", F.sinkGain);
         glUniform1i(ugl::U(progBg_, "uPeriod"), F.period);
         set1f(progBg_, "uDesat", 0.45f * slow_ + 0.2f * over_);
         set1f(progBg_, "uGrain", variant_ == V_MIDNIGHT ? 0.045f : 0.022f);

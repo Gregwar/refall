@@ -18,11 +18,12 @@ float dBox(vec2 p, vec2 b, float r) {
 // The filled Julia set of z -> z^2 + c in flat pastel bands, seen through w = uFix + uMul * (p - uCenter): the host
 // zooms for ever into a self-similar point of it (a repelling periodic point or one of its preimages), drawing it at
 // a depth between D0 and D0 + 1 so that the picture loops seamlessly, and the contour keeps revealing finer petals.
-// The bands are the smooth escape count outside and the convergence count inside (toward the attracting cycle), plus
-// uColOff, which the host raises by the iterations of a level each time it wraps the depth: each band keeps one flat
-// color of the gradient while it grows, and the new ones bloom with the next colors. A fine line between bands and a
-// soft shadow under each, like cut paper; where the bands get finer than a pixel (along the contour) they melt into
-// the wash color, so the endless detail never shimmers.
+// The bands are the smooth escape count outside and the smooth convergence count inside (toward the attracting
+// cycle), plus uColOff, which the host raises by the iterations of a level each time it wraps the depth: each band
+// keeps one flat color of the gradient while it grows, and the new ones bloom with the next colors. A fine line
+// between bands and a soft shadow under each, like cut paper; the bands' edges filtered over their width on screen
+// (from the orbit's derivative), and where they get finer than a pixel (along the contour) they melt into the wash
+// color, so the endless detail never shimmers nor frays into dots.
 inline const char* FRACTAL_FS = R"(
 in vec2 vUv;
 out vec4 frag;
@@ -35,7 +36,8 @@ uniform vec2 uC;             // the Julia parameter
 uniform vec2 uFix;           // the view's center in the complex plane
 uniform vec2 uMul;           // board units -> the complex plane (scale and turn)
 uniform float uColOff;       // the bands' count offset (the levels zoomed so far, in iterations)
-uniform vec2 uCycle[8];      // the attracting cycle (the inside) and its period
+uniform vec2 uSink;          // the attracting cycle's point by the critical point (the inside), where the distance to
+uniform float uSinkGain;     // it squares each period (e -> uSinkGain e^2), and the period
 uniform int uPeriod;
 uniform float uDesat, uGrain;
 uniform vec4 uWell;          // the well's half extents, its corner, 1 shown / 0 not (a break between songs)
@@ -58,46 +60,82 @@ void main() {
     // Deep in the zoom the point is uFix plus a tiny offset: iterated as is, each step's rounding (relative to the point)
     // grows into the offset and the picture turns to pixels. So the offset is iterated against uFix's exact orbit
     // (perturbation: (r + d)^2 + c - (r^2 + c) = (2r + d) d, its error relative to d itself) until it is large enough.
-    vec2 d = cmul(uMul, p - uCenter);
+    // Along with z, its derivative dz (by the point in the plane, as dz * 2^lz: it outgrows a float near the contour),
+    // for the bands' width on screen, a pixel's own (fwidth's, by 2x2 pixels, would break the finest into blocks).
+    vec2 d = cmul(uMul, p - uCenter), dz = vec2(1.0, 0.0);
+    float lz = 0.0;
     int i0 = 0;
     if (uRefN > 0) {
         while (i0 < uRefN && dot(d, d) < 1e-4) {
+            dz = 2.0 * cmul(uRef[i0] + d, dz);
             d = cmul(2.0 * uRef[i0] + d, d);
             i0++;
         }
     }
     vec2 z = (uRefN > 0 ? uRef[i0] : uFix) + d;
+    float pix = 1.27 * length(uMul) * abs(dFdx(p.x));   // the plane's units a pixel (x 4/pi: as wide as fwidth's)
+    float gw = 0.0;                              // the count's change a pixel
     float g = -1.0;
     bool inside = false;
-    const float EPS = 1e-3;
+    // the inside: once the orbit comes within R of uSink, it converges, squaring (gain times) its distance each period:
+    // u = log(gain e) doubles each period, so i - period log2(u / log(gain R)) is a smooth count (a whole count steps
+    // from pixel to pixel, its bands' width unknown, and frays into dashes and dots where they crowd), held about the
+    // preimages of the cycle (where u plunges); + 6: the bands then fall about where the orbit's first step within
+    // 1e-3 of the cycle drew them (the look the palettes were tuned on)
+    const float R = 0.05;
+    float uR = log(uSinkGain * R);
     for (int i = i0; i < MAXIT; i++) {
+        dz = 2.0 * cmul(z, dz);
+        float dm = dot(dz, dz);
+        if (dm > 1e20 || dm < 1e-20) {
+            float s = dm > 1e20 ? -32.0 : 32.0;
+            dz *= exp2(s);
+            lz -= s;
+        }
         z = cmul(z, z) + uC;
         float m = dot(z, z);
         if (m > 1e4) {
-            g = float(i) + 1.0 - log2(log(m) * 0.5 / log(100.0));
+            float lm = 0.5 * log(m);              // log |z|
+            g = float(i) + 1.0 - log2(lm / log(100.0));
+            gw = exp2(log2(length(dz) * pix / (sqrt(m) * lm * log(2.0))) + lz);
             break;
         }
-        for (int k = 0; k < 8; k++) {
-            if (k >= uPeriod) break;
-            vec2 e = z - uCycle[k];
-            if (dot(e, e) < EPS * EPS) {
-                inside = true;
-                g = float(i);
-                break;
-            }
+        vec2 e = z - uSink;
+        float e2 = dot(e, e);
+        if (e2 < R * R) {
+            inside = true;
+            float u = log(uSinkGain) + 0.5 * log(max(e2, 1e-30));
+            float q = log2(u / uR);
+            g = float(i) + 6.0 - float(uPeriod) * min(q, 1.0);
+            // (where the count is held, about a preimage of the cycle, still its width as if not: a petal finer
+            // than a pixel goes to the wash with the rest)
+            gw = exp2(log2(float(uPeriod) * length(dz) * pix / (sqrt(e2) * abs(u) * log(2.0))) + lz);
+            break;
         }
-        if (inside) break;
     }
     vec3 col;
     if (g < 0.0) col = uWash;                 // (no answer within MAXIT: on the contour itself)
     else {
-        float G = g + uColOff;                // the band count in the world (a band an iteration)
-        float bi = floor(G), f = G - bi;
-        col = grad(bi * 0.5 + (inside ? 3.0 : 0.0));
-        float w = max(fwidth(G), 1e-4);       // bands a pixel
-        // cut paper: the band inside lies over this one (its soft shadow), a fine line between them
-        col = mix(col, col * uShade, 0.22 * exp(-f / (w * 9.0)));
-        col = mix(col, uLine, 0.8 * (1.0 - smoothstep(0.6, 1.4, min(f, 1.0 - f) / w)));
+        // the bands: an iteration each outside; a period each inside (where the orbit squares its way in), shifted
+        // by uColOff in the gradient (the band count in the world)
+        float unit = inside ? float(uPeriod) : 1.0;
+        float t = g / unit, bi = floor(t), f = t - bi;
+        float w = max(gw / unit, 1e-4);       // bands a pixel
+        // each band one flat color, its edges filtered over the pixel (the next band's color over the last w)
+        float io = uColOff * 0.5 + (inside ? 3.0 : 0.0);
+        col = grad(bi * unit * 0.5 + io);
+        col = mix(col, grad((bi - 1.0) * unit * 0.5 + io), clamp(0.5 - f / w, 0.0, 0.5));
+        col = mix(col, grad((bi + 1.0) * unit * 0.5 + io), clamp(0.5 - (1.0 - f) / w, 0.0, 0.5));
+        float edge = 0.8 * (1.0 - smoothstep(0.6, 1.4, min(f, 1.0 - f) / w));
+        if (inside) {
+            // the petals pale (the line's color over a shaded band), a fine line of the wash between their bands
+            col = mix(col * mix(vec3(1.0), uShade, 0.22), uLine, 0.8);
+            col = mix(col, uWash, edge);
+        } else {
+            // cut paper: the band inside lies over this one (its soft shadow), a fine line between them
+            col = mix(col, col * uShade, 0.22 * exp(-f / (w * 9.0)));
+            col = mix(col, uLine, edge);
+        }
         // finer than a pixel (along the contour): the wash, still
         col = mix(col, uWash, smoothstep(0.15, 0.5, w));
     }
