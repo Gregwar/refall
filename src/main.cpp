@@ -2531,11 +2531,12 @@ void App::applyOption(const Menu::Choice& c) {
         if (c.slot != slots_.active()) useSlot(c.slot);
         menu_.slotsChanged(); // (the box under it says SELECTED)
     } else if (c.kind == Menu::Choice::SLOT_UNLOCK) {
-        if (c.slot == slots_.active() && voyage_.empty()) {
+        // (the voyage open, main or custom, unlocked in memory and saved first, then every voyage's file on that slot)
+        if (c.slot == slots_.active()) {
             progress_.unlockAll();
             progress_.save();
-            std::printf("[slots] slot %d: every stage unlocked\n", c.slot + 1);
-        } else slots_.unlockAll(c.slot); // (another slot, or a custom voyage open: the main one's file)
+        }
+        slots_.unlockAll(c.slot);
         menu_.slotsChanged();
         menu_.note(Menu::SLOTS, "ALL STAGES UNLOCKED");
     } else if (c.kind == Menu::Choice::SLOT_ERASE) {

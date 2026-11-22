@@ -438,7 +438,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         slotRow_ = (slotRow_ + dy + 2 * 8) % 2;
         if (!ok) break;
         const SaveSlots::Summary sm = slotSel_ < (int)slotSum_.size() ? slotSum_[slotSel_] : SaveSlots::Summary{};
-        if (slotRow_ == 0 && sm.unlocked) note(SLOTS, "ALREADY UNLOCKED");
+        if (slotRow_ == 0 && sm.allUnlocked) note(SLOTS, "ALREADY UNLOCKED");
         else if (slotRow_ == 1 && sm.empty) note(SLOTS, "NOTHING TO ERASE");
         else { slotConfirm_ = true; optYes_ = 0; aYes_ = 0; }
         break;

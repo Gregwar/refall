@@ -28,6 +28,7 @@ public:
     struct Summary {
         bool empty = true;      // nothing recorded (no song beaten, no stage cleared, not unlocked)
         bool unlocked = false;  // UNLOCK ALL was used on it
+        bool allUnlocked = false; // and every custom voyage open too (one made since isn't: UNLOCK ALL again opens it)
         int cleared = 0, stages = 0, beaten = 0, songs = 0;
         int64_t score = 0;      // the songs' best scores, summed (each song's best on any difficulty)
         int64_t played = 0;     // last played (seconds since the epoch; 0 unknown)
@@ -36,7 +37,7 @@ public:
     Summary summary(int slot) const;
     // Forgets a slot: its progress, its menu place and its voyages' progress (files removed).
     void erase(int slot) const;
-    // Every stage of the main voyage open on that slot, the slot marked so (saved).
+    // Every stage open on that slot, the main voyage's and every custom voyage's, each marked so (saved).
     void unlockAll(int slot) const;
 
 private:
@@ -45,4 +46,6 @@ private:
     int active_ = 0;
     std::string dir(int slot) const;   // the folder of a slot's files
     std::string activePath() const;    // save-slot.tsv
+    // The custom voyages (their campaign files, in slot 1's folder): fn(its campaign, its progress file on `slot`).
+    template <class F> void forEachVoyage(int slot, F fn) const;
 };

@@ -43,6 +43,17 @@ void SaveSlots::setActive(int slot) {
     std::printf("[slots] slot %d in use\n", active_ + 1);
 }
 
+template <class F> void SaveSlots::forEachVoyage(int slot, F fn) const {
+    std::error_code ec;
+    for (fs::directory_iterator it(voyagesDir(0), ec), end; !ec && it != end; it.increment(ec)) {
+        const fs::path f = it->path();
+        const std::string name = f.filename().string();
+        if (f.extension() != ".tsv" || name == "voyages.tsv" || name.find("-progress") != std::string::npos) continue;
+        Campaign c;
+        if (c.load(f.string())) fn(c, (fs::path(voyagesDir(slot)) / (f.stem().string() + "-progress.tsv")).string());
+    }
+}
+
 SaveSlots::Summary SaveSlots::summary(int slot) const {
     Summary r;
     const std::string path = progressPath(slot);
@@ -50,7 +61,13 @@ SaveSlots::Summary SaveSlots::summary(int slot) const {
     if (!fs::exists(path, ec)) return r;
     Progress p;
     p.load(path, &main_);
-    r.unlocked = p.allUnlocked();
+    r.unlocked = r.allUnlocked = p.allUnlocked();
+    if (r.allUnlocked)
+        forEachVoyage(slot, [&](const Campaign& c, const std::string& prog) {
+            Progress v;
+            v.load(prog, &c);
+            r.allUnlocked = r.allUnlocked && v.allUnlocked();
+        });
     r.cleared = p.clearedCount();
     r.stages = main_.size();
     for (int s = 0; s < main_.size(); s++)
@@ -88,5 +105,12 @@ void SaveSlots::unlockAll(int slot) const {
     p.load(progressPath(slot), &main_);
     p.unlockAll();
     p.save();
-    std::printf("[slots] slot %d: every stage unlocked\n", slot + 1);
+    int n = 0;
+    forEachVoyage(slot, [&](const Campaign& c, const std::string& prog) {
+        Progress v;
+        v.load(prog, &c);
+        v.unlockAll();
+        n += v.save();
+    });
+    std::printf("[slots] slot %d: every stage unlocked (and %d custom voyages)\n", slot + 1, n);
 }
