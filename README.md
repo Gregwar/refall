@@ -43,7 +43,7 @@ Every universe, its variants and the transitions: [docs/universes.md](https://gi
 
 ## Modes
 
-- **Voyage**: a campaign of 15 stages, each a few songs in chosen universes, faster and faster, on EASY, NORMAL, HARD or EXPERT.
+- **Voyage**: a campaign of 15 stages, each a few songs in chosen universes, faster and faster, on EASY, NORMAL, HARD, EXPERT or MASTER (every song at the top velocity).
 - **Free play**: any folders, files or YouTube playlists, at the difficulty and starting level you pick.
 
 Menu details and the Voyage file format: [docs/reference.md](https://github.com/Gregwar/refall/blob/main/docs/reference.md#menu-and-modes).
