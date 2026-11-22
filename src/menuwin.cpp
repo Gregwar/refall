@@ -1477,17 +1477,19 @@ void Worlds::kalVoyages() {
         p.text(F::JOSEFIN, m.vStep_ == 1 ? "PLAYLIST" : "NAME", X(ml + 40), Y(686), 16 * u, hex(0xffffff), -1, 0.45f);
         textField(X(ml + 40), Y(712), (mw - 80) * u, 62 * u, m.editText_,
                   m.vStep_ == 1 ? (pt ? "Paste (Ctrl+V) a playlist link or ID" : "Type or paste (Ctrl+V) a YouTube playlist link or ID") : nullptr);
-        if (m.vStep_ == 2) { // the songs' order, up / down to change it
-            const float rx = X(ml + mw - 40);
-            p.text(F::JOSEFIN, m.vShuffle_ ? "SONGS  SHUFFLED" : "SONGS  IN PLAYLIST ORDER", rx, Y(686), 16 * u,
-                   m.vShuffle_ ? hex(0xffe0a0) : hex(0xffffff, 0.85f), 1, 0.35f);
+        if (m.vStep_ == 2) { // a checkbox under the name: the songs shuffled (up / down ticks it), else the playlist's order
+            const float bx = X(ml + 40), by = Y(786), bs = 30 * u;
+            p.rrect(bx, by, bs, bs, 5 * u, m.vShuffle_ ? hex(0xe8c06a) : hex(0xffffff, 0.08f));
+            p.rrectLine(bx, by, bs, bs, 5 * u, 1.6f * u, m.vShuffle_ ? hex(0xffe0a0) : hex(0xffffff, 0.6f));
+            if (m.vShuffle_) p.check(bx + bs / 2, by + bs / 2, 18 * u, 3 * u, hex(0x1a1408));
+            p.text(F::JOSEFIN, "SHUFFLE SONGS", bx + bs + 18 * u, by + bs / 2 + 7 * u, 18 * u, hex(0xffffff, m.vShuffle_ ? 1.f : 0.75f), -1, 0.35f);
         }
     }
     if (!m.plMsg_.empty())
-        p.text(F::JOSEFIN, upper(m.plMsg_), making ? X(ml + 40) : X(960), Y(making ? 830 : below - 80), 16 * u,
+        p.text(F::JOSEFIN, upper(m.plMsg_), making ? X(ml + 40) : X(960), Y(making ? (m.vStep_ == 2 ? 852 : 830) : below - 80), 16 * u,
                m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), making ? -1 : 0, 0.3f);
     // only the keys a player wouldn't guess (paste, delete)
-    const char* hint = m.vStep_ == 1 ? "CTRL+V  PASTE" : m.vStep_ == 2 ? "UP / DOWN  SONG ORDER"
+    const char* hint = m.vStep_ == 1 ? "CTRL+V  PASTE" : m.vStep_ == 2 ? "UP / DOWN  SHUFFLE"
                      : !making && m.vSel_ >= 1 && m.vSel_ <= (int)vs.size() ? "DEL  DELETE" : "";
     if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(below - 30), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
 }
