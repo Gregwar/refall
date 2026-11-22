@@ -107,7 +107,7 @@ struct SongLook {
     int avoidVariant = -1;  // a variant not to pick (the one on screen when a universe follows itself), -1: none
     float duration = 0;     // the song's length in seconds (0: unknown)
     float remaining = 0;    // seconds of the song left when this look is handed over (a universe coming in mid-song)
-    int difficulty = 2;     // the run's difficulty (DIFF_EASY 0, DIFF_NORMAL 1, DIFF_HARD 2, DIFF_EXPERT 3): the progression's pace
+    int difficulty = 2;     // the run's difficulty (DIFF_EASY 0, DIFF_NORMAL 1, DIFF_HARD 2, DIFF_EXPERT 3, DIFF_MASTER 4): the progression's pace
 };
 SongLook makeSongLook(const Footprint* fp, uint64_t seed); // fp null: no song (loading)
 
