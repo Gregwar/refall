@@ -755,9 +755,166 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- life in the sea
-// One quad per critter at its place in the water, facing the view: flat cut-paper shapes (a small fish, its tail
-// beating; a jellyfish, a pulsing translucent bell; an anglerfish and its lit lure; a siphonophore, a chain of lit
-// beads; a point of light in the deep), veiled by the water between it and the eye.
+// The creatures as low-poly meshes in the water (instanced: a model matrix; alpha, seed, animation; color, glow): a
+// fish's body bending in a wave running down to its tail, the submarine's screw turning, a jellyfish's bell pulsing
+// and its tentacles trailing. Materials: 0 a fish's body, 1 its fins; 2 the submarine's hull, 3 its dark fins, 4 its
+// sail, 5 its screw, 6 its headlight; 7 the anglerfish, 8 its fins, 9 its lure's stalk, 10 the lure; 11 a jellyfish's
+// bell, 12 its tentacles; 13 the submarine's beam of light.
+inline const char* CREATURE_VS = R"(#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNrm;
+layout(location = 2) in float aMat;
+layout(location = 3) in vec4 m0;
+layout(location = 4) in vec4 m1;
+layout(location = 5) in vec4 m2;
+layout(location = 6) in vec4 m3;
+layout(location = 7) in vec4 aX;    // alpha, seed, animation, -
+layout(location = 8) in vec4 aC;    // linear rgb, glow
+uniform mat4 uVP;
+out vec3 vP;
+out vec3 vN;
+out vec3 vL;
+flat out float vMat;
+flat out vec4 vX, vC;
+void main() {
+    int m = int(aMat + 0.5);
+    vec3 p = aPos, n = aNrm;
+    float t = aX.z;
+    if (m <= 1 || m == 7 || m == 8) {
+        // a fish swimming: a wave running down its body, stronger toward the tail (the normals turned with it)
+        bool angler = m >= 7;
+        float A = angler ? 0.07 : 0.15, k = angler ? 2.0 : 3.2;
+        float w = smoothstep(angler ? 0.3 : 0.4, -1.0, p.x) + 0.12;
+        float ph = t - p.x * k;
+        p.z += A * sin(ph) * w;
+        vec2 r = normalize(vec2(1.0, -A * k * cos(ph) * w));
+        n.xz = vec2(n.x * r.x - n.z * r.y, n.x * r.y + n.z * r.x);
+    } else if (m == 5) {
+        // the screw turning about the hull's axis
+        float c = cos(t * 6.0), s = sin(t * 6.0);
+        mat2 R = mat2(c, s, -s, c);
+        p.yz = R * p.yz;
+        n.yz = R * n.yz;
+    } else if (m == 11 || m == 12) {
+        // a jellyfish: the bell contracting (narrower, taller) in slow beats, the tentacles trailing and swaying
+        float c = pow(0.5 + 0.5 * sin(t * 3.0), 3.0);
+        p.xz *= 1.0 - 0.2 * c * smoothstep(-0.6, 0.2, p.y);
+        if (p.y > -0.1) p.y *= 1.0 + 0.14 * c;
+        if (m == 12) {
+            float d = max(-p.y, 0.0);
+            float ph = d * 2.6 - t * 2.0 + aPos.x * 7.0 + aPos.z * 5.0;
+            p.x += 0.06 * sin(ph) * d;
+            p.z += 0.05 * cos(ph * 0.8 + 1.0) * d;
+        }
+    }
+    mat4 M = mat4(m0, m1, m2, m3);
+    vec4 w = M * vec4(p, 1.0);
+    vP = w.xyz;
+    vN = mat3(M) * n;
+    vL = aPos;
+    vMat = aMat;
+    vX = aX;
+    vC = aC;
+    gl_Position = uVP * w;
+}
+)";
+inline const char* CREATURE_FS = R"(#version 330 core
+in vec3 vP;
+in vec3 vN;
+in vec3 vL;
+flat in float vMat;
+flat in vec4 vX, vC;
+out vec4 frag;
+uniform int uMode;      // 0 solid, 1 translucent (a jellyfish), 2 a beam of light (added)
+uniform vec3 uSubLit;   // the submarine's lights
+void main() {
+    // under the water, behind the cut face only
+    float sY = surfY(vP.xz);
+    if (vP.y > sY || vP.z > uFrontZ) discard;
+    int m = int(vMat + 0.5);
+    vec3 V = normalize(uEye - vP);
+    vec3 N = normalize(vN);
+    if (dot(N, V) < 0.0) N = -N;
+    float depth = sY - vP.y;
+    if (uMode == 2) {
+        // the beam: brightest at the lamp, fading ahead and toward its soft edges
+        float ax = clamp(vL.x, 0.0, 1.0);
+        float I = exp(-ax * 2.4) * smoothstep(0.0, 0.08, ax) * pow(max(dot(N, V), 0.0), 1.6) * vC.a * 0.3;
+        underwater(vec3(0.0), vP);
+        frag = vec4(enc(grade(uSubLit)) * I * (0.3 + 0.7 * gT), 0.0);
+        return;
+    }
+    // the light under the water: the sun bent toward the vertical by the surface, playing in caustics over what faces
+    // up, the sky's light from above, a little of the water's own from below
+    vec3 L = normalize(vec3(uSunDir.x * 0.5, max(uSunDir.y, 0.2) + 0.7, uSunDir.z * 0.5));
+    float ca = caustic(vP.xz + vec2(vP.y * 0.3, 0.0)) * smoothstep(-0.3, 0.8, N.y) * exp(-depth * 0.18);
+    float sunK = 1.0 - 0.7 * uStorm;
+    vec3 key = uSunCol * max(dot(N, L), 0.0) * (0.9 + 1.4 * ca) * sunK * 1.7;
+    float hemi = N.y * 0.5 + 0.5;
+    vec3 amb = uAmb * (0.12 + 0.88 * hemi * hemi) + uWater * uAmb * 0.2 * max(-N.y, 0.0);
+    float fr = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+    vec3 alb = vC.rgb;
+    if (uMode == 1) {
+        // a jellyfish: clear, its rim and edges catching the light, glowing softly of its own
+        float a = (m == 12 ? 0.42 : 0.14 + 0.62 * fr) * vX.x;
+        vec3 col = alb * (amb + key * 0.8) * 1.2 + alb * vC.a * 0.3 + mix(alb, vec3(1.0), 0.6) * fr * 0.25;
+        col = underwater(col, vP);
+        frag = vec4(enc(grade(col)) * a, a);
+        return;
+    }
+    // fading in and out: a fine dither
+    if (hash12(gl_FragCoord.xy + vX.y) > vX.x) discard;
+    vec3 emis = vec3(0.0);
+    float spec = 0.15;
+    if (m <= 1) {
+        // a fish: a dark back over a silver belly, its eye; the fins lighter
+        alb = mix(alb * 0.8, mix(alb, vec3(0.9), 0.45) * 1.7, smoothstep(0.12, -0.1, vL.y));
+        if (m == 1) alb = mix(alb, vec3(1.0), 0.12) * 0.95;
+        float e = length(vec2(vL.x - 0.58, vL.y - 0.04));
+        if (m == 0) alb = mix(alb, vec3(0.015), smoothstep(0.062, 0.048, e) * step(0.02, abs(vL.z)));
+        spec = m == 0 ? 1.2 : 0.1;
+    } else if (m <= 6) {
+        // the submarine: the hull's plates, its dark keel, lit portholes along its sides and in its sail
+        alb *= 0.45 + 0.8 * smoothstep(-0.15, 0.15, vL.y);
+        if (m == 2) {
+            alb *= 1.0 - 0.1 * smoothstep(0.02, 0.0, abs(fract(vL.x * 8.0) - 0.5) - 0.47);
+            alb = mix(alb, alb * 0.5, smoothstep(-0.07, -0.1, vL.y));
+            float lo = 0.0, rim = 0.0;
+            for (int i = 0; i < 6; i++) {
+                float d = length(vec2(vL.x + 0.5 - float(i) * 0.19, vL.y - 0.03));
+                lo = max(lo, smoothstep(0.021, 0.016, d));
+                rim = max(rim, smoothstep(0.029, 0.024, d));
+            }
+            lo *= step(0.06, abs(vL.z));
+            rim *= step(0.06, abs(vL.z));
+            alb = mix(alb, alb * 0.35, rim);
+            emis = uSubLit * 1.6 * lo;
+        } else if (m == 3) alb *= 0.45;
+        else if (m == 4) {
+            float lo = smoothstep(0.02, 0.014, length(vec2(vL.x - 0.28, vL.y - 0.33))) * step(0.02, abs(vL.z));
+            emis = uSubLit * 1.1 * lo;
+        } else if (m == 5) { alb *= 0.55; spec = 1.4; }
+        else { alb = vec3(0.05); emis = mix(uSubLit, vec3(1.0), 0.6) * 3.0; }
+        spec = max(spec, 1.0);
+    } else if (m <= 10) {
+        // the anglerfish: a near-black shape, only its lure lit
+        if (m == 8) alb *= 1.3;
+        else if (m == 9) alb *= 1.6;
+        else if (m == 10) emis = vec3(1.0, 0.92, 0.72) * 2.5;
+    }
+    vec3 R = reflect(-V, N);
+    vec3 col = alb * (amb + key) + uSunCol * sunK * spec * pow(max(dot(R, L), 0.0), 12.0) * (0.6 + 1.5 * ca);
+    // the water around it: a soft rim of the water's own light
+    col += waterCol(depth) * fr * 0.3;
+    col = underwater(col, vP);
+    col += emis * (0.3 + 0.7 * gT);
+    frag = vec4(enc(grade(col)), 1.0);
+}
+)";
+
+// The lights of the deep, one quad each facing the view: a siphonophore (a chain of lit beads), a point of light, a
+// halo (the glow around a creature's light: a jellyfish, the anglerfish's lure, the submarine's lamp), veiled by the
+// water between it and the eye.
 inline const char* LIFE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aQ;
 layout(location = 1) in vec4 a0;   // x, y, half extents
@@ -783,14 +940,6 @@ flat in vec4 v0, v1, v2, v3;
 out vec4 frag;
 uniform float uPx;
 uniform float uLifeGlow;
-float sdEll(vec2 p, vec2 r) {
-    float k = length(p / r);
-    return (k - 1.0) * min(r.x, r.y);
-}
-float sdSeg(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a, ba = b - a;
-    return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));
-}
 void main() {
     int kind = int(v1.y + 0.5);
     float t = v1.z, glowK = v1.w;
@@ -802,75 +951,7 @@ void main() {
     float a = 0.0;
     vec3 glow = v3.rgb;
     float g = 0.0;
-    if (kind == 0) {
-        float L = ext.x / 1.25;
-        vec2 b = q / L;
-        float wag = sin(t) * 0.18 * smoothstep(0.1, -0.9, b.x);
-        b.y -= wag;
-        float body = sdEll(b - vec2(0.15, 0.0), vec2(0.62, 0.27));
-        vec2 tq = b - vec2(-0.55, 0.0);
-        float tail = max(max(-tq.x - 0.42, tq.x - 0.08 + abs(tq.y) * 0.3), abs(tq.y) - (0.05 - tq.x * 0.7));
-        float fork = -(abs(tq.y) - (-tq.x - 0.24) * 0.5);
-        tail = max(tail, -max(fork, -tq.x - 0.42));
-        float dd = min(body, tail) * L;
-        a = smoothstep(px, -px, dd);
-        col *= 1.0 - 0.12 * smoothstep(-0.05, 0.15, b.y);
-        float eye = smoothstep(px * 0.9, -px * 0.9, length(b - vec2(0.52, 0.05)) * L - 0.025);
-        col = mix(col, col * 0.35, eye);
-    } else if (kind == 1) {
-        float R = ext.x / 1.2;
-        vec2 b = (q - vec2(0.0, ext.y - R * 1.0)) / R;
-        float c = pow(0.5 + 0.5 * sin(t * 3.0), 3.0);
-        vec2 br = vec2(0.85 - 0.18 * c, 0.62 + 0.12 * c);
-        float bell = max(sdEll(b, br), -b.y - 0.05 * (1.0 - c));
-        float bellA = smoothstep(px / R, -px / R, bell);
-        float rimL = smoothstep(2.5 * px / R, 0.0, abs(bell));
-        float inside = smoothstep(0.0, -0.4, bell);
-        float tl = 0.0;
-        for (int i = 0; i < 5; i++) {
-            float fi = float(i);
-            float x0 = (fi - 2.0) / 2.0 * br.x * 0.8;
-            float yy = -b.y;
-            float len = 2.4 + 0.6 * fract(fi * 0.37 + v3.w);
-            if (yy > 0.0 && yy < len) {
-                float wx = x0 * (1.0 - 0.15 * yy) + 0.12 * sin(yy * 2.6 - t * 2.0 + fi * 1.7) * yy * 0.6;
-                float w = (i == 1 || i == 3) ? 0.06 : 0.025;
-                float dd = abs(b.x - wx) - w * (1.0 - yy / len);
-                tl = max(tl, smoothstep(px * 1.2 / R, 0.0, dd) * (1.0 - yy / len));
-            }
-        }
-        a = max(bellA * (0.45 + 0.35 * (1.0 - inside)), rimL * 0.85);
-        a = max(a, tl * 0.6);
-        col = mix(col, vec3(1.0), rimL * 0.4);
-        float gd = length(b * vec2(1.0, 1.2));
-        g = (exp(-gd * 2.2) * 0.35 + bellA * 0.25) * glowK;
-    } else if (kind == 2) {
-        float S = ext.y / 1.25;
-        vec2 b = q / S;
-        float body = sdEll(b - vec2(-0.05, -0.05), vec2(0.62, 0.5));
-        vec2 tq = b - vec2(-0.75, 0.0);
-        float tail = max(-tq.x - 0.35, max(tq.x - 0.1, abs(tq.y) - (0.08 - tq.x * 0.8)));
-        vec2 mq = b - vec2(0.62, -0.12);
-        float mouth = max(-mq.x - 0.45, abs(mq.y + mq.x * 0.1) - (0.02 + (mq.x + 0.45) * 0.35));
-        float dd = max(min(body, tail), -mouth) * S;
-        a = smoothstep(px, -px, dd);
-        float teeth = 0.0;
-        if (mouth < 0.06 && mq.x > -0.4 && mq.x < 0.05) {
-            float u = fract((mq.x + 0.4) / 0.09);
-            teeth = smoothstep(0.03, 0.0, abs(abs(mq.y + mq.x * 0.1) - (0.02 + (mq.x + 0.45) * 0.35) + (0.5 - abs(u - 0.5)) * 0.1 - 0.02));
-        }
-        col = mix(col, mix(glow, vec3(1.0), 0.5) * 0.35, teeth * a);
-        vec2 lure = vec2(0.82 + 0.05 * sin(t * 0.9), 0.62 + 0.06 * sin(t * 1.3));
-        vec2 mid = vec2(0.45, 0.85);
-        float stalk = min(sdSeg(b, vec2(0.15, 0.42), mid), sdSeg(b, mid, lure)) * S - 0.008;
-        a = max(a, smoothstep(px, -px, stalk));
-        col += glow * exp(-length(b - lure) * 2.5) * 0.07 * a;
-        float ld = length(b - lure) * S;
-        float lo = smoothstep(0.05, 0.02, ld);
-        col = mix(col, mix(glow, vec3(1.0), 0.5), lo);
-        a = max(a, lo);
-        g = (exp(-ld * 9.0) * 0.6 + exp(-ld * 2.5) * 0.15) * glowK * (0.85 + 0.15 * sin(t * 0.7));
-    } else if (kind == 3) {
+    if (kind == 3) {
         float L = ext.x - 0.3;
         float x = clamp(q.x, -L, L);
         float yc = 0.22 * sin(x * 1.3 + t) + 0.1 * sin(x * 2.9 - t * 0.7);
@@ -887,35 +968,10 @@ void main() {
         a = max(beadA * 0.85, th * 0.35);
         col = mix(col, vec3(1.0), beadA * 0.3);
         g = (exp(-max(bead, 0.0) * 30.0) * 0.4 * step(abs(bx), L) + exp(-thread * 9.0) * 0.08 * on) * glowK;
-    } else if (kind == 5) {
-        // a submarine: a long hull tapering to the stern, its sail and periscope, fins, a turning screw, lit
-        // portholes and a headlight's beam ahead
-        float L = ext.x / 1.6;
-        vec2 b = q / L;
-        float r = 0.17 - 0.07 * smoothstep(0.1, -1.0, b.x);
-        float hull = length(vec2(max(abs(b.x) - 0.8, 0.0), b.y)) - r;
-        vec2 s = b - vec2(0.22, 0.27);
-        float sail = max(abs(s.x) - 0.12 + s.y * 0.15, abs(s.y) - 0.13) - 0.015;
-        float plane = max(abs(b.x - 0.22) - 0.09, abs(b.y - 0.3) - 0.012);
-        float scope = min(sdSeg(b, vec2(0.27, 0.38), vec2(0.27, 0.52)), sdSeg(b, vec2(0.27, 0.52), vec2(0.32, 0.52))) - 0.012;
-        vec2 f = b - vec2(-0.86, 0.0);
-        float fin = max(abs(f.x) - 0.05 - abs(f.y) * 0.15, abs(f.y) - 0.22);
-        float screw = sdEll(b - vec2(-1.0, 0.0), vec2(0.022, 0.03 + 0.09 * abs(sin(t * 7.0))));
-        float dd = min(min(min(hull, sail), min(plane, scope)), min(fin, screw)) * L;
-        a = smoothstep(px, -px, dd);
-        col *= 0.7 + 0.45 * smoothstep(-0.18, 0.16, b.y);
-        float stripe = smoothstep(px / L, -px / L, abs(b.y + 0.07) - 0.012) * step(abs(b.x), 0.85);
-        col = mix(col, col * 0.55, stripe);
-        float lo = 0.0;
-        for (int i = 0; i < 6; i++) {
-            float hx = -0.5 + float(i) * 0.19;
-            lo = max(lo, smoothstep(0.034, 0.024, length(b - vec2(hx, 0.02))));
-        }
-        lo = max(lo, smoothstep(0.022, 0.014, length(b - vec2(0.2, 0.3))));
-        col = mix(col, mix(glow, vec3(1.0), 0.5) * 1.6, lo * a);
-        float ahead = b.x - 0.96;
-        float beam = ahead > 0.0 ? exp(-pow((b.y + 0.02) / (0.035 + ahead * 0.3), 2.0) * 2.0) * exp(-ahead * 1.6) : 0.0;
-        g = (beam * 0.6 + exp(-length(b - vec2(0.97, -0.02)) * 12.0) * 0.8 + lo * 0.4) * glowK;
+    } else if (kind == 6) {
+        // a halo: a bright core, a wide soft glow
+        float r = length(vQ);
+        g = (exp(-r * 12.0) * 0.6 + exp(-r * 3.5) * 0.2) * glowK;
     } else {
         // a point of light living in the dark, twinkling at its own slow pace
         float r = length(q);

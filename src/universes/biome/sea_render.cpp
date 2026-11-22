@@ -82,9 +82,179 @@ struct MeshBuilder {
     void windows(float x0, float x1, float y, float h, float zw) {
         box(vec3(x0 + 0.08f, y - h * 0.5f, -zw - 0.02f), vec3(x1 + 0.02f, y + h * 0.5f, zw + 0.02f), 4);
     }
+    void vtx(const vec3& p, const vec3& n, int m) { v.insert(v.end(), {p.x, p.y, p.z, n.x, n.y, n.z, (float)m}); }
+    // a surface over a grid of rings (R + 1) of S points each, closed around: P(i, j) its points; smooth (normals
+    // across the facets) or flat (low-poly)
+    template <class F>
+    void rings(int R, int S, F P, int m, bool smooth) {
+        auto N = [&](int i, int j) {
+            const vec3 a = P(std::min(i + 1, R), j) - P(std::max(i - 1, 0), j), b = P(i, (j + 1) % S) - P(i, (j + S - 1) % S);
+            vec3 n = cross(a, b);
+            // at a tip (a ring of one point): along the axis, away from the next ring
+            if (length(n) < 1e-6f) n = P(i, j) - P(i == 0 ? 1 : R - 1, j);
+            return normalize(n);
+        };
+        for (int i = 0; i < R; i++)
+            for (int j = 0; j < S; j++) {
+                const int k = (j + 1) % S;
+                if (!smooth) {
+                    quad(P(i, j), P(i + 1, j), P(i + 1, k), P(i, k), m);
+                    continue;
+                }
+                const int id[6][2] = {{i, j}, {i + 1, j}, {i + 1, k}, {i, j}, {i + 1, k}, {i, k}};
+                for (const auto& q : id) vtx(P(q[0], q[1]), N(q[0], q[1]), m);
+            }
+    }
+    // a square rod between two points
+    void rod(const vec3& a, const vec3& b, float r, int m) {
+        const vec3 d = normalize(b - a);
+        const vec3 u = normalize(cross(d, std::fabs(d.y) > 0.9f ? vec3(1, 0, 0) : vec3(0, 1, 0))) * r, w = normalize(cross(d, u)) * r;
+        const vec3 c[4] = {u + w, w - u, vec3(0.f) - u - w, u - w};
+        for (int i = 0; i < 4; i++) quad(a + c[i], b + c[i], b + c[(i + 1) % 4], a + c[(i + 1) % 4], m);
+    }
 };
 
 } // namespace
+
+// The creatures' meshes (CREATURE_VS's materials), each at scale 1 (its size): a fish (head at +x: a body
+// flattened on its sides, a forked tail, its fins), the submarine (a hull of revolution, its sail and planes, the
+// rudders, a five-bladed screw, the headlight), the anglerfish and its lure, a jellyfish (its bell, its tentacles), the
+// submarine's beam (a cone along +x).
+void SeaWorld::buildCreatures(std::vector<float>& v) {
+    MeshBuilder b{v};
+    auto mark = [&](int t) { creatureFirst_[t] = (int)(v.size() / 7); };
+    auto done = [&](int t) { creatureCount_[t] = (int)(v.size() / 7) - creatureFirst_[t]; };
+    // a body of revolution along x, its rings' (x, half height, half width) given; S points around
+    auto body = [&](const std::vector<vec3>& r, int S, int m, bool smooth, float yoff = 0.f) {
+        b.rings((int)r.size() - 1, S, [&](int i, int j) {
+            const float a = TAU * (float)j / (float)S;
+            return vec3(r[i].x, yoff + r[i].y * std::cos(a), r[i].z * std::sin(a));
+        }, m, smooth);
+    };
+    // the fish
+    mark(M_FISH);
+    {
+        std::vector<vec3> r;
+        const float xs[9] = {-0.5f, -0.36f, -0.15f, 0.08f, 0.3f, 0.48f, 0.62f, 0.73f, 0.79f};
+        const float hs[9] = {0.05f, 0.1f, 0.19f, 0.26f, 0.27f, 0.23f, 0.16f, 0.08f, 0.f};
+        for (int i = 0; i < 9; i++) r.push_back(vec3(xs[i], hs[i], hs[i] * 0.42f));
+        body(r, 8, 0, false);
+        // the forked tail, the dorsal fin, the anal fin, the pectoral fins
+        const vec3 A(-0.46f, 0.05f, 0.f), B(-0.99f, 0.34f, 0.f), C(-0.83f, 0.f, 0.f), D(-0.99f, -0.34f, 0.f), E(-0.46f, -0.05f, 0.f);
+        b.tri(A, B, C, 1);
+        b.tri(A, C, E, 1);
+        b.tri(C, D, E, 1);
+        b.tri(vec3(0.34f, 0.24f, 0.f), vec3(-0.04f, 0.42f, 0.f), vec3(-0.16f, 0.17f, 0.f), 1);
+        b.tri(vec3(-0.12f, -0.17f, 0.f), vec3(-0.32f, -0.28f, 0.f), vec3(-0.36f, -0.09f, 0.f), 1);
+        for (float s : {1.f, -1.f}) b.tri(vec3(0.46f, -0.07f, s * 0.09f), vec3(0.24f, -0.15f, s * 0.22f), vec3(0.28f, -0.04f, s * 0.1f), 1);
+    }
+    done(M_FISH);
+    // the submarine (its hull from -1 to 0.98, 0.17 round)
+    mark(M_SUB);
+    {
+        std::vector<vec3> r;
+        const float xs[14] = {0.98f, 0.965f, 0.93f, 0.88f, 0.8f, 0.7f, 0.4f, -0.1f, -0.35f, -0.55f, -0.72f, -0.86f, -0.95f, -0.985f};
+        const float rs[14] = {0.f, 0.06f, 0.105f, 0.14f, 0.162f, 0.17f, 0.17f, 0.17f, 0.158f, 0.135f, 0.1f, 0.062f, 0.032f, 0.f};
+        for (int i = 0; i < 14; i++) r.push_back(vec3(xs[i], rs[i], rs[i]));
+        body(r, 18, 2, true);
+        // the casing along its back
+        b.box(vec3(-0.35f, 0.15f, -0.045f), vec3(0.62f, 0.182f, 0.045f), 4);
+        // the sail: a streamlined fin (round ahead, sharp aft), a little narrower at its top
+        {
+            const int S = 10;
+            auto at = [&](int i, int j) {
+                const float a = TAU * (float)j / (float)S, y = i == 0 ? 0.12f : 0.4f, k = i == 0 ? 1.f : 0.9f;
+                const float ca = std::cos(a), sa = std::sin(a);
+                const float x = ca > 0.f ? 0.13f * ca : 0.17f * ca;   // round leading edge at +x, a longer tail aft
+                return vec3(0.23f + x * k + (i == 0 ? 0.f : -0.02f), y, 0.042f * sa * k * (ca > 0.f ? 1.f : 0.6f + 0.4f * (1.f + ca)));
+            };
+            b.rings(1, S, at, 4, false);
+            for (int j = 0; j < S; j++) b.tri(vec3(0.21f, 0.4f, 0.f), at(1, j), at(1, (j + 1) % S), 4);
+        }
+        // the sail's planes, the periscope and a mast
+        b.box(vec3(0.2f, 0.3f, -0.13f), vec3(0.3f, 0.312f, 0.13f), 3);
+        b.box(vec3(0.255f, 0.4f, -0.008f), vec3(0.272f, 0.53f, 0.008f), 3);
+        b.box(vec3(0.255f, 0.515f, -0.008f), vec3(0.3f, 0.53f, 0.008f), 3);
+        b.box(vec3(0.17f, 0.4f, -0.006f), vec3(0.182f, 0.47f, 0.006f), 3);
+        // the stern's planes and rudders, a cross
+        for (float s : {1.f, -1.f}) {
+            b.quad(vec3(-0.78f, 0.f, s * 0.06f), vec3(-0.93f, 0.f, s * 0.03f), vec3(-0.94f, 0.f, s * 0.22f), vec3(-0.86f, 0.f, s * 0.22f), 3);
+            b.quad(vec3(-0.78f, s * 0.06f, 0.f), vec3(-0.93f, s * 0.03f, 0.f), vec3(-0.94f, s * 0.22f, 0.f), vec3(-0.86f, s * 0.22f, 0.f), 3);
+        }
+        // the screw: a hub, five blades, each twisted (turned by the vertex shader)
+        b.box(vec3(-1.02f, -0.014f, -0.014f), vec3(-0.975f, 0.014f, 0.014f), 5);
+        for (int k = 0; k < 5; k++) {
+            const float a = TAU * (float)k / 5.f;
+            const vec3 rd(0.f, std::cos(a), std::sin(a)), tg(0.f, -std::sin(a), std::cos(a));
+            auto P = [&](float rr, float w) { return vec3(-1.f + 0.02f * w, 0.f, 0.f) + rd * rr + tg * (0.028f * w); };
+            b.quad(P(0.01f, -1.f), P(0.1f, -0.6f), P(0.1f, 0.6f), P(0.01f, 1.f), 5);
+        }
+        // the headlight under the nose
+        b.box(vec3(0.93f, -0.11f, -0.025f), vec3(0.965f, -0.07f, 0.025f), 6);
+    }
+    done(M_SUB);
+    // the anglerfish (its body from -0.7 to 0.6, 0.5 high), its fins, the lure on its stalk
+    mark(M_ANGLER);
+    {
+        std::vector<vec3> r;
+        const float xs[8] = {-0.72f, -0.55f, -0.3f, -0.05f, 0.2f, 0.42f, 0.56f, 0.62f};
+        const float hs[8] = {0.f, 0.22f, 0.4f, 0.5f, 0.49f, 0.4f, 0.24f, 0.f};
+        for (int i = 0; i < 8; i++) r.push_back(vec3(xs[i], hs[i], hs[i] * 0.72f));
+        body(r, 9, 7, false, -0.05f);
+        b.tri(vec3(-0.66f, 0.02f, 0.f), vec3(-1.05f, 0.28f, 0.f), vec3(-1.05f, -0.3f, 0.f), 8);
+        b.tri(vec3(0.05f, 0.42f, 0.f), vec3(-0.25f, 0.56f, 0.f), vec3(-0.45f, 0.3f, 0.f), 8);
+        for (float s : {1.f, -1.f}) b.tri(vec3(0.15f, -0.25f, s * 0.3f), vec3(-0.1f, -0.42f, s * 0.48f), vec3(-0.12f, -0.2f, s * 0.32f), 8);
+        b.rod(vec3(0.15f, 0.4f, 0.f), vec3(0.45f, 0.85f, 0.f), 0.012f, 9);
+        b.rod(vec3(0.45f, 0.85f, 0.f), vec3(0.8f, 0.64f, 0.f), 0.01f, 9);
+        const vec3 c(0.82f, 0.62f, 0.f);
+        const float e = 0.045f;
+        const vec3 o[6] = {vec3(e, 0, 0), vec3(-e, 0, 0), vec3(0, e, 0), vec3(0, -e, 0), vec3(0, 0, e), vec3(0, 0, -e)};
+        for (int i : {0, 1})
+            for (int j : {2, 3})
+                for (int k : {4, 5}) b.tri(c + o[i], c + o[j], c + o[k], 10);
+    }
+    done(M_ANGLER);
+    // a jellyfish: the bell (radius 1: its outside, its rim, its inside), five tentacles hanging from its rim, four
+    // frilled arms under its middle (each a pair of crossed ribbons)
+    mark(M_JELLY);
+    {
+        const float ys[9] = {0.62f, 0.59f, 0.5f, 0.32f, 0.08f, -0.05f, -0.02f, 0.2f, 0.4f};
+        const float rs[9] = {0.f, 0.32f, 0.6f, 0.82f, 0.92f, 0.86f, 0.72f, 0.5f, 0.f};
+        const int S = 14;
+        b.rings(8, S, [&](int i, int j) {
+            const float a = TAU * (float)j / (float)S;
+            return vec3(rs[i] * std::cos(a), ys[i], rs[i] * std::sin(a));
+        }, 11, true);
+        auto ribbon = [&](const vec3& top, float len, float w0) {
+            for (int s = 0; s < 2; s++) {
+                const vec3 side = s == 0 ? vec3(1, 0, 0) : vec3(0, 0, 1);
+                const int K = 10;
+                for (int k = 0; k < K; k++) {
+                    const float y0 = -len * k / K, y1 = -len * (k + 1) / K;
+                    const float w0k = w0 * (1.f - 0.8f * k / K), w1k = w0 * (1.f - 0.8f * (k + 1) / K);
+                    b.quad(top + vec3(0.f, y0, 0.f) - side * w0k, top + vec3(0.f, y1, 0.f) - side * w1k,
+                           top + vec3(0.f, y1, 0.f) + side * w1k, top + vec3(0.f, y0, 0.f) + side * w0k, 12);
+                }
+            }
+        };
+        for (int k = 0; k < 5; k++) {
+            const float a = TAU * (float)k / 5.f + 0.3f;
+            ribbon(vec3(0.74f * std::cos(a), -0.04f, 0.74f * std::sin(a)), 2.3f + 0.35f * (float)(k % 3), 0.025f);
+        }
+        for (int k = 0; k < 4; k++) {
+            const float a = TAU * (float)k / 4.f + 0.8f;
+            ribbon(vec3(0.15f * std::cos(a), 0.05f, 0.15f * std::sin(a)), 1.2f + 0.2f * (float)(k % 2), 0.08f);
+        }
+    }
+    done(M_JELLY);
+    // the beam: a cone from the lamp (its apex) to x = 1
+    mark(M_BEAM);
+    b.rings(1, 14, [&](int i, int j) {
+        const float a = TAU * (float)j / 14.f, rr = i == 0 ? 0.01f : 0.3f;
+        return vec3((float)i, rr * std::cos(a), rr * std::sin(a));
+    }, 13, true);
+    done(M_BEAM);
+}
 
 // =====================================================================================================
 // Setup
@@ -111,6 +281,7 @@ bool SeaWorld::init() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     progCube_ = compile(shaders::CUBE_VS, shaders::CUBE_FS, "sea thrown cube", {W, shaders::WORLD_GLSL, G, shaders::WATER_GLSL});
     progLife_ = compile(shaders::LIFE_VS, shaders::LIFE_FS, "sea life", {W, shaders::WORLD_GLSL});
+    progCreature_ = compile(shaders::CREATURE_VS, shaders::CREATURE_FS, "sea creature", {W, shaders::WORLD_GLSL});
     progPart_ = compile(common::PART_VS, common::PART_FS, "sea particle", {W, shaders::WORLD_GLSL});
     progCell_ = compile(common::CELL_VS, std::string(common::CELL_HEAD) + shaders::CELL_FILL + common::CELL_MAIN, "sea cube",
                         {G, shaders::WATER_GLSL});
@@ -290,6 +461,7 @@ void SeaWorld::buildMeshes() {
         boxFirst_ = (int)(v.size() / 7);
         b.box(vec3(-0.44f), vec3(0.44f), 0);
         boxCount_ = (int)(v.size() / 7) - boxFirst_;
+        buildCreatures(v);
 
         glGenVertexArrays(1, &boatVao_);
         glGenBuffers(1, &meshVbo_);
@@ -309,13 +481,30 @@ void SeaWorld::buildMeshes() {
             glVertexAttribPointer(3 + i, 4, GL_FLOAT, GL_FALSE, 20 * sizeof(float), (void*)(sizeof(float) * 4 * i));
             glVertexAttribDivisor(3 + i, 1);
         }
-        glBindVertexArray(0);
         boxVao_ = boatVao_;
+        // the creatures: the same meshes' buffer, their own instances (a model matrix, then two vec4s)
+        glGenVertexArrays(1, &creatureVao_);
+        glGenBuffers(1, &creatureInstVbo_);
+        glBindVertexArray(creatureVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, meshVbo_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), nullptr);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(6 * sizeof(float)));
+        glBindBuffer(GL_ARRAY_BUFFER, creatureInstVbo_);
+        for (int i = 0; i < 6; i++) {
+            glEnableVertexAttribArray(3 + i);
+            glVertexAttribPointer(3 + i, 4, GL_FLOAT, GL_FALSE, 24 * sizeof(float), (void*)(sizeof(float) * 4 * i));
+            glVertexAttribDivisor(3 + i, 1);
+        }
+        glBindVertexArray(0);
     }
 }
 
 SeaWorld::~SeaWorld() {
-    for (GLuint p : {progSky_, progSand_, progSurf_, progFront_, progBoat_, progDepth_, progPass_, progCube_, progLife_, progPart_, progCell_})
+    for (GLuint p : {progSky_, progSand_, progSurf_, progFront_, progBoat_, progDepth_, progPass_, progCube_, progLife_, progPart_, progCell_, progCreature_})
         glDeleteProgram(p);
     passT_.destroy();
     glDeleteTextures(1, &pudTex_);
@@ -324,8 +513,8 @@ SeaWorld::~SeaWorld() {
         glDeleteBuffers(1, &m->vbo);
         if (m->ibo) glDeleteBuffers(1, &m->ibo);
     }
-    for (GLuint v : {boatVao_, cubeVao_, lifeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {meshVbo_, meshInstVbo_, cubeVbo_, lifeVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {boatVao_, cubeVao_, lifeVao_, creatureVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {meshVbo_, meshInstVbo_, cubeVbo_, lifeVbo_, creatureInstVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -403,6 +592,103 @@ void SeaWorld::drawBoxes() {
     glDrawArraysInstanced(GL_TRIANGLES, boxFirst_, boxCount_, (GLsizei)(inst.size() / 20));
 }
 
+// The life in the water this frame: each creature's place, its heading and how it is turned, its animation; the quads
+// of the lights (the deep's lights, the halos around the creatures' own).
+void SeaWorld::creatureInstances(CreatureDraw& d) const {
+    const float world = ctx.world(), S = seaLevel();
+    auto put = [&](int t, const vec3& pos, const vec3& fx, const vec3& fy, float scale, float a, float seed, float anim, const vec3& col, float glow) {
+        const mat4 m = model(pos, fx, fy, cross(fx, fy), scale);
+        d.inst[t].insert(d.inst[t].end(), m.m, m.m + 16);
+        d.inst[t].insert(d.inst[t].end(), {a, seed, anim, 0.f, col.x, col.y, col.z, glow});
+    };
+    auto quad = [&](const vec3& p, float hx, float hy, float dir, int kind, float anim, float glow, const vec3& body, float a, const vec3& gc, float seed) {
+        const float v[20] = {p.x, p.y, hx, hy, dir, (float)kind, anim, glow, body.x, body.y, body.z, a,
+                             gc.x, gc.y, gc.z, seed, std::min(p.z, FRONT_Z - 0.05f), 0.f, 0.f, 0.f};
+        d.quads.insert(d.quads.end(), v, v + 20);
+    };
+    // a frame heading along f, its up as near `up` as it can be
+    auto frame = [](const vec3& f, const vec3& up, vec3& fy) {
+        const vec3 fx = normalize(f);
+        fy = normalize(up - fx * dot(up, fx));
+        return fx;
+    };
+    for (const Critter& c : critters_) {
+        const float a = c.alpha * world;
+        if (a <= 0.003f) continue;
+        const vec3 P = critterPos(c);
+        const float dark = smoothstepf(0.5f, 10.f, S - P.y);
+        switch (c.kind) {
+        case L_FISH: {
+            // along where it swims (never quite straight up or down)
+            vec3 h = c.head;
+            h.y = std::clamp(h.y, -0.6f, 0.6f);
+            vec3 fy;
+            const vec3 fx = frame(h, vec3(0.f, 1.f, 0.f), fy);
+            put(M_FISH, P, fx, fy, c.size, a, c.seed, ctx.time * (6.f + 6.f * c.dart) + c.phase, lerp(c.col, ctx.pal.deep * 0.25f, dark * 0.7f), 0.f);
+            break;
+        }
+        case L_JELLY: {
+            // bobbing, swaying slowly, its glow around its bell
+            const float anim = ctx.worldTime * 0.55f + c.phase, glow = 0.35f + 0.35f * dark + 0.6f * glowUp_;
+            const vec3 pj = P + vec3(0.f, 0.25f * std::sin(anim * 0.5f) + 1.1f * c.size, 0.f);
+            const vec3 up = normalize(vec3(0.15f * std::sin(anim * 0.3f + c.seed), 1.f, 0.1f * std::cos(anim * 0.37f + c.seed)));
+            vec3 fx;
+            const vec3 fy = frame(up, vec3(1.f, 0.f, 0.f), fx);
+            put(M_JELLY, pj, fx, fy, c.size, a, c.seed, anim, c.col, glow);
+            quad(pj + fy * (0.25f * c.size), 2.4f * c.size, 2.4f * c.size, 1.f, 6, 0.f, glow * 0.6f, c.col, a, c.glow, c.seed);
+            break;
+        }
+        case L_ANGLER: {
+            const float anim = ctx.worldTime + c.phase;
+            vec3 fy;
+            const vec3 fx = frame(vec3(c.dir, 0.06f * std::sin(anim * 0.5f), 0.f), vec3(0.f, 1.f, 0.f), fy);
+            put(M_ANGLER, P, fx, fy, c.size, a, c.seed, anim, c.col, 0.f);
+            const vec3 lure = P + (fx * 0.82f + fy * 0.62f) * c.size;
+            quad(lure + vec3(0.f, 0.f, 0.1f), 0.9f, 0.9f, 1.f, 6, 0.f, (0.8f + 0.4f * glowUp_) * (0.85f + 0.15f * std::sin(anim * 0.7f)), c.col, a, c.glow, c.seed);
+            break;
+        }
+        case L_SUB: {
+            // along a gentle winding course (in and out from the cut face), bobbing, banking into its turns; its
+            // lamp's beam ahead
+            const float anim = ctx.worldTime + c.phase, ph = c.x * 0.3f + c.seed;
+            const float vx = c.dir * c.speed;
+            const float zo = -0.9f * (1.f - std::cos(ph)), dzdx = -0.9f * 0.3f * std::sin(ph), d2z = -0.9f * 0.3f * 0.3f * std::cos(ph);
+            const vec3 ps(c.x, P.y + 0.08f * std::sin(anim * 0.4f), c.z + zo);
+            const vec3 vel(vx, 0.032f * std::cos(anim * 0.4f), dzdx * vx);
+            vec3 fy;
+            const vec3 fx = frame(vel, normalize(vec3(0.f, 1.f, std::clamp(d2z * vx * vx * 4.f, -0.25f, 0.25f))), fy);
+            const float glow = 0.7f + 0.3f * dark + 0.4f * glowUp_;
+            put(M_SUB, ps, fx, fy, c.size, a, c.seed, anim, c.col, glow);
+            const vec3 lamp = ps + (fx * 0.97f - fy * 0.09f) * c.size;
+            put(M_BEAM, lamp, fx, fy, c.size * 1.8f, a, c.seed, anim, c.col, glow);
+            quad(lamp + fx * 0.15f + vec3(0.f, 0.f, 0.4f), 1.3f, 1.3f, 1.f, 6, 0.f, glow * 0.9f, c.col, a, c.glow, c.seed);
+            d.subLit = c.glow;
+            break;
+        }
+        case L_SIPHON:
+            quad(P, c.size + 0.3f, 0.7f, c.dir, L_SIPHON, ctx.worldTime * 0.35f + c.phase, 0.55f + 0.5f * glowUp_, c.col, a, c.glow, c.seed);
+            break;
+        default: {
+            // a point of light, twinkling
+            const float tw = 0.55f + 0.45f * std::sin(ctx.time * (0.3f + 0.02f * c.seed) + c.seed * 6.f);
+            quad(P, c.size, c.size, c.dir, L_MOTE, ctx.time + c.phase, (0.8f + 0.5f * glowUp_) * tw * smoothstepf(0.35f, 0.8f, dark), c.col, a, c.glow, c.seed);
+            break;
+        }
+        }
+    }
+}
+
+// The creatures' meshes from `first` to `last`, one instanced draw each (the program bound).
+void SeaWorld::drawCreatures(const CreatureDraw& d, int first, int last) {
+    glBindVertexArray(creatureVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, creatureInstVbo_);
+    for (int t = first; t <= last; t++) {
+        if (d.inst[t].empty()) continue;
+        glBufferData(GL_ARRAY_BUFFER, d.inst[t].size() * sizeof(float), d.inst[t].data(), GL_STREAM_DRAW);
+        glDrawArraysInstanced(GL_TRIANGLES, creatureFirst_[t], creatureCount_[t], (GLsizei)(d.inst[t].size() / 24));
+    }
+}
+
 // =====================================================================================================
 // Passes
 // =====================================================================================================
@@ -418,6 +704,9 @@ void SeaWorld::shadowPass() {
     setMat(progDepth_, "uVP", ctx.lightVP);
     drawBoxes();
     drawBoats(true);
+    CreatureDraw life;
+    if (!critters_.empty()) creatureInstances(life);
+    drawCreatures(life, M_FISH, M_ANGLER);
 
     GLint shadowFbo = 0, vp[4];
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &shadowFbo);
@@ -431,6 +720,7 @@ void SeaWorld::shadowPass() {
     drawBoxes();
     glUseProgram(progDepth_);
     drawBoats(true);
+    drawCreatures(life, M_FISH, M_ANGLER);
     glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)shadowFbo);
     glViewport(vp[0], vp[1], vp[2], vp[3]);
 }
@@ -496,70 +786,36 @@ void SeaWorld::drawWorld() {
         set3f(progBoat_, "uLit", ctx.pal.window);
         drawBoats(false);
     }
-    // the life in the water (premultiplied, under the surface)
-    glEnable(GL_BLEND);
-    glDepthMask(GL_FALSE);
+    // the life in the water: the creatures (solid, writing their depth), then, premultiplied under the surface, the
+    // jellyfish, the submarine's beam, the lights (the deep's, the creatures' halos)
     if (!critters_.empty() && world > 0.01f) {
-        std::vector<float> inst;
-        const float S = seaLevel();
-        for (const Critter& c : critters_) {
-            const float a = c.alpha * world;
-            if (a <= 0.003f) continue;
-            const float y = critterY(c);
-            const float dark = smoothstepf(0.5f, 10.f, S - y);
-            vec3 body = c.col;
-            float hx = c.size, hy = c.size, glow = 0.f, anim = ctx.time + c.phase;
-            switch (c.kind) {
-            case L_FISH:
-                body = lerp(c.col, ctx.pal.deep * 0.25f, dark * 0.7f);
-                hx = c.size * 1.25f; hy = c.size * 0.7f;
-                anim = ctx.time * (6.f + 6.f * c.dart) + c.phase;
-                break;
-            case L_JELLY:
-                hx = c.size * 1.2f; hy = c.size * 2.6f;
-                glow = 0.35f + 0.35f * dark + 0.6f * glowUp_;
-                anim = ctx.worldTime * 0.55f + c.phase;
-                break;
-            case L_ANGLER:
-                hx = c.size * 1.6f; hy = c.size * 1.25f;
-                glow = 0.8f + 0.4f * glowUp_;
-                anim = ctx.worldTime + c.phase;
-                break;
-            case L_SUB:
-                // (wider than the hull, for the headlight's beam)
-                hx = c.size * 1.6f; hy = c.size * 0.65f;
-                glow = 0.7f + 0.3f * dark + 0.4f * glowUp_;
-                anim = ctx.worldTime + c.phase;
-                break;
-            case L_SIPHON:
-                hx = c.size + 0.3f; hy = 0.7f;
-                glow = 0.55f + 0.5f * glowUp_;
-                anim = ctx.worldTime * 0.35f + c.phase;
-                break;
-            default: {
-                const float tw = 0.55f + 0.45f * std::sin(ctx.time * (0.3f + 0.02f * c.seed) + c.seed * 6.f);
-                glow = (0.8f + 0.5f * glowUp_) * tw * smoothstepf(0.35f, 0.8f, dark);
-                hx = hy = c.size;
-                break;
-            }
-            }
-            const float bob = c.kind == L_JELLY ? 0.25f * std::sin(anim * 0.5f) : c.kind == L_FISH ? 0.04f * std::sin(ctx.time * 1.3f + c.phase * 3.f) : c.kind == L_SUB ? 0.08f * std::sin(anim * 0.4f) : 0.f;
-            const float v[20] = {c.x, y + bob, hx, hy, c.dir, (float)c.kind, anim, glow, body.x, body.y, body.z, a,
-                                 c.glow.x, c.glow.y, c.glow.z, c.seed, c.z, 0.f, 0.f, 0.f};
-            inst.insert(inst.end(), v, v + 20);
-        }
-        if (!inst.empty()) {
-            glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        CreatureDraw d;
+        creatureInstances(d);
+        glUseProgram(progCreature_);
+        worldUniforms(progCreature_);
+        set3f(progCreature_, "uSubLit", d.subLit);
+        set1i(progCreature_, "uMode", 0);
+        drawCreatures(d, M_FISH, M_ANGLER);
+        glEnable(GL_BLEND);
+        glDepthMask(GL_FALSE);
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        set1i(progCreature_, "uMode", 1);
+        drawCreatures(d, M_JELLY, M_JELLY);
+        set1i(progCreature_, "uMode", 2);
+        drawCreatures(d, M_BEAM, M_BEAM);
+        if (!d.quads.empty()) {
             glUseProgram(progLife_);
             worldUniforms(progLife_);
             set1f(progLife_, "uPx", ctx.px);
             set1f(progLife_, "uLifeGlow", 0.5f + 0.5f * glowUp_ + 0.5f);
             glBindVertexArray(lifeVao_);
             glBindBuffer(GL_ARRAY_BUFFER, lifeVbo_);
-            glBufferData(GL_ARRAY_BUFFER, inst.size() * sizeof(float), inst.data(), GL_STREAM_DRAW);
-            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(inst.size() / 20));
+            glBufferData(GL_ARRAY_BUFFER, d.quads.size() * sizeof(float), d.quads.data(), GL_STREAM_DRAW);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(d.quads.size() / 20));
         }
     }
+    glEnable(GL_BLEND);
+    glDepthMask(GL_FALSE);
     // a copy of the world so far: what the thrown cubes' glass shows behind it
     glBindFramebuffer(GL_READ_FRAMEBUFFER, ctx.msFbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, ctx.bgT.fbo);
