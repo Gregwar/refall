@@ -206,8 +206,9 @@ static void usage() {
         "                       drop) as JSON, then exit (tools/demo.py cuts on it)\n"
         "modes (with no songs and no option above, the game opens on its title screen: VOYAGE, FREE PLAY):\n"
         "  --free               free play straight away, without the menu (also when songs are given)\n"
-        "  --difficulty D       easy, normal, hard (default) or expert (e/n/h/x), or a gravity multiplier (e.g. 0.7):\n"
-        "                       free play's speed (EASY x0.6, NORMAL x0.8, HARD x1, EXPERT x1.4), the voyage's difficulty\n"
+        "  --difficulty D       easy, normal, hard (default), expert or hardcore (e/n/h/x/c), or a gravity multiplier (e.g. 0.7):\n"
+        "                       free play's speed (EASY x0.6, NORMAL x0.8, HARD x1, EXPERT x1.4, HARDCORE x1.4 from the top\n"
+        "                       level), the voyage's difficulty\n"
         "  --level N            free play's starting level (1..40, default 1; the menu picks the nearest of its steps)\n"
         "  --stage S[:SONG]     a voyage run straight away: stage S (1..15) from its song SONG (default 1)\n"
         "  --campaign FILE      the campaign data (default: data/campaign.tsv)\n"
@@ -334,8 +335,8 @@ private:
     // A run's end (or game over): its stage, its songs now all beaten (in this run or over several), counts as cleared
     // (`score` and `lines` its record, kept if better); the stages it opened get their unlocks on the wheel. `fresh`:
     // the stage is done for the first time on this difficulty (its clear is celebrated), `nextOpened`: the next stage
-    // just opened on it, `expertOpened`: the stage itself on EXPERT (done on HARD).
-    struct RunOutcome { bool fresh = false, nextOpened = false, expertOpened = false; };
+    // just opened on it, `harderOpened`: the stage itself on EXPERT (done on HARD) or HARDCORE (done on EXPERT), -1 none.
+    struct RunOutcome { bool fresh = false, nextOpened = false; int harderOpened = -1; };
     RunOutcome campaignOutcome(int score, int lines);
     // A Voyage game over: once the board has dissolved, the frame is kept and the debrief comes over it.
     bool debriefPending_ = false;
@@ -860,7 +861,7 @@ void App::updateGravity(double songTime, float dt) {
     // Free play (levels rising with the lines): each song warms up, from a share of the level's velocity to all of it.
     const bool freeLevels = mode_ == MODE_FREE && game_.fixedLevel() <= 0.f && !viewer_;
     float v = game_.velocity();
-    const bool expert = game_.runDifficulty() == DIFF_EXPERT;
+    const bool expert = expertRules(game_.runDifficulty());
     if (freeLevels)
         v = std::max(1.f, v * lerpf(expert ? FREE_WARMUP_VELOCITY_EXPERT : FREE_WARMUP_VELOCITY, 1.f,
                                     smoothstepf(0.f, expert ? FREE_WARMUP_SECONDS_EXPERT : FREE_WARMUP_SECONDS, (float)songTime)));
@@ -2622,8 +2623,8 @@ void App::beginSession(const Menu::Choice& c) {
         runSnapshot();
         for (int k = c.song; k < (int)st.songs.size(); k++) paths.push_back(st.songs[k].entry());
         fixed = st.songs[c.song].level[c.difficulty];
-        // EXPERT's fall is a little faster again on top of its velocities (which stop at the top, 40)
-        speedMul_ = c.difficulty == DIFF_EXPERT ? EXPERT_VOYAGE_SPEED : 1.f;
+        // EXPERT's fall is a little faster again on top of its velocities (which stop at the top, 40), HARDCORE's too
+        speedMul_ = expertRules(c.difficulty) ? EXPERT_VOYAGE_SPEED : 1.f;
         if (opt_.universe.empty() && !st.songs[c.song].universe.empty())
             forcedUniverse_ = universes::parse(st.songs[c.song].universe, &forcedVariant_);
         std::printf("[campaign] stage %d from song %d on %s\n", c.stage + 1, c.song + 1, difficultyName(c.difficulty));
@@ -2641,7 +2642,8 @@ void App::beginSession(const Menu::Choice& c) {
 
     track_.reset();
     nextTrack_.reset();
-    game_.setStartLevel(camp ? 1 : c.level);
+    // (free play on HARDCORE: from the top level)
+    game_.setStartLevel(camp ? 1 : c.difficulty == DIFF_HARDCORE ? Game::MAX_LEVEL : c.level);
     game_.setRunDifficulty(c.difficulty);
     game_.reset(runSeed_ ^ splitmix64(sceneCounter_));
     game_.setFixedLevel(fixed);
@@ -2705,7 +2707,7 @@ void App::campaignSongStarted() {
     run_.songStartLines = game_.lines();
     const CampaignSong& s = st->songs[k];
     run_.velTo = s.level[run_.diff];
-    const bool expert = run_.diff == DIFF_EXPERT;
+    const bool expert = expertRules(run_.diff);
     if (k == run_.from) { // the run's first song: a chill warm-up first
         run_.velFrom = std::max(1.f, run_.velTo * (expert ? WARMUP_VELOCITY_EXPERT : WARMUP_VELOCITY));
         run_.velRamp = expert ? WARMUP_SECONDS_EXPERT : WARMUP_SECONDS;
@@ -2754,7 +2756,7 @@ App::RunOutcome App::campaignOutcome(int score, int lines) {
             if (run_.openBefore[s * DIFF_COUNT + d] || !progress_.unlocked(s, d)) continue;
             menu_.celebrateUnlock(s, d);
             if (s == stage + 1 && d == diff) r.nextOpened = true;
-            if (s == stage && d == DIFF_EXPERT) r.expertOpened = true;
+            if (s == stage && d == diff + 1 && d >= DIFF_EXPERT) r.harderOpened = d;
             std::printf("[campaign] stage %d opened on %s\n", s + 1, difficultyName(d));
         }
     if (r.fresh) {
@@ -2772,7 +2774,7 @@ void App::campaignEnd() {
     const RunOutcome r = campaignOutcome(game_.score(), game_.lines());
     std::string note = r.nextOpened ? "NEXT STAGE UNLOCKED" : "";
     if (stage + 1 >= campaign_.size() && (run_.from == 0 || r.fresh)) note = "THE VOYAGE IS COMPLETE";
-    if (r.expertOpened) note += note.empty() ? "EXPERT UNLOCKED" : "   /   EXPERT UNLOCKED";
+    if (r.harderOpened >= 0) note += std::string(note.empty() ? "" : "   /   ") + difficultyName(r.harderOpened) + " UNLOCKED";
     char sub[128];
     if (run_.from == 0 || r.fresh) {
         std::printf("[campaign] stage %d cleared on %s (%d points, %d lines)%s\n", stage + 1, difficultyName(run_.diff),
@@ -2801,7 +2803,7 @@ void App::gameOverDebrief() {
     if (r.fresh)
         std::snprintf(note, sizeof(note), "STAGE %d CLEARED   /   %s", run_.stage + 1,
                       r.nextOpened ? "NEXT STAGE UNLOCKED" : run_.stage + 1 >= campaign_.size() ? "THE VOYAGE IS COMPLETE" : "ALL SONGS BEATEN");
-    if (r.expertOpened) std::snprintf(note + std::strlen(note), sizeof(note) - std::strlen(note), "%sEXPERT UNLOCKED", r.fresh ? "   /   " : "");
+    if (r.harderOpened >= 0) std::snprintf(note + std::strlen(note), sizeof(note) - std::strlen(note), "%s%s UNLOCKED", r.fresh ? "   /   " : "", difficultyName(r.harderOpened));
     Menu::Choice retry; // RETRY SONG: the song the game ended on, on to the stage's end from there
     retry.kind = Menu::Choice::PLAY_CAMPAIGN;
     retry.difficulty = run_.diff;
@@ -3182,7 +3184,7 @@ static void viewerUsage() {
         "  a campaign reviewed: its songs in their universes, the computer playing; the overlay (Tab / H) shows\n"
         "  the songs by stage and the song's sections, and its tour plays each section a few seconds (Space)\n"
         "  campaign             a campaign .tsv, or a custom voyage (its id or title); default: the main campaign\n"
-        "  --difficulty D       the velocities played: easy, normal (default), hard or expert\n"
+        "  --difficulty D       the velocities played: easy, normal (default), hard, expert or hardcore\n"
         "  --stage N --song K   start on that song (default 1, 1)\n"
         "  --size WxH           window size (default 1600x900)\n"
         "  --fullscreen         start fullscreen\n"
@@ -3203,7 +3205,7 @@ static int viewerMain(int argc, char** argv) {
         if (a == "-h" || a == "--help") { viewerUsage(); return 0; }
         else if (a == "--difficulty" && i + 1 < argc) {
             if (!parseDifficulty(argv[++i], &o.difficulty, &o.speedMul)) {
-                std::fprintf(stderr, "unknown difficulty '%s': easy, normal, hard or expert\n", argv[i]);
+                std::fprintf(stderr, "unknown difficulty '%s': easy, normal, hard, expert or hardcore\n", argv[i]);
                 return 1;
             }
         }
@@ -3292,7 +3294,7 @@ static int start(int argc, char** argv) {
         else if (a == "--free") freePlay = true;
         else if (a == "--difficulty" && i + 1 < argc) {
             if (!parseDifficulty(argv[++i], &o.difficulty, &o.speedMul)) {
-                std::fprintf(stderr, "unknown difficulty '%s': easy, normal, hard, expert or a multiplier (e.g. 0.7)\n", argv[i]);
+                std::fprintf(stderr, "unknown difficulty '%s': easy, normal, hard, expert, hardcore or a multiplier (e.g. 0.7)\n", argv[i]);
                 return 1;
             }
             o.difficultyGiven = true;

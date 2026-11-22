@@ -123,8 +123,8 @@ public:
     // the same scale).
     static constexpr float MAX_VELOCITY = 40.f, TWENTY_G = 30.f; // (20G: see the app's gravity)
     static constexpr float TWENTY_G_EXPERT = 24.f;                 // (EXPERT's: from 24)
-    // The velocity from which hyperdrop can happen on a difficulty: HARD TWENTY_G, EXPERT TWENTY_G_EXPERT; -1: never.
-    static float hyperdropFrom(int diff) { return diff == DIFF_HARD ? TWENTY_G : diff == DIFF_EXPERT ? TWENTY_G_EXPERT : -1.f; }
+    // The velocity from which hyperdrop can happen on a difficulty: HARD TWENTY_G, EXPERT (and HARDCORE) TWENTY_G_EXPERT; -1: never.
+    static float hyperdropFrom(int diff) { return diff == DIFF_HARD ? TWENTY_G : expertRules(diff) ? TWENTY_G_EXPERT : -1.f; }
     float velocity() const {
         return fixedLevel_ > 0.f ? std::clamp(fixedLevel_, 1.f, MAX_VELOCITY)
                                  : 1.f + (level() - 1) * (MAX_VELOCITY - 1.f) / float(MAX_LEVEL - 1);
@@ -138,7 +138,7 @@ public:
     void setFixedLevel(float level) { fixedLevel_ = level; }
     // 20G (the game calls it hyperdrop): the app drops each piece to the stack at once; the lock delay is then a little longer
     void setTwentyG(bool on) { twentyG_ = on; }
-    // The run's difficulty (DIFF_EASY .. DIFF_EXPERT; kept by reset()): EXPERT has its own, shorter lock delay.
+    // The run's difficulty (DIFF_EASY .. DIFF_HARDCORE; kept by reset()): EXPERT and HARDCORE have shorter lock delays.
     void setRunDifficulty(int d) { runDiff_ = d; }
     int runDifficulty() const { return runDiff_; }
     bool twentyG() const { return twentyG_; }
@@ -154,8 +154,8 @@ public:
     // Lines cleared during the bonus don't charge it. EXPERT's is weaker: more lines to charge it, shorter.
     static constexpr int BONUS_LINES = 12, BONUS_LINES_EXPERT = 20;
     static constexpr float BONUS_SECONDS = 10.f, BONUS_SECONDS_EXPERT = 5.f;
-    int bonusLines() const { return runDiff_ == DIFF_EXPERT ? BONUS_LINES_EXPERT : BONUS_LINES; }
-    float bonusSeconds() const { return runDiff_ == DIFF_EXPERT ? BONUS_SECONDS_EXPERT : BONUS_SECONDS; }
+    int bonusLines() const { return expertRules(runDiff_) ? BONUS_LINES_EXPERT : BONUS_LINES; }
+    float bonusSeconds() const { return expertRules(runDiff_) ? BONUS_SECONDS_EXPERT : BONUS_SECONDS; }
     // Gauge level 0..1 (while active: the time left).
     float bonusGauge() const {
         return bonusActive_ ? bonusLeft_ / bonusSeconds() : std::min(1.f, bonusLines_ / (float)bonusLines());
@@ -176,16 +176,19 @@ public:
 private:
     // Lock delay: 0.55 s at level 1 down to 0.5 s at the plateau (level 20), and 0.5 s in 20G (the pieces fall to the
     // stack at once, see setTwentyG): a fast fall never leaves less time to slide and turn a piece than 20G does.
-    // EXPERT: 0.4 s throughout. Its clock only runs once the piece is seen to rest (see update).
+    // EXPERT: 0.4 s throughout, HARDCORE 0.3 s. Its clock only runs once the piece is seen to rest (see update).
     float lockDelay() const {
+        if (runDiff_ == DIFF_HARDCORE) return HARDCORE_LOCK_DELAY;
         if (runDiff_ == DIFF_EXPERT) return EXPERT_LOCK_DELAY;
         return twentyG_ ? 0.5f : 0.55f - 0.05f * difficulty();
     }
-    static constexpr float EXPERT_LOCK_DELAY = 0.4f;
+    static constexpr float EXPERT_LOCK_DELAY = 0.4f, HARDCORE_LOCK_DELAY = 0.3f;
 
-    // Move resets: how many slides or turns of a resting piece restart its lock delay (EXPERT: fewer).
-    static constexpr int MAX_RESETS = 15, MAX_RESETS_EXPERT = 10;
-    int maxResets() const { return runDiff_ == DIFF_EXPERT ? MAX_RESETS_EXPERT : MAX_RESETS; }
+    // Move resets: how many slides or turns of a resting piece restart its lock delay (EXPERT: fewer, HARDCORE fewer again).
+    static constexpr int MAX_RESETS = 15, MAX_RESETS_EXPERT = 10, MAX_RESETS_HARDCORE = 5;
+    int maxResets() const {
+        return runDiff_ == DIFF_HARDCORE ? MAX_RESETS_HARDCORE : runDiff_ == DIFF_EXPERT ? MAX_RESETS_EXPERT : MAX_RESETS;
+    }
 
     void spawn(int type);
     void lockPiece(bool dropped = false);

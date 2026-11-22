@@ -10,11 +10,11 @@
 
 #include "difficulty.hpp"
 
-const char* difficultyName(int d); // "EASY", "NORMAL", "HARD", "EXPERT"
+const char* difficultyName(int d); // "EASY", "NORMAL", "HARD", "EXPERT", "HARDCORE"
 // Free play: the gravity multiplier of each difficulty (on every level's speed); HARD is the game as it was, EXPERT
-// 1.4 times it.
+// 1.4 times it, HARDCORE too (from the top level).
 float freePlayMultiplier(int d);
-// "easy" / "normal" / "hard" / "expert" (any case, or e/n/h/x) or a number (the multiplier itself, e.g. 0.7): false if
+// "easy" / "normal" / "hard" / "expert" / "hardcore" (any case, or e/n/h/x/c) or a number (the multiplier itself, e.g. 0.7): false if
 // neither.
 // A number sets *mul and *d to the nearest difficulty; a name sets *d and its multiplier.
 bool parseDifficulty(const std::string& s, int* d, float* mul);
@@ -25,7 +25,7 @@ struct CampaignSong {
     std::string id;       // YouTube video id
     std::string title;
     std::string universe; // "NAME" or "NAME:VARIANT" (as --universe takes it)
-    float level[DIFF_COUNT] = {1, 1, 1, 1}; // the velocity (1 .. Game::MAX_VELOCITY, may be fractional)
+    float level[DIFF_COUNT] = {1, 1, 1, 1, 1}; // the velocity (1 .. Game::MAX_VELOCITY, may be fractional; HARDCORE: the top)
     std::string entry() const { return "ytdl:" + id + "\t" + title; } // a library entry
 };
 struct CampaignStage {
@@ -54,7 +54,7 @@ private:
 // stage N is cleared on it or on a harder one, or once its songs are all beaten there, in any runs (stage 1 always is;
 // reaching a stage on HARD opens it on NORMAL and EASY too, not done there but playable), or everything once UNLOCK ALL
 // was used on the save slot (saveslots.hpp).
-// On EXPERT a stage also opens once it is itself cleared (or its songs all beaten) on HARD.
+// On EXPERT a stage also opens once it is itself cleared (or its songs all beaten) on HARD; on HARDCORE, on EXPERT.
 // The file keys songs by video id and stage clears by their songs, so that regrouping the campaign keeps the songs
 // beaten (a clear whose stage no longer exists is dropped, and the stages it had opened stay open). A file of the
 // first layout (12 stages of 5, keyed by index) is migrated on load, its old copy kept as <file>.bak.
@@ -77,8 +77,8 @@ public:
         if (unlockAll_ || stage <= reach_) return true;
         for (int d = std::max(0, diff); d < DIFF_COUNT; d++)
             if (cleared(stage - 1, d) || allBeaten(stage - 1, d)) return true;
-        // EXPERT: a stage done on HARD opens there too
-        if (diff == DIFF_EXPERT && (cleared(stage, DIFF_HARD) || allBeaten(stage, DIFF_HARD))) return true;
+        // EXPERT: a stage done on HARD opens there too (HARDCORE: done on EXPERT)
+        if (diff >= DIFF_EXPERT && (cleared(stage, diff - 1) || allBeaten(stage, diff - 1))) return true;
         return false;
     }
     bool cleared(int stage, int diff) const;
@@ -100,7 +100,7 @@ private:
     struct SongRec { bool beaten = false; int best = 0, lines = -1, mostLines = -1; };
     struct StageRec {
         bool cleared[DIFF_COUNT] = {};
-        int best[DIFF_COUNT] = {}, lines[DIFF_COUNT] = {-1, -1, -1, -1};
+        int best[DIFF_COUNT] = {}, lines[DIFF_COUNT] = {-1, -1, -1, -1, -1};
         std::vector<SongRec> songs[DIFF_COUNT];
     };
     StageRec& at(int stage);

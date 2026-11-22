@@ -201,8 +201,8 @@ void Worlds::tabs(F f, Col ink, Col accent, float track) {
     const float T = pt ? 1.25f : 1.f;
     std::string name = m.voyageTitle_.empty() ? std::string("VOYAGE") : upper(asciiFold(m.voyageTitle_));
     while (name.size() > 4 && p.width(f, name, 22 * T * u, track + 0.2f) > 700 * u) name.pop_back();
-    // the difficulties, centred on cx (four of them, EASY .. EXPERT)
-    const float cx = X(pt ? 960 : 1250), sp = 195 * u, y = Y(pt ? 150 : 90), on = 1.f - std::min(1.f, m.aRow_), mid = 0.5f * (DIFF_COUNT - 1);
+    // the difficulties, centred on cx (five of them, EASY .. HARDCORE)
+    const float cx = X(pt ? 960 : 1300), sp = (pt ? 176 : 190) * u, y = Y(pt ? 150 : 90), on = 1.f - std::min(1.f, m.aRow_), mid = 0.5f * (DIFF_COUNT - 1);
     const float nw = p.width(f, name, 22 * T * u, track + 0.2f), nx = pt ? X(960) - nw * 0.5f : X(80), ny = Y(pt ? 62 : 92);
     // a soft shade under the title and the tabs, so they read over a bright crystal
     p.rrect(nx - 40 * u, ny - 42 * u, nw + 80 * u, 64 * u, 32 * u, hex(0x02040c, 0.22f), 50 * u);
@@ -1167,12 +1167,12 @@ void Worlds::kalFree() {
     std::string cur, next;
     float mix;
     tourAt(11.f, cur, next, mix);
-    // portrait: the title, the difficulties two by two, the playlists and the starting level, one under the other
+    // portrait: the title, the difficulties two by two (the last alone), the playlists and the starting level, one under the other
     // (the playlists' and the level's panels narrower: PW across, from PL)
     const bool pt = m.portrait_;
     constexpr float PW = 800, PL = 960 - PW / 2;
     if (pt) {
-        pLayout({{560, 90, 800, 130, 1.3f}, {590, 225, 740, 850, 1.1f}, {PL, 680, PW, 262, 1.3f}, {PL, 950, PW, 120, 1.3f}}, 28);
+        pLayout({{560, 90, 800, 130, 1.3f}, {590, 225, 740, 1270, 1.1f}, {PL, 680, PW, 262, 1.3f}, {PL, 950, PW, 120, 1.3f}}, 28);
         pAt(0);
     }
     kalBackground(mix > 0.5f ? next : cur);
@@ -1182,12 +1182,14 @@ void Worlds::kalFree() {
     const bool rows = m.playlists_ != nullptr;
     const float L = pt ? PL : 120, W = pt ? PW : 1680; // the lower panels' left and width
     const float onDiff = rows ? 1.f - std::min(1.f, m.aFreeRow_) : 1.f;
-    // the difficulties' gems: teal, violet, rose, and EXPERT an ember orange
-    static const uint32_t C[DIFF_COUNT] = {0x6fd8c0, 0x9c86ff, 0xff6f9c, 0xff8a3d};
+    // the difficulties' gems: teal, violet, rose, EXPERT an ember orange and HARDCORE a blood red
+    static const uint32_t C[DIFF_COUNT] = {0x6fd8c0, 0x9c86ff, 0xff6f9c, 0xff8a3d, 0xe8283c};
     if (pt) pAt(1);
     for (int d = 0; d < DIFF_COUNT; d++) {
         const float f = sstep(near1(m.aFree_, d));
-        const float x = pt ? X(960 + ((d % 2) - 0.5f) * 380.f) : X(960 + (d - 0.5f * (DIFF_COUNT - 1)) * 400.f), y = Y(pt ? 405 + (d / 2) * 420.f : 405);
+        // (portrait: two by two, the last one alone, centred)
+        const bool alone = d == DIFF_COUNT - 1 && d % 2 == 0;
+        const float x = pt ? X(960 + (alone ? 0.f : ((d % 2) - 0.5f) * 380.f)) : X(960 + (d - 0.5f * (DIFF_COUNT - 1)) * 340.f), y = Y(pt ? 405 + (d / 2) * 420.f : 405);
         const float R = (108 + 20 * f * onDiff) * u;
         // a setting round it: a bronze ring and a blue orbit, gold when chosen
         p.circle(x, y, R + 30 * u, hex(0x0a1020, 0.35f), 30 * u);
@@ -1201,7 +1203,8 @@ void Worlds::kalFree() {
         for (int i = 0; i < 4; i++)
             kite(x, y, t * 0.05f * freePlayMultiplier(d) + i * TAU / 4, 0, R, 0.55f, hex(C[d]), 0.5f + 0.45f * f, true,
                  f > 0.5f && onDiff > 0.5f ? hex(0xffffff, 0.9f) : hex(0x08080c, 0.9f));
-        p.glass(x - 110 * u, y + R + 40 * u, 220 * u, 78 * u, 16 * u, u, f * onDiff, 0.5f);
+        const float bw = std::max(220 * u, p.width(F::JOSEFIN, difficultyName(d), 28 * u, 0.35f) + 44 * u); // (HARDCORE: wider)
+        p.glass(x - bw / 2, y + R + 40 * u, bw, 78 * u, 16 * u, u, f * onDiff, 0.5f);
         p.text(F::JOSEFIN, difficultyName(d), x, y + R + 76 * u, (24 + 4 * f) * u, hex(0xffffff, 0.5f + 0.5f * f), 0, 0.35f);
         char b[16];
         std::snprintf(b, sizeof(b), "x%.1f", freePlayMultiplier(d));
@@ -1310,18 +1313,21 @@ void Worlds::kalFree() {
         if (!m.plMsg_.empty())
             p.text(F::JOSEFIN, upper(m.plMsg_), X(L + 40), Y(930), 16 * u, m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), -1, 0.3f);
         // the starting level: a strip of coarse steps along the bottom (HARD's and EXPERT's hyperdrop levels in its colour)
-        // (portrait: its name over it, the steps across it)
+        // (portrait: its name over it, the steps across it); HARDCORE starts at the top one, the strip dimmed on it
         const float onLvl = std::clamp(m.aFreeRow_ - 1.f, 0.f, 1.f);
+        const bool fixedTop = m.freeDiff_ == DIFF_HARDCORE;
+        if (fixedTop) p.setFade(0.55f);
         if (pt) pAt(3);
         const float ly = Y(pt ? 990 : 962), lh = 78 * u, cw = (pt ? (W - 80) / Menu::FREE_LEVEL_COUNT : 120) * u, lx = X(pt ? L + 40 : 440);
         p.glass(X(L), ly, W * u, lh, 24 * u, u, 0.4f * onLvl, 0.55f);
         p.text(F::JOSEFIN, "STARTING LEVEL", X(L + 40), pt ? ly - 14 * u : ly + lh / 2 + 6 * u, 16 * u, hex(0xffffff, 0.55f + 0.45f * onLvl), -1, 0.45f);
-        const float sx = lx + (m.aLvl_ + 0.5f) * cw; // the selection, sliding under the numbers
+        const float shownLvl = fixedTop ? (float)(Menu::FREE_LEVEL_COUNT - 1) : m.aLvl_;
+        const float sx = lx + (shownLvl + 0.5f) * cw; // the selection, sliding under the numbers
         p.rrect(sx - cw / 2 + 8 * u, ly + 10 * u, cw - 16 * u, lh - 20 * u, 14 * u, hex(0xffffff, 0.08f + 0.08f * onLvl));
         p.rrectLine(sx - cw / 2 + 8 * u, ly + 10 * u, cw - 16 * u, lh - 20 * u, 14 * u, (1.4f + 1.2f * onLvl) * u, hex(0xffffff, 0.45f + 0.5f * onLvl));
         for (int i = 0; i < Menu::FREE_LEVEL_COUNT; i++) {
             const int lv = Menu::FREE_LEVELS[i];
-            const float f = sstep(near1(m.aLvl_, i)), x = lx + (i + 0.5f) * cw;
+            const float f = sstep(near1(shownLvl, i)), x = lx + (i + 0.5f) * cw;
             const float from = Game::hyperdropFrom(m.freeDiff_);
             const bool g20 = from > 0.f && lv >= from;
             const uint32_t gc = C[std::clamp(m.freeDiff_, 0, DIFF_COUNT - 1)];
@@ -1329,6 +1335,7 @@ void Worlds::kalFree() {
                    withA(g20 ? hex(gc) : hex(0xffffff), 0.45f + 0.55f * f), 0, 0.1f);
             if (g20) p.text(F::JOSEFIN, "HYPERDROP", x, ly + lh / 2 + 21 * u, 10 * u, hex(gc, 0.5f + 0.4f * f), 0, 0.12f);
         }
+        p.setFade(1.f);
     }
     // only the keys a player wouldn't guess (paste, remove); the arrows, Enter and Esc go without saying
     // (the built-in playlists can't be removed: no hint on them)

@@ -500,7 +500,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         } else {
             plSel_ = std::clamp(plSel_ + dx, 0, nCh - 1);
             if (dy < 0) freeRow_ = 0;
-            if (dy > 0) freeRow_ = 2;
+            if (dy > 0 && freeDiff_ != DIFF_HARDCORE) freeRow_ = 2; // (HARDCORE starts at the top level: no choice)
             if (in.pressed(A_UI_DELETE) && plSel_ < (int)choices.size() && choices[plSel_].url != DEFAULT_PLAYLIST &&
                 choices[plSel_].url != ELECTRO_PLAYLIST) {
                 playlists_->remove(choices[plSel_].url);

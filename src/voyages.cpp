@@ -117,7 +117,7 @@ std::string makeVoyageCampaign(const std::string& title, const std::vector<std::
             const float cs = S > 1 ? (float)s * (float)(curve.size() - 1) / (float)(S - 1) : 0.f;
             const float ck = ns > 1 ? (float)k / (float)(ns - 1) : 0.f;
             char lv[64];
-            float L[DIFF_COUNT] = {1, 1, 1, 1};
+            float L[DIFF_COUNT] = {1, 1, 1, 1, 1};
             if (curve.size() > 0)
                 for (int d = 0; d < DIFF_COUNT; d++) L[d] = curveLevel(curve, cs, ck, d);
             std::snprintf(lv, sizeof(lv), "%.1f\t%.1f\t%.1f\t%.1f", L[0], L[1], L[2], L[3]);

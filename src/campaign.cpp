@@ -53,12 +53,12 @@ bool isNumber(const std::string& s) {
 float expertVelocity(float hard) { return std::min(Game::MAX_VELOCITY, std::round((hard + 7.f) * 10.f) / 10.f); }
 
 const char* difficultyName(int d) {
-    static const char* N[] = {"EASY", "NORMAL", "HARD", "EXPERT"};
+    static const char* N[] = {"EASY", "NORMAL", "HARD", "EXPERT", "HARDCORE"};
     return N[std::clamp(d, 0, DIFF_COUNT - 1)];
 }
 
 float freePlayMultiplier(int d) {
-    static const float M[] = {0.6f, 0.8f, 1.f, 1.4f};
+    static const float M[] = {0.6f, 0.8f, 1.f, 1.4f, 1.4f};
     return M[std::clamp(d, 0, DIFF_COUNT - 1)];
 }
 
@@ -68,7 +68,7 @@ bool parseDifficulty(const std::string& s0, int* d, float* mul) {
     for (int k = 0; k < DIFF_COUNT; k++) {
         std::string n = difficultyName(k);
         for (char& c : n) c = (char)std::tolower((unsigned char)c);
-        if (s == n || (s.size() == 1 && s[0] == "enhx"[k])) {
+        if (s == n || (s.size() == 1 && s[0] == "enhxc"[k])) {
             *d = k;
             *mul = freePlayMultiplier(k);
             return true;
@@ -136,6 +136,7 @@ bool Campaign::parse(const std::string& text) {
         const bool expert = c.size() > 8 && isNumber(c[7]);
         s.level[DIFF_EXPERT] = expert ? std::clamp((float)std::atof(c[7].c_str()), 1.f, Game::MAX_VELOCITY)
                                       : expertVelocity(s.level[DIFF_HARD]);
+        s.level[DIFF_HARDCORE] = Game::MAX_VELOCITY; // (every song at the top)
         const size_t t = expert ? 8 : 7;
         s.title = c.size() > t ? c[t] : s.id;
         int v = -1;
@@ -257,7 +258,7 @@ std::string Progress::stageKey(int stage) const {
 //   reach	<stage 1..>	(stages up to it open)
 //   stage	<stage 1..>	<DIFF>	<best run score>	<its lines>	<its songs' ids, comma separated>
 //   songid	<video id>	<DIFF>	<best score>	<its lines>	<most lines>
-// DIFF is EASY, NORMAL, HARD or EXPERT2 (EXPERT: a bare EXPERT is HARD's former name, read as HARD, so that files
+// DIFF is EASY, NORMAL, HARD, EXPERT2 or HARDCORE (EXPERT: a bare EXPERT is HARD's former name, read as HARD, so that files
 // written before EXPERT existed keep their HARD results). Lines are -1 when unknown. Older files: "song <stage> <song> <diff> <best> [<lines> <most>]" and stage lines
 // without the ids (the 12 x 5 layout), migrated on load.
 void Progress::load(const std::string& path, const Campaign* camp) {
