@@ -30,7 +30,7 @@
 // a thin line of it.
 //
 // Seven palettes (SUNSHINE, APRICOT, SAGE, MIDNIGHT: a deep pastel night, RAINBOW, and two near-black ones, OBSIDIAN:
-// black and graphite bands, pewter lines turning opal in the drop, EMBERS: brown-black and oxblood bands, ember lines
+// black and graphite bands, silver lines turning opal in the drop, EMBERS: brown-black and oxblood bands, ember lines
 // that glow like blown coals in the drop), from the key, mode, brightness and air: the darkest minor songs take the
 // near-black one (REFALL_FRACTAL_DARK=OBSIDIAN or EMBERS while both are tried, OBSIDIAN by default). Cost: one
 // fullscreen pass (the fractal: under a millisecond of GPU at 1080p; REFALL_GPUTIME=1 prints it), the blocks as
@@ -71,7 +71,8 @@ vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255
 // A palette's colors (sRGB), by slot: the gradient's six stops and its drop colors, the lines between bands, the
 // wash (the contour, too fine to band), the shadows' tint, the well and its line, the accent, the HUD's two inks, the
 // seven pieces. A near-black palette also has drop lines: in the drop, the lines cycle through its three colors
-// (every dropCycle seconds), an opal sheen, or embers breathing.
+// (every dropCycle seconds), an opal sheen, or embers breathing; and its petals' inside, which takes the line's color,
+// takes it darkened (by inside), so that its lines can be bright.
 enum Slot {
     BAND0, DROP0 = BAND0 + 6, LINE = DROP0 + 6, WASH, SHADE, WELL, WELL_LINE, ACCENT, HUD_PALE, HUD_DEEP, PIECE0,
     SLOTS = PIECE0 + 7
@@ -81,6 +82,7 @@ struct VariantDef {
     unsigned c[SLOTS];
     unsigned dropLine[3];   // (none: 0, the line stays)
     float dropCycle;
+    float inside;           // (none: 0, the line's color itself)
 };
 const VariantDef VARIANTS[] = {
     // peach, butter, coral, sky, pink; the drop: a sunset, saturated but still pastel
@@ -119,17 +121,17 @@ const VariantDef VARIANTS[] = {
     {"OBSIDIAN",
      {0x0c0c0d, 0x1c1b1a, 0x2b2a2b, 0x111111, 0x232120, 0x1a1b1b,
       0x0a0a0b, 0x2c2228, 0x0c0c0c, 0x202a26, 0x0b0b0b, 0x2c281e,
-      0x5c5955, 0x1f1e1f, 0x3a3838, 0x0f0f10, 0x8a8682, 0xe6c2cc, 0xf0ece6, 0x0f0f10,
+      0xcdc9c3, 0x1f1e1f, 0x3a3838, 0x0f0f10, 0x8a8682, 0xe6c2cc, 0xf0ece6, 0x0f0f10,
       0x8fbcc6, 0xdcc488, 0xb79ccb, 0x86bc9e, 0xd98c90, 0x939fd2, 0xe3a77c},
-     {0x9e8290, 0x80a09a, 0xa89c82}, 3.5f},
+     {0xf2c4d6, 0xc4ead6, 0xf0dca8}, 3.5f, 0.42f},
     // near black, warm: black, brown-black, oxblood, aubergine-brown, thin ember lines; the drop: the coals blown on
     // (the bands warm up, the lines brighten and breathe); warm pieces
     {"EMBERS",
      {0x0b0807, 0x1d120e, 0x2b1315, 0x140c0b, 0x25151b, 0x1f140f,
       0x100706, 0x3a1209, 0x170a08, 0x50200b, 0x130807, 0x3a1215,
-      0x6c2c15, 0x26140e, 0x3c2620, 0x100b0a, 0x9a4f2c, 0xf2a04c, 0xf6e4d0, 0x100b0a,
+      0xe8823a, 0x26140e, 0x3c2620, 0x100b0a, 0x9a4f2c, 0xf2a04c, 0xf6e4d0, 0x100b0a,
       0xe6c792, 0xf0b23c, 0xd48ca2, 0xa6b86c, 0xe45e46, 0xa79ac2, 0xf28e4c},
-     {0x8e3c16, 0xb65a1c, 0x6e2a12}, 1.7f},
+     {0xf08a38, 0xffc472, 0xd85a26}, 1.7f, 0.45f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 constexpr int V_SUNSHINE = 0, V_APRICOT = 1, V_SAGE = 2, V_MIDNIGHT = 3, V_RAINBOW = 4, V_OBSIDIAN = 5, V_EMBERS = 6;
@@ -713,7 +715,9 @@ void FractalUniverse::render(const Frame& f, GLuint fbo) {
         glUniform3fv(ugl::U(progBg_, "uBand"), 6, bands);
         glUniform3fv(ugl::U(progBg_, "uDropBand"), 6, bands + 18);
         set1f(progBg_, "uDropMix", ease(dropMix_));
-        set3f(progBg_, "uLine", lineColor());
+        const vec3 line = lineColor();
+        set3f(progBg_, "uLine", line);
+        set3f(progBg_, "uInside", line * (VARIANTS[variant_].inside > 0.f ? VARIANTS[variant_].inside : 1.f));
         set3f(progBg_, "uWash", col_[WASH]);
         set3f(progBg_, "uShade", col_[SHADE]);
         set3f(progBg_, "uWellFill", col_[WELL]);
