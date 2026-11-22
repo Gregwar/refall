@@ -250,7 +250,7 @@ private:
     double cursorX_ = -1, cursorY_ = -1;
     float cursorIdle_ = 0;
     bool cursorHidden_ = false;
-    // A screen holding still (the pause menu, a run's debrief) is drawn a while, then kept as it is: the frames are
+    // A screen holding still (the pause menu) is drawn a while, then kept as it is: the frames are
     // not drawn again, swap() waits for a key instead (the gamepads read 30 times a second).
     float stillT_ = 0;
     bool held_ = false;
@@ -1651,7 +1651,7 @@ bool App::frame() {
             hideIdleCursor(dt);
         }
         if (!shotMode && (win_ || opt_.stream)) input_.update(dt); // offline renders ignore the keyboard and gamepads: they must be reproducible
-        const bool still = win_ && !shotMode && !testPlay() && !viewer_ && (mode_ == MODE_MENU ? menu_.still() : paused_) &&
+        const bool still = win_ && !shotMode && !testPlay() && !viewer_ && mode_ != MODE_MENU && paused_ &&
                            !input_.changed() && cursorIdle_ > 0 && !g_refresh &&
                            !input_.remapping() && ctrlNoteT_ <= 0; // (a remap's steps come without any action changing)
         g_refresh = false;
