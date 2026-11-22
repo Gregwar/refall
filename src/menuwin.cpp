@@ -86,6 +86,9 @@ struct Worlds {
     bool open(int s) const { return (!m.progress_ || m.progress_->unlocked(s, m.diff_)) && !m.unlockToPlay(s, m.diff_); }
     bool beaten(int s, int k) const { return m.progress_ && m.progress_->beaten(s, k, m.diff_); }
     bool cleared(int s) const { return m.progress_ && m.progress_->cleared(s, m.diff_); }
+    // cleared as the menu shows it: a stage being celebrated only once its petal turns (TURN_AT into it)
+    static constexpr float TURN_AT = 2.3f;
+    bool shownCleared(int s) const { return cleared(s) && !(m.celebrate_ == s && m.celebrateT_ < TURN_AT); }
     // a song's colour: its stage's hue, in a gradient across the stage's songs (song 1 lighter and a touch warmer,
     // song 5 deeper and a touch cooler), so a stage reads as one family
     Col songCol(int s, int k) const {
@@ -267,7 +270,7 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
         for (int k = 0; k < nSongs(fs); k++) beat += beaten(fs, k);
         std::snprintf(b, sizeof(b), "%d / %d SONGS BEATEN ON %s", beat, nSongs(fs), difficultyName(m.diff_));
         p.text(body, b, lx, y0 + 160 * u, 17 * u, dim, -1, 0.3f);
-        if (cleared(fs)) {
+        if (shownCleared(fs)) {
             std::snprintf(b, sizeof(b), "CLEARED    BEST %d    %s LINES", m.progress_->stageBest(fs, m.diff_),
                           linesStr(m.progress_->stageLines(fs, m.diff_)).c_str());
             p.text(body, b, rx, y0 + 46 * u, 18 * u, hex(0xffd27a), 1, 0.3f);
@@ -306,7 +309,7 @@ void Worlds::infoPortrait(F head, F body, Col ink, Col dim) {
         for (int k = 0; k < nSongs(fs); k++) beat += beaten(fs, k);
         std::snprintf(b, sizeof(b), "%d / %d SONGS BEATEN ON %s", beat, nSongs(fs), difficultyName(m.diff_));
         p.text(body, b, lx, y0 + 165 * u, 17 * T * u, dim, -1, 0.3f);
-        if (cleared(fs)) {
+        if (shownCleared(fs)) {
             std::snprintf(b, sizeof(b), "CLEARED    BEST %d    %s LINES", m.progress_->stageBest(fs, m.diff_),
                           linesStr(m.progress_->stageLines(fs, m.diff_)).c_str());
             p.text(body, b, lx, y0 + 216 * u, 17 * T * u, hex(0xffd27a), -1, 0.3f);
@@ -574,7 +577,7 @@ void Worlds::kalCampaign() {
     // faster and faster, then turns into its cleared look at once, a white copy of its contour spreading out as a wave.
     const int celS = m.celebrate_ >= 0 && m.celebrate_ < n && open(m.celebrate_) && cleared(m.celebrate_) ? m.celebrate_ : -1;
     const float celT = m.celebrateT_;
-    constexpr float TURN = 2.3f; // when it turns
+    constexpr float TURN = TURN_AT; // when it turns
     // A stage just opened (see Menu::celebrateUnlock), drawn last as well, over a lighter shade: drawn locked up to
     // then, its padlock grows and shakes, springs open and flies off; the petal fills with its hue from its base to its
     // tip under a line of light, its number disc flashes, a copy of its contour spreads out and its songs light up.
@@ -848,11 +851,25 @@ void Worlds::kalCampaign() {
         const float rowH = ns > 0 ? std::min(70.f, 350.f / ns) : 70.f;
         p.glass(X(1198), Y(160), 614 * u, (350 + std::max(0, ns - 1) * rowH + 20 + 32 - 160) * u, 26 * u, u, 0.f, 0.42f);
         p.text(F::JOSEFIN_LIGHT, "STAGE " + std::to_string(fs + 1), x, Y(250), 64 * u, hex(0xffffff), -1, 0.15f);
-        const char* st = !o ? "LOCKED" : cleared(fs) ? "CLEARED" : "OPEN";
-        p.text(F::JOSEFIN, st, x, Y(292), 18 * T * u, !o ? hex(0xb0b0b8) : cleared(fs) ? hex(0x86e8a8) : hex(0xffffff, 0.9f), -1, 0.4f);
+        // (a stage being celebrated says CLEARED only once its petal turns; one being unlocked says LOCKED until its
+        // lock breaks: open() already waits for it; the new word comes in with a pop and a glow)
+        const bool celebrating = m.celebrate_ == fs && cleared(fs) && m.celebrateT_ < TURN;
+        const bool cl = cleared(fs) && !celebrating;
+        float since = 99.f; // the time since the word changed
+        if (m.celebrate_ == fs && cleared(fs)) since = m.celebrateT_ - TURN;
+        else if (m.unlock_ == fs && m.unlockDiff_ == m.diff_) since = m.unlockT_ - Menu::UNLOCK_OPEN;
+        const char* st = !o ? "LOCKED" : cl ? "CLEARED" : "OPEN";
+        const Col stc = !o ? hex(0xb0b0b8) : cl ? hex(0x86e8a8) : hex(0xffffff, 0.9f);
+        const float pop = since >= 0.f && since < 0.7f ? std::exp(-since * 6.f) : 0.f;
+        if (pop > 0.01f) {
+            p.setAdditive(true);
+            p.glow(x + p.width(F::JOSEFIN, st, 18 * T * u, 0.4f) * 0.5f, Y(286), (60 + 40 * pop) * u, withA(stc, 0.55f * pop));
+            p.setAdditive(false);
+        }
+        p.text(F::JOSEFIN, st, x, Y(292), 18 * T * u * (1.f + 0.35f * pop), mixc(stc, hex(0xffffff), 0.6f * pop), -1, 0.4f);
         // the scores and lines in two right-aligned columns (lines dimmer): the stage's on the header line
         const float colS = x + 430 * u, colL = x + 528 * u;
-        if (o && cleared(fs)) {
+        if (o && cl) {
             p.text(F::JOSEFIN, "BEST " + std::to_string(m.progress_->stageBest(fs, m.diff_)), colS, Y(292), 18 * T * u, hex(0xffd27a), 1, 0.3f);
             p.text(F::JOSEFIN, linesStr(m.progress_->stageLines(fs, m.diff_)) + " L", colL, Y(292), 18 * T * u, hex(0xffd27a, 0.7f), 1, 0.3f);
         }
