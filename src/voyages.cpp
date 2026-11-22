@@ -194,10 +194,16 @@ std::string VoyageStore::progressPath(const std::string& id) const {
 
 std::string VoyageStore::create(const std::string& title, const std::string& url, const std::vector<std::string>& entries,
                                 uint64_t seed, std::string* err, bool shuffle) {
+    // (no song over MAX_SECONDS: mixes, live sets, full albums; a length the listing didn't give is let in)
     std::vector<std::string> songs;
+    int tooLong = 0;
     for (const std::string& e : entries)
-        if (isYoutubeEntry(e)) songs.push_back(e);
-    if (songs.empty()) { if (err) *err = "No song in this playlist"; return ""; }
+        if (isYoutubeEntry(e)) {
+            if (youtubeDuration(e) > MAX_SECONDS) tooLong++;
+            else songs.push_back(e);
+        }
+    if (tooLong) std::printf("[voyages] %d songs over %d minutes left out\n", tooLong, MAX_SECONDS / 60);
+    if (songs.empty()) { if (err) *err = tooLong ? "Every song is over 10 minutes" : "No song in this playlist"; return ""; }
     if (curve_.size() == 0) { if (err) *err = "No campaign to follow"; return ""; }
     char id[32];
     std::snprintf(id, sizeof(id), "v%llx%04x", (unsigned long long)now(), (unsigned)(seed & 0xffff));

@@ -19,7 +19,11 @@ std::string youtubeEntryTitle(const std::string& entry);
 
 // Expands a playlist / video URL into library entries (empty on failure; prints why). Listings are
 // cached: a known URL starts at once from its cached list, refreshed in the background for the next run.
-std::vector<std::string> resolveYoutube(const std::string& url);
+// needDurations: a cached list whose videos' lengths aren't known (cached by an older version) is listed again first.
+std::vector<std::string> resolveYoutube(const std::string& url, bool needDurations = false);
+
+// A video's length in seconds, as its playlist's listing gave it (an entry or a video id), -1 if unknown.
+int youtubeDuration(const std::string& entry);
 
 // The library entry of a video id, with its title when a cached listing knows it (no network).
 std::string youtubeEntryForId(const std::string& id);

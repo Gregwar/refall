@@ -26,6 +26,7 @@ struct VoyageProgress {
 class VoyageStore {
 public:
     static constexpr int MAX_SONGS = 60, STAGE_SONGS = 4;
+    static constexpr int MAX_SECONDS = 600; // (a song longer than this is left out: mixes, live sets, full albums)
     // <the progress file's folder>/voyages
     static std::string defaultDir(const std::string& progressPath);
     void load(const std::string& dir);

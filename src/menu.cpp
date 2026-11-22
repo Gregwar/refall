@@ -594,7 +594,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
                         vFetch_ = std::async(std::launch::async, [url]() {
                             VFetched f;
                             f.url = url;
-                            f.entries = resolveYoutube(url);
+                            f.entries = resolveYoutube(url, true); // (with the lengths: no song over 10 minutes)
                             if (f.entries.empty()) { f.error = "Couldn't read it: offline, private, or empty?"; return f; }
                             f.title = url == DEFAULT_PLAYLIST ? std::string(GAME_TITLE) : youtubeTitle(url);
                             if (f.title.empty()) f.title = playlistIdOf(url).empty() ? "My voyage" : "Playlist " + playlistIdOf(url);

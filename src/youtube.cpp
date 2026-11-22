@@ -10,6 +10,7 @@
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -75,7 +76,56 @@ static std::string playlistUrl(const std::string& url) {
     return "https://www.youtube.com/playlist?list=" + id;
 }
 
-// Runs yt-dlp to list a playlist / video; ok is false when yt-dlp is missing or fails.
+// The videos' lengths, as the listings give them: <cache>/refall/youtube/durations.tsv, one "id<TAB>seconds" per line.
+static std::mutex durMutex;
+static std::map<std::string, int> durations;
+static bool durLoaded = false;
+
+static fs::path durationsFile() { return fs::path(cacheDir()) / "durations.tsv"; }
+
+static void loadDurations() { // (under durMutex)
+    if (durLoaded) return;
+    durLoaded = true;
+    FILE* f = std::fopen(durationsFile().string().c_str(), "rb");
+    if (!f) return;
+    char line[256];
+    while (std::fgets(line, sizeof(line), f)) {
+        std::string s(line);
+        const size_t tab = s.find('\t');
+        if (tab == std::string::npos) continue;
+        const std::string id = s.substr(0, tab);
+        if (safeId(id)) durations[id] = std::atoi(s.c_str() + tab + 1);
+    }
+    std::fclose(f);
+}
+
+static void addDurations(const std::map<std::string, int>& got) {
+    if (got.empty()) return;
+    std::lock_guard<std::mutex> lock(durMutex);
+    loadDurations();
+    for (const auto& [id, d] : got) durations[id] = d;
+    // written to a temporary file then renamed (see writeList)
+    fs::path tmp = durationsFile();
+    tmp += ".tmp";
+    FILE* f = std::fopen(tmp.string().c_str(), "wb");
+    if (!f) return;
+    for (const auto& [id, d] : durations) std::fprintf(f, "%s\t%d\n", id.c_str(), d);
+    std::fclose(f);
+    std::error_code ec;
+    fs::rename(tmp, durationsFile(), ec);
+}
+
+int youtubeDuration(const std::string& entry) {
+    const size_t tab = entry.find('\t');
+    const std::string id = entry.rfind("ytdl:", 0) == 0 ? entry.substr(5, tab == std::string::npos ? std::string::npos : tab - 5) : entry;
+    std::lock_guard<std::mutex> lock(durMutex);
+    loadDurations();
+    const auto it = durations.find(id);
+    return it == durations.end() ? -1 : it->second;
+}
+
+// Runs yt-dlp to list a playlist / video; ok is false when yt-dlp is missing or fails. (The videos' lengths come with
+// the listing, at no cost: kept for youtubeDuration.)
 static std::vector<std::string> listYoutube(const std::string& url, bool quiet, bool& ok) {
     std::vector<std::string> out;
     ok = false;
@@ -91,23 +141,33 @@ static std::vector<std::string> listYoutube(const std::string& url, bool quiet, 
                          url.c_str());
         return out;
     }
-    std::string cmd = tool + " --flat-playlist --yes-playlist --no-warnings --print " + shellQuote("%(id)s\t%(title)s") +
+    std::string cmd = tool + " --flat-playlist --yes-playlist --no-warnings --print " + shellQuote("%(id)s\t%(duration)s\t%(title)s") +
                       " " + shellQuote(url);
     if (!quiet) std::printf("[youtube] listing %s ...\n", url.c_str());
     FILE* p = platform::openRead(cmd);
     if (!p) return out;
     char line[2048];
+    std::map<std::string, int> got;
     while (std::fgets(line, sizeof(line), p)) {
         std::string s(line);
         while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
         size_t tab = s.find('\t');
         std::string id = s.substr(0, tab);
         if (!safeId(id)) continue;
-        std::string title = tab == std::string::npos ? id : s.substr(tab + 1);
+        // the length ("NA" when the listing doesn't know it), then the title
+        std::string rest = tab == std::string::npos ? id : s.substr(tab + 1);
+        const size_t tab2 = rest.find('\t');
+        if (tab2 != std::string::npos) {
+            const std::string d = rest.substr(0, tab2);
+            if (!d.empty() && d[0] >= '0' && d[0] <= '9') got[id] = (int)std::atof(d.c_str());
+            rest = rest.substr(tab2 + 1);
+        }
+        const std::string& title = rest;
         if (title == "[Private video]" || title == "[Deleted video]") continue;
         out.push_back("ytdl:" + id + "\t" + title);
     }
     ok = platform::closeRead(p) == 0 && !out.empty();
+    addDurations(got);
     return out;
 }
 
@@ -167,11 +227,16 @@ static void writeList(const fs::path& file, const std::vector<std::string>& entr
     fs::rename(tmp, file, ec);
 }
 
-std::vector<std::string> resolveYoutube(const std::string& rawUrl) {
+std::vector<std::string> resolveYoutube(const std::string& rawUrl, bool needDurations) {
     const std::string url = playlistUrl(rawUrl);
     const fs::path cached = listCacheFile(url);
     std::vector<std::string> out = readList(cached);
     bool ok = false;
+    if (needDurations && !out.empty()) { // a list cached before the lengths were kept: listed again now, for them
+        int known = 0;
+        for (const auto& e : out) known += youtubeDuration(e) >= 0;
+        if (known * 2 < (int)out.size()) out.clear();
+    }
     if (!out.empty()) {
         // Start at once from the cached listing; refresh it in the background for the next run.
         std::printf("[youtube] %zu songs (cached list of %s, refreshing it for next time)\n", out.size(), url.c_str());
