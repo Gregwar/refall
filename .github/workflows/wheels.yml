@@ -181,6 +181,14 @@ jobs:
     permissions:
       contents: write
     steps:
+      # (the message: the tag's section of CHANGELOG.md and how to install, tools/release_notes.sh)
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            CHANGELOG.md
+            .github/release-install.md
+            tools/release_notes.sh
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -189,5 +197,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Refall $GITHUB_REF_NAME" \
-            --notes "Windows: download Refall-windows-x64.exe and run it (no install needed). Linux: download the AppImage for your machine (x86_64 or aarch64), make it executable (\`chmod +x\`) and run it. macOS: open the .dmg for your Mac (arm64: Apple silicon, x64: Intel) and drag Refall to Applications; the first time, right-click it and choose Open (it is not signed by an Apple developer). Everywhere: \`uvx refall\` (or \`pipx install refall\`). https://pypi.org/project/refall/"
+          tools/release_notes.sh "$GITHUB_REF_NAME" > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Refall $GITHUB_REF_NAME" --notes-file notes.md
