@@ -607,14 +607,16 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             }
             break;
         }
-        if (vStep_ == 2) { // its name
+        if (vStep_ == 2) { // its name, and the songs' order (up / down)
             type(60);
+            if (dy) vShuffle_ = !vShuffle_;
             std::string name = editText_;
             while (!name.empty() && name.back() == ' ') name.pop_back();
             while (!name.empty() && name[0] == ' ') name.erase(0, 1);
             if (in.pressed(A_UI_ENTER) && !name.empty()) {
                 std::string err;
-                const std::string id = voyages_->create(name, vUrl_, vEntries_, std::random_device{}() ^ ((uint64_t)std::random_device{}() << 32), &err);
+                const std::string id = voyages_->create(name, vUrl_, vEntries_, std::random_device{}() ^ ((uint64_t)std::random_device{}() << 32), &err,
+                                                        vShuffle_);
                 if (id.empty()) { plMsg_ = err; plMsgBad_ = true; }
                 else {
                     vStep_ = 0;

@@ -1460,12 +1460,18 @@ void Worlds::kalVoyages() {
         p.text(F::JOSEFIN, m.vStep_ == 1 ? "PLAYLIST" : "NAME", X(ml + 40), Y(686), 16 * u, hex(0xffffff), -1, 0.45f);
         textField(X(ml + 40), Y(712), (mw - 80) * u, 62 * u, m.editText_,
                   m.vStep_ == 1 ? (pt ? "Paste (Ctrl+V) a playlist link or ID" : "Type or paste (Ctrl+V) a YouTube playlist link or ID") : nullptr);
+        if (m.vStep_ == 2) { // the songs' order, up / down to change it
+            const float rx = X(ml + mw - 40);
+            p.text(F::JOSEFIN, m.vShuffle_ ? "SONGS  SHUFFLED" : "SONGS  IN PLAYLIST ORDER", rx, Y(686), 16 * u,
+                   m.vShuffle_ ? hex(0xffe0a0) : hex(0xffffff, 0.85f), 1, 0.35f);
+        }
     }
     if (!m.plMsg_.empty())
         p.text(F::JOSEFIN, upper(m.plMsg_), making ? X(ml + 40) : X(960), Y(making ? 830 : below - 80), 16 * u,
                m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), making ? -1 : 0, 0.3f);
     // only the keys a player wouldn't guess (paste, delete)
-    const char* hint = m.vStep_ == 1 ? "CTRL+V  PASTE" : !making && m.vSel_ >= 1 && m.vSel_ <= (int)vs.size() ? "DEL  DELETE" : "";
+    const char* hint = m.vStep_ == 1 ? "CTRL+V  PASTE" : m.vStep_ == 2 ? "UP / DOWN  SONG ORDER"
+                     : !making && m.vSel_ >= 1 && m.vSel_ <= (int)vs.size() ? "DEL  DELETE" : "";
     if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(below - 30), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
 }
 

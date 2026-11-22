@@ -213,6 +213,7 @@ private:
     std::string voyageId_, voyageTitle_;       // the voyage the Voyage's screen shows ("" the main one)
     std::map<std::string, int> voyageStage_;   // the stage each voyage was on, this session
     int vSel_ = 0, vStep_ = 0;
+    bool vShuffle_ = false; // the new voyage's songs shuffled (up / down on its name toggles it), else the playlist's order
     int voyageCols() const { return portrait_ ? 1 : 2; } // the cards' grid (one column in portrait)
     float aV_ = 0, aVRow_ = 0;                 // the focused card, its row (eased: the grid scrolls to it)
     std::vector<VoyageProgress> vProg_;        // how far each card's voyage went (read when the screen opens)

@@ -40,8 +40,9 @@ public:
     void setMain(const Campaign& main, const std::string& progressPath) { curve_ = main; mainProgress_ = progressPath; }
     const Campaign& main() const { return curve_; }
     // Makes a voyage of `entries` (library entries, "ytdl:ID\tTITLE") and registers it: its id, or "" (*err why not).
+    // `shuffle`: the songs in a random order (else the playlist's).
     std::string create(const std::string& title, const std::string& url, const std::vector<std::string>& entries,
-                       uint64_t seed, std::string* err);
+                       uint64_t seed, std::string* err, bool shuffle = false);
     void remove(const std::string& id); // with its files (its progress on every slot)
     void used(const std::string& id);   // now its last use (it moves first)
     // How far a voyage went (read from its progress file); "" the main campaign.
@@ -60,4 +61,4 @@ private:
 
 // A voyage's campaign file, as Campaign::load reads it.
 std::string makeVoyageCampaign(const std::string& title, const std::vector<std::string>& entries, const Campaign& curve,
-                               uint64_t seed);
+                               uint64_t seed, bool shuffle = false);

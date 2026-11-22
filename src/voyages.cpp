@@ -49,11 +49,15 @@ float curveLevel(const Campaign& c, float s, float k, int d) {
 } // namespace
 
 std::string makeVoyageCampaign(const std::string& title, const std::vector<std::string>& entries0, const Campaign& curve,
-                               uint64_t seed) {
+                               uint64_t seed, bool shuffle) {
     std::mt19937_64 rng(seed);
-    // the songs: all of them up to 60, else 60 drawn at random (kept in the playlist's order)
+    // the songs: all of them up to 60, else 60 drawn at random (kept in the playlist's order); shuffled: in a random
+    // order, the first 60 of it
     std::vector<std::string> entries = entries0;
-    if ((int)entries.size() > VoyageStore::MAX_SONGS) {
+    if (shuffle) {
+        std::shuffle(entries.begin(), entries.end(), rng);
+        if ((int)entries.size() > VoyageStore::MAX_SONGS) entries.resize(VoyageStore::MAX_SONGS);
+    } else if ((int)entries.size() > VoyageStore::MAX_SONGS) {
         std::vector<int> idx(entries.size());
         for (int i = 0; i < (int)idx.size(); i++) idx[i] = i;
         std::shuffle(idx.begin(), idx.end(), rng);
@@ -189,7 +193,7 @@ std::string VoyageStore::progressPath(const std::string& id) const {
 }
 
 std::string VoyageStore::create(const std::string& title, const std::string& url, const std::vector<std::string>& entries,
-                                uint64_t seed, std::string* err) {
+                                uint64_t seed, std::string* err, bool shuffle) {
     std::vector<std::string> songs;
     for (const std::string& e : entries)
         if (isYoutubeEntry(e)) songs.push_back(e);
@@ -202,7 +206,7 @@ std::string VoyageStore::create(const std::string& title, const std::string& url
     {
         std::ofstream f(campaignPath(id));
         if (!f) { if (err) *err = "Couldn't write " + campaignPath(id); return ""; }
-        f << makeVoyageCampaign(title, songs, curve_, seed);
+        f << makeVoyageCampaign(title, songs, curve_, seed, shuffle);
     }
     Campaign c;
     if (!c.load(campaignPath(id))) { if (err) *err = "Couldn't read the voyage back"; fs::remove(campaignPath(id), ec); return ""; }
