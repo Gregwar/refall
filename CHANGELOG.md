@@ -3,6 +3,18 @@
 Each release's section is its GitHub release message (the release workflow takes the section of its tag): the
 changes to the whole game, then those of single universes, each list with the most important changes first.
 
+## 1.0.10
+
+### Game
+
+- MASTER, a fifth difficulty after EXPERT: every song at the top velocity (40), a 0.3 s lock delay, 5 move resets, EXPERT's other rules; free play starts at level 40; a stage opens on MASTER once done on EXPERT
+- NORMAL slightly easier: the Voyage's velocities 10% lower (stage 1 from 4.5, the finale at 20.2), free play's gravity x0.75 (was x0.8)
+- Release messages now list the changes as bullet lists
+
+### Universes
+
+- No universe changes in this release
+
 ## 1.0.9
 
 ### Game
