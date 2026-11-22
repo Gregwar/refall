@@ -58,7 +58,7 @@ const char* difficultyName(int d) {
 }
 
 float freePlayMultiplier(int d) {
-    static const float M[] = {0.6f, 0.8f, 1.f, 1.4f};
+    static const float M[] = {0.6f, 0.75f, 1.f, 1.4f};
     return M[std::clamp(d, 0, DIFF_COUNT - 1)];
 }
 

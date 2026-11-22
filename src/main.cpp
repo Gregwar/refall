@@ -207,7 +207,7 @@ static void usage() {
         "modes (with no songs and no option above, the game opens on its title screen: VOYAGE, FREE PLAY):\n"
         "  --free               free play straight away, without the menu (also when songs are given)\n"
         "  --difficulty D       easy, normal, hard (default) or expert (e/n/h/x), or a gravity multiplier (e.g. 0.7):\n"
-        "                       free play's speed (EASY x0.6, NORMAL x0.8, HARD x1, EXPERT x1.4), the voyage's difficulty\n"
+        "                       free play's speed (EASY x0.6, NORMAL x0.75, HARD x1, EXPERT x1.4), the voyage's difficulty\n"
         "  --level N            free play's starting level (1..40, default 1; the menu picks the nearest of its steps)\n"
         "  --stage S[:SONG]     a voyage run straight away: stage S (1..15) from its song SONG (default 1)\n"
         "  --campaign FILE      the campaign data (default: data/campaign.tsv)\n"
