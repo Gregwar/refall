@@ -171,7 +171,7 @@ private:
 
     // ---- GL.
     GLuint progSky_ = 0, progTerrain_ = 0, progObj_ = 0, progWater_ = 0, progCloud_ = 0, progGlow_ = 0, progFlat_ = 0,
-           progGlass_ = 0, progFinal_ = 0, progShape_ = 0;
+           progGlass_ = 0, progFinal_ = 0, progShape_ = 0, progTrip_ = 0;
     GLuint meshVao_[isl::M_COUNT] = {}, meshVbo_[isl::M_COUNT] = {}, instVbo_[isl::M_COUNT] = {};
     int meshCount_[isl::M_COUNT] = {};
     GLuint idx_[isl::LOD_COUNT] = {};
@@ -200,6 +200,11 @@ private:
     Sky sky_;
     float lights_ = 0.f, night_ = 0.f;
     vec3 backdrop() const;
+    // ---- TRIP: the swirls' clock (faster with the energy), the soft beat swell, the ringed sun's heading
+    bool trip() const;
+    float flowT_ = 0.f, pulse_ = 0.f, tripSunYaw_ = 0.f;
+    bool tripSunInit_ = false;
+    vec3 tripSun_{1, 0.1f, 0};
 
     // ---- Staging: continuous level 0 calm .. 2 peak.
     int level_ = 1;
