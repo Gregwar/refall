@@ -28,7 +28,10 @@
 // shadow.
 // The drops: the same shapes take the variant's neon palette (the strokes, the land, the sky and its ringed sun, the
 // puffs, zebra palms), washing in from the horizon toward the eye in 1.5 s and receding the same way at the drop's
-// end, held against flip flops (updatePsy; one pass, a per pixel blend: psyK in shaders.hpp).
+// end, held against flip flops (updatePsy; one pass, a per pixel blend: psyK in shaders.hpp). Each palette is a few
+// hue families, every surface in close tones of its own (the sea's strokes neighbouring shades of one hue, the lagoon
+// band a lighter tone of it; the land one family against the sea; the sky another; the sun an accent): tonal waves,
+// not stripes of colour; the strokes flow and swell less in a drop than the music would have them.
 // The variants are palettes: each its natural colours and hours, its archipelago (cays and villas, atolls and
 // bungalows, or limestone and white villages) and its drop's neons.
 #include "universes/islands/islands.hpp"
@@ -166,48 +169,50 @@ struct VariantDef {
 };
 #define HOURS(h) h, (int)(sizeof(h) / sizeof(h[0]))
 const VariantDef VARIANTS[] = {
-    // LAGOON: white sand cays and villas over turquoise shallows; the drop the classic neon trip: turquoise, acid
-    // green and orange strokes, an orange lagoon band, violet sand, a violet sky under a yellow, orange, lime and
-    // magenta ringed sun, yellow puffs
+    // LAGOON: white sand cays and villas over turquoise shallows; the drop neon turquoise and lime: the sea in
+    // turquoise, aqua and teal, a pale aqua lagoon band, the land in limes and acid greens, a violet sky with lilac
+    // puffs, a gold ringed sun
     {"LAGOON", 0xe9d49d, 0xeeede9, 0x7cc256, 0x3f8c5c, 0x4c6a72, 0x787661,
      0x45cdd9, 0x3db6d1,
      0x4f9e22, 0x7cbc30, 0x6e6a4c, 0x4f9a3c, 0x3a7e40, 0.42f, HOURS(PASTEL_DAY), 0,
      0x0c1c30, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0xff9a4a,
-     {0x24ccbd, 0x80e038, 0xff9438, 0x4cd680, 0x4c1a8c, 0xff8029, 0xfff59e, 0x6b2bcc, 0x331273, 0xffe64c,
-      0xffdb33, 0xff8026, 0xb8ed33, 0xff6b33, 0xeb4099, 0x9ef233, 0xff802e, 0x8c33e6, 0xffde4a, 0xd66bf5,
-      0x7de62e, 0x21a85c, 0x9945ed, 0xff7833, 0xf06199, 0x5921b2, 0x8042d9, 0xffd640, 0xff9e33, 0x29bd66,
-      0x8ce03d, 0xbd61f7}},
+     {0x14bcbc, 0x1ccbc6, 0x30d9cf, 0x1fc8c4, 0x109ca6, 0x62e8da, 0xd6fff4, 0x7c46dc, 0x5a2cb4, 0xfff4b0,
+      0xffd84c, 0xffc844, 0xffe070, 0xffbc3c, 0xffd05a, 0xffcc50, 0xffe080, 0xffe8a0, 0xeaff9c, 0xccf064,
+      0x88e03c, 0x5cc232, 0x48a836, 0xa4ec50, 0x6cc838, 0x4ca834, 0x3ca878, 0xeee2ff, 0xbfa2f2, 0x48b432,
+      0x64cc3a, 0x3a9a30}},
     // CORAL: atolls with a peak in their lagoon, bungalows of thatch over turquoise water, pinkish sand; the drop
-    // magenta and cyan: cyan, magenta and electric blue strokes, a yellow lagoon band, pink sand, a magenta sky
+    // magenta and cyan: the sea in cyans and azure, an ice blue lagoon band, the land in pinks and magentas, a violet
+    // sky with pink white puffs, a pale pink ringed sun
     {"CORAL", 0xf0d6b8, 0xf2eee8, 0x6cc46a, 0x2e8a62, 0x4c6670, 0x7a6a62,
      0x4cd6cc, 0x38b8c6,
      0x46a02a, 0x86c234, 0x6e604a, 0x3e9a48, 0x2a7a44, 0.5f, HOURS(PASTEL_DAY), 1,
      0x0c1c30, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0xff7ad8,
-     {0x1fd8f2, 0xf23cc0, 0x4a5cff, 0x8a7ef0, 0x1e0c58, 0xffe640, 0xfff0fa, 0xd8288c, 0x2c0c66, 0xfff4a0,
-      0x4cf0ff, 0xff40c0, 0xffe84c, 0x5a66ff, 0xff8ad8, 0x4cf0ff, 0xffe84c, 0x30e0ff, 0xffe85a, 0xff8ad0,
-      0x30f0b8, 0x0c9ca0, 0x6a4cf0, 0xffd840, 0xd8209a, 0x40148c, 0x7038c0, 0xa0f4ff, 0xf070d8, 0x20d0b0,
-      0x60f090, 0x8a66ff}},
+     {0x1cb0e6, 0x26c0ee, 0x44d0f6, 0x2abcec, 0x1488c4, 0x86e6ff, 0xe8fbff, 0x9050e6, 0x5c2cc0, 0xfff0f8,
+      0xffb4e2, 0xff96d4, 0xffcaec, 0xff84cc, 0xffa8dc, 0xff9cd8, 0xffc0e6, 0xffd6f0, 0xffd2f0, 0xff9cd6,
+      0xec4ca8, 0xc8308e, 0xa6247e, 0xf878c8, 0xd23c98, 0xa82480, 0xb0449a, 0xffe6f6, 0xd8a6ec, 0xd03894,
+      0xe854ae, 0xa82682}},
     // GOLDEN: pale limestone islands with white villages, olives and cypresses, a deeper blue sea, the late afternoon
-    // into the sunset; the drop sunset gold and violet: gold, violet and coral strokes, a hot pink lagoon band, an
-    // orange sky under a plum zenith, gold puffs
+    // into the sunset; the drop gold and violet: the sea in violets and purples, a lilac lagoon band, the land in golds
+    // and ambers, a sunset sky orange to rose with peach puffs, a pale gold ringed sun
     {"GOLDEN", 0xecd9ae, 0xf0ece4, 0x9cba5a, 0x5a8a4c, 0x6a6a6e, 0x8c7a62,
      0x4cc8dc, 0x3aa6d0,
      0x6a9a3a, 0x9cb848, 0x7a6650, 0x6a8a44, 0x4a6a38, 0.32f, HOURS(GOLDEN_DAY), 2,
      0x0c1c30, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0xffc030,
-     {0xffc030, 0x8c40e6, 0xff6a58, 0xd88a8c, 0x40104c, 0xff5aa0, 0xfff2c0, 0xff8040, 0x4c1872, 0xfff6b0,
-      0xffcc40, 0xff8030, 0xff6890, 0x9a4cf2, 0xf0404c, 0xffcc40, 0xff6890, 0x8c34d8, 0xffea80, 0xd872c0,
-      0xdcc028, 0xc03458, 0x8040d8, 0xffcc4c, 0xf05a4c, 0x5a1872, 0x8c4c9a, 0xffd870, 0xff8080, 0xf08c28,
-      0xc0405a, 0x9a4ce6}},
-    // ULTRAVIOLET: cays and villas on a cool day into a lilac blue hour; the drop under a black light: violet, ultra
-    // blue and lime strokes, a hot cyan lagoon band, violet sand, a near black indigo sky, glowing pinks
+     {0x7c3cd2, 0x8a4adc, 0x9c5ee6, 0x8646d8, 0x5e2cae, 0xbe8cfa, 0xf4e8ff, 0xff9458, 0xe0566a, 0xfff4c8,
+      0xffe084, 0xffd064, 0xffea9c, 0xffc654, 0xffdc7c, 0xffd474, 0xffe49c, 0xfff0b4, 0xfff0b4, 0xffd872,
+      0xf2b234, 0xd88e24, 0xb8701e, 0xffca50, 0xe49e34, 0xbc7824, 0xc0743c, 0xffdcae, 0xf4a282, 0xd89a2a,
+      0xeab43c, 0xb47c22}},
+    // ULTRAVIOLET: cays and villas on a cool day into a lilac blue hour; the drop under a black light: the sea in
+    // indigos and ultra blues, a periwinkle lagoon band, the land glowing mint and jade, a near black indigo sky with
+    // lilac puffs, a pink and violet ringed sun
     {"ULTRAVIOLET", 0xe6dcc0, 0xeef0f2, 0x6cbc78, 0x347e6c, 0x4a5e74, 0x6c7080,
      0x48c0dc, 0x3a9ed0,
      0x449a46, 0x78b84a, 0x66645a, 0x3e8e54, 0x2e7050, 0.45f, HOURS(COOL_DAY), 0,
      0x0c1c30, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0xb48cff,
-     {0x7426ff, 0x264cff, 0x80ff4c, 0x5a4cf2, 0x14052e, 0x30fff2, 0xd8fff2, 0x401a9a, 0x0a0526, 0xd8fff2,
-      0x30f2ff, 0x9a30ff, 0x9aff40, 0x304cff, 0xff4ce6, 0x9aff40, 0x30f2ff, 0x8030ff, 0x9aff4c, 0x8c4cff,
-      0x30f29a, 0x0c808c, 0x4c26c0, 0xff4cd8, 0x3058f2, 0x1e0c66, 0x40209a, 0xcc80ff, 0x5a40e6, 0x30f29a,
-      0x9aff4c, 0xff58e0}},
+     {0x3828d8, 0x4434e6, 0x5848f2, 0x4030e0, 0x24189e, 0x7c72ff, 0xdad6ff, 0x3c1c8e, 0x170c42, 0xffe2fa,
+      0xff74e2, 0xe456f2, 0xff94ec, 0xcc4cf0, 0xf26cea, 0xd454f2, 0xff7ce4, 0xf2a4ff, 0xd2fff0, 0x8cffd8,
+      0x34f0b2, 0x1cc292, 0x12927a, 0x64ffca, 0x22caa2, 0x169a80, 0x2a8aa4, 0xcaaaff, 0x7c5adc, 0x1ab28a,
+      0x2ad2a2, 0x128c72}},
 };
 #undef HOURS
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
@@ -2299,12 +2304,13 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     curv_ = lerpf(1.f / 6.4e6f, 1.f / 1.3e5f, smoothstepf(250.f, 2600.f, alt_));
     {
         // the strokes flow on their own clock (a little faster with the energy and the level, never fast); a soft
-        // swell on each beat (a smooth bump, no edge: the bands breathe, nothing flickers)
-        flowT_ += wdt * (0.55f + 0.35f * energy_ + 0.15f * lv_);
+        // swell on each beat (a smooth bump, no edge: the bands breathe, nothing flickers). In the drops' neons both
+        // calmer: the flow barely quicker than in the calm, the swell a quarter of its size (tonal waves, no pulse)
+        flowT_ += wdt * (0.55f + (0.35f * energy_ + 0.15f * lv_) * (1.f - 0.75f * psy_));
         float pk = 0.f;
         if (music.hasSong && !f.paused) {
             const float ph = (float)(music.beat - std::floor(music.beat));
-            pk = std::pow(0.5f + 0.5f * std::cos(TAU * ph), 6.f) * (0.35f + 0.65f * energy_);
+            pk = std::pow(0.5f + 0.5f * std::cos(TAU * ph), 6.f) * (0.35f + 0.65f * energy_) * (1.f - 0.75f * psy_);
         }
         pulse_ = approach(pulse_, pk, 6.f, dt);
         // the ringed sun: ahead and to the right, a little above the horizon, following the heading slowly (it
