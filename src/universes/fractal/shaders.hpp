@@ -165,13 +165,17 @@ void main() {
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 iA; // x, y, half, rotation
-layout(location = 2) in vec4 iB; // type, alpha, mode (0 block, 1 ghost), scale
+layout(location = 2) in vec4 iB; // the same-piece neighbours' mask, alpha, mode (0 block, 1 ghost), scale
 layout(location = 3) in vec4 iC; // color, k (< 0 a lock's brightening, > 0 the game over's greying)
 uniform mat4 uVP;
 out vec2 vU;
 flat out vec4 vB, vC;
 void main() {
-    vec2 l = aCorner * 0.58;           // the cell spans -0.5..0.5
+    // the cell spans -0.5..0.5, the quad a margin past it (the antialiased edge), but only to the cell's side toward
+    // a neighbour of the same piece: the two quads meet there, each pixel drawn once (no seam, even translucent)
+    int m = int(iB.x + 0.5);
+    vec2 l = aCorner * vec2(aCorner.x < 0.0 ? ((m & 1) != 0 ? 0.5 : 0.58) : ((m & 2) != 0 ? 0.5 : 0.58),
+                            aCorner.y > 0.0 ? ((m & 4) != 0 ? 0.5 : 0.58) : ((m & 8) != 0 ? 0.5 : 0.58));
     float c = cos(iA.w), s = sin(iA.w);
     vec2 w = vec2(c * l.x - s * l.y, s * l.x + c * l.y) * iA.z * 2.0 * iB.w;
     vU = l;
@@ -184,19 +188,32 @@ in vec2 vU;
 flat in vec4 vB, vC;
 out vec4 frag;
 uniform vec3 uShine;
-uniform float uGap;        // the hairline between cells (board units, the same at any scale)
+uniform float uGap;        // the hairline between pieces (board units, the same at any scale)
 uniform float uLine;       // the ghost's line (board units)
 void main() {
     vec2 u = vU;
     AA = max(fwidth(u.x), 1e-4) * 0.6;
     float sc = max(vB.w, 0.3);
     vec3 col = vC.rgb;
-    // one flat square of the piece's color, a hairline gap around it, corners barely rounded
-    float d = dBox(u, vec2(0.5 - uGap * 0.5 / sc), 0.035);
+    // one flat square of the piece's color, a hairline gap around it, corners barely rounded; the cells of a piece
+    // one shape: a side shared with a cell of the same piece runs on past the cell's edge (into the neighbour, which
+    // does the same), a corner fills only where the diagonal cell is in the piece too (an inner corner stays clean,
+    // square), so only the shape's outer corners are rounded
+    int m = int(vB.x + 0.5);
+    float h = 0.5 - uGap * 0.5 / sc, E = 0.7;
+    vec2 lo = vec2((m & 1) != 0 ? -E : -h, (m & 8) != 0 ? -E : -h);
+    vec2 hi = vec2((m & 2) != 0 ? E : h, (m & 4) != 0 ? E : h);
+    // a row (run on left and right), a column (up and down), and the corners filled (the cell's quarter, square)
+    float d = min(dBox(u - vec2(lo.x + hi.x, 0.0) * 0.5, vec2(hi.x - lo.x, 2.0 * h) * 0.5, 0.035),
+                  dBox(u - vec2(0.0, lo.y + hi.y) * 0.5, vec2(2.0 * h, hi.y - lo.y) * 0.5, 0.035));
+    if ((m & 21) == 21) d = min(d, dBox(u - vec2(-0.5, 0.5), vec2(0.5), 0.0));
+    if ((m & 38) == 38) d = min(d, dBox(u - vec2(0.5, 0.5), vec2(0.5), 0.0));
+    if ((m & 73) == 73) d = min(d, dBox(u - vec2(-0.5, -0.5), vec2(0.5), 0.0));
+    if ((m & 138) == 138) d = min(d, dBox(u - vec2(0.5, -0.5), vec2(0.5), 0.0));
     float a = cov(d);
     vec3 c = col;
     if (abs(vB.z - 1.0) < 0.5) {
-        // the ghost: a faint wash of the piece's color inside a thin line of it
+        // the ghost: a faint wash of the piece's color inside a thin line of it (one line around the piece's shape)
         float W = uLine / sc;
         a = max(a * 0.16, cov(abs(d + W * 0.5) - W * 0.5) * 0.7);
     } else if (vC.w < 0.0) c = mix(c, uShine, -vC.w);   // a lock's brief brightening
