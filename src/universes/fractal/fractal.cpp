@@ -24,10 +24,13 @@
 // Around a song: the setup dives from the whole flower, small on the paper, down into its point; the teardown pulls
 // the camera back out to the whole flower.
 //
-// The well is a calm pale panel inside a slim line, a soft shadow under it. The blocks are truly flat: one square of
-// a single flat color per cell (no outline, no shading, no highlight), a hairline gap between cells, the corners
-// barely rounded; seven soft retro colors, one per piece type. The ghost is a faint wash of the piece's color inside
-// a thin line of it.
+// The well is a calm pale panel inside a slim line, a soft shadow under it. The blocks are truly flat: a single flat
+// color (no outline, no shading, no highlight), the cells of a piece one joined shape (each locked cell keeps its
+// piece, its ids following the rows down on a clear; a side shared with a cell of the same piece runs on into it, an
+// inner corner fills only where the diagonal cell is in the piece too), a hairline gap between pieces, only the
+// shape's outer corners barely rounded; the falling piece, the previews and the cleared cells (which shrink away
+// together) the same. Seven soft retro colors, one per piece type. The ghost is a faint wash of the piece's color
+// inside one thin line of it, around the piece's shape.
 //
 // Seven palettes (SUNSHINE, APRICOT, SAGE, MIDNIGHT: a deep pastel night, RAINBOW, and two near-black ones, OBSIDIAN:
 // black and graphite bands, silver lines turning opal in the drop, EMBERS: brown-black and oxblood bands, ember lines
@@ -40,6 +43,7 @@
 #include <complex>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -225,6 +229,24 @@ View targetView(const Target& t, double frac, double spin) {
     return {t.p, mul, t.screen};
 }
 
+// The neighbours of a cell of the same piece, as the blocks' mask (1 left, 2 right, 4 up, 8 down, 16 up left, 32 up
+// right, 64 down left, 128 down right; up on screen: the row above).
+template <class F> int neighbourMask(int x, int y, F same) {
+    const int d[8][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}};
+    int m = 0;
+    for (int k = 0; k < 8; k++)
+        if (same(x + d[k][0], y + d[k][1])) m |= 1 << k;
+    return m;
+}
+// A piece's cell's mask, from the piece's four cells.
+int pieceMask(const int (*k)[2], int x, int y) {
+    return neighbourMask(x, y, [&](int a, int b) {
+        for (int i = 0; i < 4; i++)
+            if (k[i][0] == a && k[i][1] == b) return true;
+        return false;
+    });
+}
+
 class FractalUniverse : public Universe {
 public:
     ~FractalUniverse() override;
@@ -247,11 +269,16 @@ private:
     // ---- Blocks.
     struct CellInst { float a[4], b[4], c[4]; };
     std::vector<CellInst> cells_;
-    void cell(float x, float y, int type, float alpha, int mode, float scale, float k);
+    void cell(float x, float y, int type, float alpha, int mode, float scale, float k, int mask);
     void buildBoard(const Game& g);
     vec3 lineColor() const;
-    struct Pop { float x, y; int type; float t; };
+    struct Pop { float x, y; int type; float t; int mask; float cx, cy; };   // (cx, cy: its shape's center)
     std::vector<Pop> pops_;
+    // each cell's piece (its lock's number * 8 + its type + 1; 0 empty, < 0 alone): the cells of a piece one shape
+    int ids_[Game::H][Game::W] = {};
+    int lockCount_ = 0;
+    void syncCells(const Game& g);
+    int gridMask(const Game& g, int x, int y) const;
 
     // ---- The HUD's plates (its lettering: the host's).
     float fade_ = 1.f;
@@ -426,12 +453,57 @@ TransitionHints FractalUniverse::hints() const {
 void FractalUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
-    case GameEvent::Clear: {
+    case GameEvent::Lock: {
+        // each cell keeps its piece (the cells of a bigger lock, a filled board, each alone)
+        lockCount_++;
         for (auto& c : ev.cells) {
-            if (c.y < Game::HIDDEN) continue;
-            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
-            pops_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), 0.f});
+            if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+            ids_[c.y][c.x] = ev.cells.size() <= 4 ? lockCount_ * 8 + std::clamp(c.type, 0, 6) + 1 : -1 - (c.y * Game::W + c.x);
         }
+        break;
+    }
+    case GameEvent::Clear: {
+        bool rows[Game::H] = {};
+        for (auto& c : ev.cells)
+            if (c.y >= 0 && c.y < Game::H) rows[c.y] = true;
+        // a popping cell stays joined to the cells of its piece that pop with it: they shrink together, toward the
+        // center of their shape
+        auto popping = [&](int a, int b, int id) {
+            return id > 0 && a >= 0 && a < Game::W && b >= 0 && b < Game::H && rows[b] && ids_[b][a] == id;
+        };
+        for (auto& c : ev.cells) {
+            if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
+            const int id = ids_[c.y][c.x];
+            const int m = neighbourMask(c.x, c.y, [&](int a, int b) { return popping(a, b, id); });
+            // its shape: the cells it joins, step by step
+            bool seen[Game::H][Game::W] = {};
+            int q[Game::H * Game::W][2], n = 0;
+            float sx = 0.f, sy = 0.f;
+            q[n][0] = c.x; q[n][1] = c.y; n++;
+            seen[c.y][c.x] = true;
+            for (int i = 0; i < n; i++) {
+                const int x = q[i][0], y = q[i][1];
+                sx += x; sy += y;
+                const int d[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+                for (auto& k : d)
+                    if (popping(x + k[0], y + k[1], id) && !seen[y + k[1]][x + k[0]]) {
+                        seen[y + k[1]][x + k[0]] = true;
+                        q[n][0] = x + k[0]; q[n][1] = y + k[1]; n++;
+                    }
+            }
+            const vec3 o = layout::cellPos(sx / n, sy / n);
+            pops_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), 0.f, m, o.x, o.y});
+        }
+        // the pieces' ids follow their rows down
+        int ni[Game::H][Game::W] = {};
+        int dst = Game::H - 1;
+        for (int y = Game::H - 1; y >= 0; y--) {
+            if (rows[y]) continue;
+            std::memcpy(ni[dst], ids_[y], sizeof(ids_[y]));
+            dst--;
+        }
+        std::memcpy(ids_, ni, sizeof(ids_));
         // the zoom accelerates: a burst of about a level a line (more for a quad), eased in and out (render)
         burst_ += ZOOM_LINE + ZOOM_LINE_MORE * (std::min(ev.count, 4) - 1);
         break;
@@ -445,13 +517,34 @@ void FractalUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // Board
 // =====================================================================================================
 
-void FractalUniverse::cell(float x, float y, int type, float alpha, int mode, float scale, float k) {
+void FractalUniverse::syncCells(const Game& g) {
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) {
+            const bool full = g.cell(x, y).type >= 0;
+            // (a cell of no known piece, or not the one locked there (the board filled anew): alone)
+            if (full && (ids_[y][x] == 0 || (ids_[y][x] > 0 && ids_[y][x] % 8 != g.cell(x, y).type + 1))) ids_[y][x] = -1 - (y * Game::W + x);
+            if (!full) ids_[y][x] = 0;
+        }
+}
+
+// A stack cell's mask (a row still falling after a clear joins its piece's cells once it has landed).
+int FractalUniverse::gridMask(const Game& g, int x, int y) const {
+    const int id = ids_[y][x];
+    if (id <= 0) return 0;
+    return neighbourMask(x, y, [&](int a, int b) {
+        return a >= 0 && a < Game::W && b >= 0 && b < Game::H && ids_[b][a] == id &&
+               std::fabs(g.rowOffset(b) - g.rowOffset(y)) < 1e-3f;
+    });
+}
+
+void FractalUniverse::cell(float x, float y, int type, float alpha, int mode, float scale, float k, int mask) {
     if (alpha <= 0.003f || scale <= 0.f) return;
     const vec3 c = col_[PIECE0 + std::clamp(type, 0, 6)];
-    cells_.push_back({{x, y, 0.5f, 0.f}, {(float)type, alpha, (float)mode, scale}, {c.x, c.y, c.z, k}});
+    cells_.push_back({{x, y, 0.5f, 0.f}, {(float)mask, alpha, (float)mode, scale}, {c.x, c.y, c.z, k}});
 }
 
 void FractalUniverse::buildBoard(const Game& g) {
+    syncCells(g);
     const float overRows = over_ * 26.f;
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
@@ -460,11 +553,12 @@ void FractalUniverse::buildBoard(const Game& g) {
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
             float k = -0.3f * std::pow(saturate(c.flash), 8.f);
             if (over_ > 0.f) k = 0.7f * saturate(overRows - (y - Game::HIDDEN));
-            cell(p.x, p.y, c.type, 1.f, 0, 1.f, k);
+            cell(p.x, p.y, c.type, 1.f, 0, 1.f, k, gridMask(g, x, y));
         }
     for (const Pop& p : pops_) {
-        const float t = saturate(p.t / CLEAR_T);
-        cell(p.x, p.y, p.type, 1.f - ease((t - 0.5f) / 0.5f), 0, 1.f - 0.6f * ease(t), -0.35f * (1.f - t));
+        const float t = saturate(p.t / CLEAR_T), s = 1.f - 0.6f * ease(t);
+        cell(p.cx + (p.x - p.cx) * s, p.cy + (p.y - p.cy) * s, p.type, 1.f - ease((t - 0.5f) / 0.5f), 0, s,
+             -0.35f * (1.f - t), p.mask);
     }
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
@@ -478,14 +572,14 @@ void FractalUniverse::buildBoard(const Game& g) {
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                cell(w.x, w.y, p.type, 1.f, 1, 1.f, 0.f);
+                cell(w.x, w.y, p.type, 1.f, 1, 1.f, 0.f, pieceMask(gc, c[0], c[1]));
             }
         }
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         for (auto& c : cs) {
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            cell(w.x, w.y, p.type, 1.f, 0, 1.f, 0.f);
+            cell(w.x, w.y, p.type, 1.f, 0, 1.f, 0.f, pieceMask(cs, c[0], c[1]));
         }
     }
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
@@ -500,7 +594,7 @@ void FractalUniverse::buildBoard(const Game& g) {
         }
         for (auto& c : cs)
             cell(center.x + (c[0] - (minx + maxx) * 0.5f) * sc, center.y - (c[1] - (miny + maxy) * 0.5f) * sc, type,
-                 alpha, 0, sc, 0.f);
+                 alpha, 0, sc, 0.f, pieceMask(cs, c[0], c[1]));
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
     for (int i = 0; i < 3; i++) {
