@@ -639,7 +639,7 @@ void main() {
 // ---------------------------------------------------------------- the pieces: low poly cubes, one per cell
 // The mesh: a chamfered cube, each vertex given as its corner's signs (aS) and which axes it is pulled in along by
 // the chamfer (aK). Instance: a = center xyz, size (board units); b = color rgb, seed; c = dull, glow, alpha,
-// neighbours (a mask of the cells of the same piece around it: 1 left, 2 right, 4 up, 8 down).
+// neighbours (a mask of the cells of the same piece around it: 1 left, 2 right, 4 up, 8 down, 16 .. 128 the diagonals).
 inline const char* GLASS_VS = R"(#version 330 core
 layout(location = 0) in vec3 aS;
 layout(location = 1) in vec3 aK;
@@ -650,7 +650,6 @@ uniform mat4 uVP;
 out vec3 vPos;
 flat out vec3 vCol;
 flat out vec4 vE;
-float hv(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
 void main() {
     // its front face on the board's plane, its depth behind; a side shared with a cell of the same piece runs on to
     // the cell's edge (no gap, no chamfer: the piece one block), an open side inset by the gap and chamfered
@@ -662,9 +661,16 @@ void main() {
     p.x = aS.x * (mx ? 0.5 : 0.5 - G - aK.x * C);
     p.y = aS.y * (my ? 0.5 : 0.5 - G - aK.y * C);
     p.z = -D * 0.5 + aS.z * (D * 0.5 - aK.z * C);
-    // a little irregular, like the islands' facets: the corners away from the piece's other cells nudged by the
-    // cell's seed (the same corner the same nudge on every facet it bounds)
-    if (!mx && !my) p += (vec3(hv(aS * 3.1 + aK * 1.7 + iB.a * 91.0), hv(aS * 5.3 + aK * 2.9 + iB.a * 57.0), hv(aS * 7.7 + aK * 4.3 + iB.a * 33.0)) - 0.5) * vec3(0.035, 0.035, 0.07);
+    // an inner corner of the piece, mitred: the cell at the corner (both sides in the piece, the diagonal not) closes
+    // on the line where the open sides of its two neighbours meet (inset by the gap, and by the chamfer on the front
+    // and back faces), and those neighbours (one side in the piece, the diagonal too) run their open side on to that
+    // line, so the edges and chamfers turn cleanly there (no step, no seam)
+    int dg = aS.y > 0.0 ? (aS.x < 0.0 ? 16 : 32) : (aS.x < 0.0 ? 64 : 128);
+    bool md = (m / dg) % 2 == 1;
+    float miter = G + (1.0 - aK.z) * C;
+    if (mx && my && !md) p.xy = aS.xy * (0.5 - miter);
+    else if (mx && !my && md) p.x = aS.x * (0.5 + miter);
+    else if (my && !mx && md) p.y = aS.y * (0.5 + miter);
     vPos = iA.xyz + p * iA.w;
     vCol = iB.rgb;
     vE = iC;
