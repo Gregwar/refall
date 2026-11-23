@@ -882,7 +882,8 @@ void App::updateGravity(double songTime, float dt) {
     const bool hard = from > 0.f;
     hyperAble_ = hard;
     if (hard) hyperFrom_ = from;
-    const bool twentyG = hard && gameRate_ > 0.999f &&
+    // (none during the bonus: the pieces appear at the top, free to move; back once the fall has eased back)
+    const bool twentyG = hard && gameRate_ > 0.999f && bonusFall_ < 0.01f &&
                          v >= from - 0.05f && (pace >= 1.29f || (pace >= 1.19f && v >= Game::MAX_VELOCITY - 0.05f));
     if (twentyG != game_.twentyG()) {
         game_.setTwentyG(twentyG);

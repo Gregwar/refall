@@ -376,6 +376,22 @@ bool Game::activateBonus() {
     bonusLeft_ = bonusSeconds();
     bonusLines_ = 0;
     lockTimer_ = 0; // (a piece about to lock gets all the bonus to think)
+    // a piece hyperdropped to the stack goes back up as far as its column lets it (the bonus has no hyperdrop)
+    if (twentyG_ && active_) {
+        Piece p = cur_;
+        while (p.y > 1) {
+            Piece up = p;
+            up.y--;
+            if (collides(up)) break;
+            p = up;
+        }
+        if (p.y != cur_.y) {
+            cur_ = p;
+            visY_ = seenY_ = (float)p.y;
+            grounded_ = false;
+            lockResets_ = 0;
+        }
+    }
     events_.push_back({GameEvent::BonusStart});
     return true;
 }
