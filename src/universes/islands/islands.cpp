@@ -19,19 +19,18 @@
 // back up into the sky.
 // Every cleared row releases a flock of seabirds beside the well (at dusk, it lights lanterns along the shore too).
 //
-// The look is flattened low poly: the terrain a jittered grid of flat facets (one material and one flat color each),
-// faceted trees and rocks, the sea in flat bands of color by its depth (a foam line at the shore, the turquoise
-// shallows, a teal ledge, the deep blue) with a few white angular glints and crisp white wakes, a plain gradient
-// sky, faceted clouds.
-// The pieces are low poly cubes: one chamfered cube per cell in its piece's color, seen in perspective, flat shaded by
-// the scene's sun, its corners nudged by its seed, running on into the cells of the same piece (one block a piece).
-// FLAT (a variant only when asked for) draws the same world as a flat vector illustration: each surface one flat fill
-// in two tones by the sun (smooth normals, a crisp terminator), a white surf rim, slate peaks, a pale sky with flat
-// puffs, a flat haze, no shadow map; a plain translucent well, flat pastel tiles over a small offset shadow. Its sea
-// is TRIP's broad slowly flowing strokes in close tints of blue, its sky TRIP's ringed sun in pale creams; in a drop
-// the same shapes take TRIP's neons, washing in from the horizon and receding the same way (updatePsy); the well, the
-// pieces and the lettering stay FLAT's.
-// TRIP (a variant only when asked for) is that neon paint all along, through a light liquid warp, in dark panes.
+// The look is a flat vector illustration: each surface one flat fill in two tones by the sun (smooth normals, a crisp
+// terminator), every colour border antialiased over about a pixel: a white surf rim round the beaches, the sand, two
+// greens, slate peaks, the cliffs; the sea in broad slowly flowing strokes in close tints of blue, the lighter cyan
+// shallows round the islands, a pale lagoon band ringed with a fine line; a pastel sky with flat puffs and a huge
+// ringed sun in pale creams, a flat grey blue haze, the lights at dusk. The well a dense navy pane, the HUD in matching
+// panes, pale lettering; the pieces flat pastel tiles (a piece one shape, clean inner corners) over a small offset
+// shadow.
+// The drops: the same shapes take the variant's neon palette (the strokes, the land, the sky and its ringed sun, the
+// puffs, zebra palms), washing in from the horizon toward the eye in 1.5 s and receding the same way at the drop's
+// end, held against flip flops (updatePsy; one pass, a per pixel blend: psyK in shaders.hpp).
+// The variants are palettes: each its natural colours and hours, its archipelago (cays and villas, atolls and
+// bungalows, or limestone and white villages) and its drop's neons.
 #include "universes/islands/islands.hpp"
 
 #include <algorithm>
@@ -105,80 +104,131 @@ mat4 inverse(const mat4& mm) {
     return r;
 }
 
-// ---------------------------------------------------------------- the variants
+// ---------------------------------------------------------------- the hours: the day passes over the song
+struct Hour {
+    float t, elev;              // song progress, the sun's elevation (degrees)
+    unsigned sun;
+    float sunK;
+    unsigned top, hor, low, fog;
+    float haze;                 // per meter at sea level
+};
+// a pastel day: a pale sky (the sun's color only tints the flat light), the haze a grey blue, into a pink dusk
+const Hour PASTEL_DAY[] = {
+    {0.00f, 64.f, 0xffffff, 1.f, 0xa4d4ec, 0xb8e0f0, 0x9ccbe0, 0x92b6c8, 1.f / 5500.f},
+    {0.42f, 46.f, 0xfffaf0, 1.f, 0xa0d0ea, 0xbee0ee, 0x9ccbe0, 0x96b8c8, 1.f / 5500.f},
+    {0.66f, 24.f, 0xfff0d8, 1.f, 0x9cc8e6, 0xdce4d8, 0xb0c8d0, 0xb0bec4, 1.f / 5200.f},
+    {0.80f, 9.f, 0xffd8b0, 1.f, 0x9cb8dc, 0xf6d6b0, 0xd0bcb4, 0xc8b4b0, 1.f / 5000.f},
+    {0.90f, 2.5f, 0xffc0a0, 1.f, 0x8ca4d4, 0xf8b8a0, 0xc4a4b0, 0xc0a0b0, 1.f / 5500.f},
+    {0.955f, -1.f, 0xf0b0b0, 1.f, 0x6e7cbc, 0xe8a0a4, 0x9c8cb0, 0x9c8cb0, 1.f / 5500.f},
+    {1.00f, -5.f, 0xa8a0d0, 1.f, 0x3c4688, 0x8c7aa8, 0x5c5a8c, 0x60608c, 1.f / 5500.f},
+};
+// the late afternoon: a warm pastel light from the start, the sunset, then dusk
+const Hour GOLDEN_DAY[] = {
+    {0.00f, 30.f, 0xfff0d8, 1.f, 0x9cc8e6, 0xe6e2d2, 0xb4c8d0, 0xb4c0c4, 1.f / 5200.f},
+    {0.40f, 14.f, 0xffdcb4, 1.f, 0x9cbade, 0xf4d6b2, 0xccbcb4, 0xc6b6b0, 1.f / 5000.f},
+    {0.70f, 5.f, 0xffc8a4, 1.f, 0x90a8d6, 0xf8c0a4, 0xc8a8b2, 0xc4a6b2, 1.f / 5300.f},
+    {0.88f, 0.f, 0xf4b4ac, 1.f, 0x7884c0, 0xeca8a6, 0xa494b2, 0xa094b2, 1.f / 5500.f},
+    {1.00f, -4.f, 0xb0a4d0, 1.f, 0x48528e, 0x9c84ac, 0x666494, 0x6a6a92, 1.f / 5500.f},
+};
+// a cool day: bluer pastels, into a lilac blue hour
+const Hour COOL_DAY[] = {
+    {0.00f, 60.f, 0xf4f8ff, 1.f, 0x9cc8ec, 0xc4e0f2, 0x9cc4e0, 0x98b4cc, 1.f / 5500.f},
+    {0.50f, 40.f, 0xf0f4ff, 1.f, 0x94c0ea, 0xc8dcf0, 0xa0c0dc, 0x9cb4ce, 1.f / 5500.f},
+    {0.80f, 12.f, 0xe4e4ff, 1.f, 0x8aa6dc, 0xd4d0ec, 0xaab0d0, 0xa8acca, 1.f / 5300.f},
+    {0.93f, 1.f, 0xd8c8f0, 1.f, 0x6c78c0, 0xc8b4dc, 0x9090bc, 0x9494bc, 1.f / 5500.f},
+    {1.00f, -5.f, 0xa4a0d8, 1.f, 0x3a4488, 0x8a80b0, 0x5c5a8c, 0x60608c, 1.f / 5500.f},
+};
+
+// ---------------------------------------------------------------- the variants: palettes
+// The drop's neons (display colors), in the order of shaders.hpp's N_ indices: the sea's three strokes and its calm
+// tint, the line round the lagoon band, the band, the foam; the sky low and high, the ringed sun's core, its five
+// rings, its two arms, its halo; the land: the rim, the sand, the two greens, the slate, the peaks, the cliffs low
+// and high, the far silhouette; the puffs lit and in shade; the trees (two low, one up the mountains).
+constexpr int NEON_COUNT = 32;
 struct VariantDef {
     const char* name;
-    // the land and the seabed
-    unsigned sand, sandWet, grass, jungle, rock, cliff, seabed, reefA, reefB, dry;
-    float dryK;
-    // the water: its scattering in the shallows and the deep, its absorption (per meter), the foam
+    // the land
+    unsigned sand, sandWet, grass, jungle, rock, cliff;
+    // the water: the shallows and the deep (the strokes are close tints of the deep)
     unsigned shallow, deep;
-    float sigma[3], scatterK, wave;
     // the flora
     unsigned leaf, leaf2, trunk, fol1, fol2;
     float cloudP;
-    int hours;                 // 0: midday to dusk, 1: the golden hour to nightfall, 2: FLAT's pastel day
-    // the well: its backing, the seven pieces (I O T S Z J L: bright candy pastels), the accent
+    const Hour* hours;
+    int hourCount;
+    int world;                 // the archipelago: 0 cays and villas, 1 atolls and bungalows, 2 limestone and white villages
+    // the well: its panes, the seven pieces (I O T S Z J L: flat pastels), the accent (light: it letters the HUD's
+    // accented lines on the navy panes)
     unsigned backing;
     unsigned piece[7];
     unsigned accent;
-    bool flat = false;         // FLAT: a vector illustration (flat fills, two tones, flat pastel tiles), see flat()
-    int trip = 0;              // 1: TRIP, the psychedelic look (flat neon, marbled swirls, a ringed sun)
+    unsigned neon[NEON_COUNT];
 };
+#define HOURS(h) h, (int)(sizeof(h) / sizeof(h[0]))
 const VariantDef VARIANTS[] = {
-    // white sand cays and villas over turquoise shallows, deep blue offshore
-    {"CARIBBEAN", 0xf2dfa8, 0xd8c08a, 0x6cc040, 0x3e9a34, 0x7a5e48, 0x5a4234, 0xe6dcc0, 0xc4806c, 0x6e9048, 0xa4a052, 0.12f,
-     0x3ccad2, 0x2366b6, {0.85f, 0.16f, 0.1f}, 9.f, 1.f,
-     0x4f9a2e, 0xc2b848, 0x8c7658, 0x3e8c30, 0x2a6a28, 0.42f, 0,
-     0x0a1e32, {0x5df1f6, 0xffd768, 0xca90ff, 0x74f09d, 0xff7a8c, 0x86adff, 0xffaa64}, 0xff7a5a, false},
-    // jagged jungle peaks in emerald lagoons, overwater bungalows of thatch
-    {"POLYNESIA", 0xf0dca8, 0xd4bc88, 0x58b838, 0x2a8a30, 0x6a5444, 0x4e3a2e, 0xe4dcc2, 0xcc8670, 0x80689c, 0x8aa648, 0.05f,
-     0x36d2c2, 0x1d5cac, {0.8f, 0.13f, 0.09f}, 10.f, 1.1f,
-     0x3e902a, 0xb4c040, 0x806c50, 0x2e8228, 0x1c5a22, 0.5f, 0,
-     0x081e2a, {0x65ffe3, 0xffde6f, 0xf28df7, 0x99f172, 0xff8276, 0x80a9ff, 0xffb46a}, 0xff6a4a, false},
-    // white villages, olive trees and cypresses on pale limestone, a deep blue sea
-    {"MEDITERRANEAN", 0xecdcb0, 0xccb48a, 0x9aac46, 0x5a8034, 0xb8946c, 0x86624a, 0xdcd6c4, 0x8c8c62, 0x5c7046, 0xc8a456, 0.45f,
-     0x34b2da, 0x1c56ae, {0.75f, 0.12f, 0.075f}, 7.f, 0.9f,
-     0x6a8a3a, 0xa8a050, 0x7a6450, 0x6a7a44, 0x3c4e2a, 0.3f, 0,
-     0x0a1836, {0x67e2ff, 0xffe078, 0xb99fff, 0x8be37d, 0xff8279, 0x7da9ff, 0xffaf70}, 0x2a5ae0, false},
-    // the whole flight in the golden hour, into the sunset and the night, the lanterns lit along the shores
-    {"SUNSET", 0xf0d8a8, 0xd0b084, 0x66b23c, 0x348a30, 0x76604c, 0x58443a, 0xe6d8c0, 0xc47e6a, 0x6e844a, 0xa4a052, 0.1f,
-     0x34c0ca, 0x1f5eac, {0.85f, 0.16f, 0.1f}, 9.f, 0.85f,
-     0x4c922e, 0xc8b048, 0x86704e, 0x3a8030, 0x26622a, 0.45f, 1,
-     0x121432, {0x67f7ff, 0xffe279, 0xd297ff, 0x7df7a9, 0xff7d94, 0x94b6ff, 0xffb46f}, 0xffae4a, false},
-    // FLAT (only when asked for: --universe ISLANDS:FLAT): the Caribbean as a flat vector illustration: flat fills,
-    // a white surf rim round the beaches, slate mountains, a pale sky with flat white puffs, distant islands faded to
-    // grey blue, the sea's strokes in tints of blue; a plain dense navy well, flat pastel tiles with a small
-    // offset shadow; the HUD in navy panes, pale lettering. In the drops, TRIP's neons over the same shapes.
-    {"FLAT", 0xe9d49d, 0xeeede9, 0x7cc256, 0x3f8c5c, 0x4c6a72, 0x787661, 0xe6dcc0, 0xc4806c, 0x6e9048, 0xa4a052, 0.f,
-     0x45cdd9, 0x3db6d1, {0.85f, 0.16f, 0.1f}, 9.f, 1.f,
-     0x4f9e22, 0x7cbc30, 0x6e6a4c, 0x4f9a3c, 0x3a7e40, 0.42f, 2,
-     0x0c1c30, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0x1e4e6c, true},
-    // TRIP: the same flight rendered flat and through a psychedelic filter: the sea and the greens marbled neon
-    // bands flowing slowly, violet sand ringed in orange, a deep violet sky under a huge ringed sun, zebra palms;
-    // the pieces soft pastels in a dark slate well
-    {"TRIP", 0xd66cf4, 0xffde4a, 0x7ce62e, 0x2ecf8a, 0xf0609a, 0x5a22b4, 0x30d0b0, 0xff8a30, 0x7ce62e, 0xffd040, 0.f,
-     0x2ad4b0, 0x86e22e, {0.85f, 0.16f, 0.1f}, 9.f, 1.f,
-     0x8a3af0, 0xffd040, 0xffd040, 0x7ce62e, 0x2ecf8a, 0.42f, 0,
-     0x1c2038, {0x8fd2f0, 0xf8d070, 0xc993f5, 0x93e0a0, 0xf57ee8, 0x9aa8f8, 0xf5a080}, 0x8a5af0, false, 1},
+    // LAGOON: white sand cays and villas over turquoise shallows; the drop the classic neon trip: turquoise, acid
+    // green and orange strokes, an orange lagoon band, violet sand, a violet sky under a yellow, orange, lime and
+    // magenta ringed sun, yellow puffs
+    {"LAGOON", 0xe9d49d, 0xeeede9, 0x7cc256, 0x3f8c5c, 0x4c6a72, 0x787661,
+     0x45cdd9, 0x3db6d1,
+     0x4f9e22, 0x7cbc30, 0x6e6a4c, 0x4f9a3c, 0x3a7e40, 0.42f, HOURS(PASTEL_DAY), 0,
+     0x0c1c30, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0xff9a4a,
+     {0x24ccbd, 0x80e038, 0xff9438, 0x4cd680, 0x4c1a8c, 0xff8029, 0xfff59e, 0x6b2bcc, 0x331273, 0xffe64c,
+      0xffdb33, 0xff8026, 0xb8ed33, 0xff6b33, 0xeb4099, 0x9ef233, 0xff802e, 0x8c33e6, 0xffde4a, 0xd66bf5,
+      0x7de62e, 0x21a85c, 0x9945ed, 0xff7833, 0xf06199, 0x5921b2, 0x8042d9, 0xffd640, 0xff9e33, 0x29bd66,
+      0x8ce03d, 0xbd61f7}},
+    // CORAL: atolls with a peak in their lagoon, bungalows of thatch over turquoise water, pinkish sand; the drop
+    // magenta and cyan: cyan, magenta and electric blue strokes, a yellow lagoon band, pink sand, a magenta sky
+    {"CORAL", 0xf0d6b8, 0xf2eee8, 0x6cc46a, 0x2e8a62, 0x4c6670, 0x7a6a62,
+     0x4cd6cc, 0x38b8c6,
+     0x46a02a, 0x86c234, 0x6e604a, 0x3e9a48, 0x2a7a44, 0.5f, HOURS(PASTEL_DAY), 1,
+     0x0c1c30, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0xff7ad8,
+     {0x1fd8f2, 0xf23cc0, 0x4a5cff, 0x8a7ef0, 0x1e0c58, 0xffe640, 0xfff0fa, 0xd8288c, 0x2c0c66, 0xfff4a0,
+      0x4cf0ff, 0xff40c0, 0xffe84c, 0x5a66ff, 0xff8ad8, 0x4cf0ff, 0xffe84c, 0x30e0ff, 0xffe85a, 0xff8ad0,
+      0x30f0b8, 0x0c9ca0, 0x6a4cf0, 0xffd840, 0xd8209a, 0x40148c, 0x7038c0, 0xa0f4ff, 0xf070d8, 0x20d0b0,
+      0x60f090, 0x8a66ff}},
+    // GOLDEN: pale limestone islands with white villages, olives and cypresses, a deeper blue sea, the late afternoon
+    // into the sunset; the drop sunset gold and violet: gold, violet and coral strokes, a hot pink lagoon band, an
+    // orange sky under a plum zenith, gold puffs
+    {"GOLDEN", 0xecd9ae, 0xf0ece4, 0x9cba5a, 0x5a8a4c, 0x6a6a6e, 0x8c7a62,
+     0x4cc8dc, 0x3aa6d0,
+     0x6a9a3a, 0x9cb848, 0x7a6650, 0x6a8a44, 0x4a6a38, 0.32f, HOURS(GOLDEN_DAY), 2,
+     0x0c1c30, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0xffc030,
+     {0xffc030, 0x8c40e6, 0xff6a58, 0xd88a8c, 0x40104c, 0xff5aa0, 0xfff2c0, 0xff8040, 0x4c1872, 0xfff6b0,
+      0xffcc40, 0xff8030, 0xff6890, 0x9a4cf2, 0xf0404c, 0xffcc40, 0xff6890, 0x8c34d8, 0xffea80, 0xd872c0,
+      0xdcc028, 0xc03458, 0x8040d8, 0xffcc4c, 0xf05a4c, 0x5a1872, 0x8c4c9a, 0xffd870, 0xff8080, 0xf08c28,
+      0xc0405a, 0x9a4ce6}},
+    // ULTRAVIOLET: cays and villas on a cool day into a lilac blue hour; the drop under a black light: violet, ultra
+    // blue and lime strokes, a hot cyan lagoon band, violet sand, a near black indigo sky, glowing pinks
+    {"ULTRAVIOLET", 0xe6dcc0, 0xeef0f2, 0x6cbc78, 0x347e6c, 0x4a5e74, 0x6c7080,
+     0x48c0dc, 0x3a9ed0,
+     0x449a46, 0x78b84a, 0x66645a, 0x3e8e54, 0x2e7050, 0.45f, HOURS(COOL_DAY), 0,
+     0x0c1c30, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0xb48cff,
+     {0x7426ff, 0x264cff, 0x80ff4c, 0x5a4cf2, 0x14052e, 0x30fff2, 0xd8fff2, 0x401a9a, 0x0a0526, 0xd8fff2,
+      0x30f2ff, 0x9a30ff, 0x9aff40, 0x304cff, 0xff4ce6, 0x9aff40, 0x30f2ff, 0x8030ff, 0x9aff4c, 0x8c4cff,
+      0x30f29a, 0x0c808c, 0x4c26c0, 0xff4cd8, 0x3058f2, 0x1e0c66, 0x40209a, 0xcc80ff, 0x5a40e6, 0x30f29a,
+      0x9aff4c, 0xff58e0}},
 };
+#undef HOURS
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
-constexpr int AUTO_VARIANTS = 4; // the ones a song picks on its own (FLAT and TRIP only when asked for)
+// The variants' former names (saved settings, campaigns, --universe): each to the palette nearest its look.
+const std::vector<std::pair<std::string, int>> FORMER_VARIANTS = {
+    {"CARIBBEAN", 0}, {"FLAT", 0}, {"TRIP", 0}, {"POLYNESIA", 1}, {"MEDITERRANEAN", 2}, {"SUNSET", 2}};
 
 isl::Style styleFor(int v) {
     isl::Style s{};
     using namespace isl;
+    const int world = VARIANTS[v].world;
     const float base[6] = {0.26f, 0.26f, 0.16f, 0.14f, 0.09f, 0.09f};
     for (int i = 0; i < 6; i++) s.w[i] = base[i];
     const int bagCar[8] = {T_VILLA, T_CAY, 100 + T_ISLET, T_VOLCANO, T_ATOLL, 200, T_VILLAGE, 100 + T_VILLA};
     const int bagPoly[8] = {T_ATOLL, T_VILLAGE, 100 + T_CAY, T_VOLCANO, 200, T_VILLA, 100 + T_ATOLL, T_ISLET};
     const int bagMed[8] = {T_VILLA, T_ISLET, 100 + T_VILLAGE, T_VOLCANO, 200, T_VILLAGE, 100 + T_ISLET, T_VILLA};
-    const int* bag = v == 1 ? bagPoly : v == 2 ? bagMed : bagCar;
+    const int* bag = world == 1 ? bagPoly : world == 2 ? bagMed : bagCar;
     for (int i = 0; i < 8; i++) s.heroBag[i] = bag[i];
     s.fillP = 0.72f;
-    s.dry = v == 2;
-    s.thatch = v == 1;
-    s.flat = VARIANTS[v].flat;
+    s.dry = world == 2;
+    s.thatch = world == 1;
     s.villageWalls[0] = lin(0xf2c6c0);
     s.villageWalls[1] = lin(0xf4dc90);
     s.villageWalls[2] = lin(0xa8dcc8);
@@ -192,12 +242,12 @@ isl::Style styleFor(int v) {
     s.canvas[1] = lin(0x2a8ac8);
     s.canvas[2] = lin(0xf2b830);
     s.accentWood = lin(0xa87650);
-    if (v == 1) { // Polynesia: volcanoes and atolls, few cays
+    if (world == 1) { // atolls and bungalows: volcanoes and atolls, few cays
         const float w[6] = {0.3f, 0.12f, 0.3f, 0.08f, 0.12f, 0.08f};
         for (int i = 0; i < 6; i++) s.w[i] = w[i];
         s.accentWood = lin(0x9a6a44);
     }
-    if (v == 2) { // the Mediterranean: rocky islands, villages, no atolls
+    if (world == 2) { // limestone: rocky islands, villages, no atolls
         const float w[6] = {0.42f, 0.06f, 0.f, 0.26f, 0.16f, 0.1f};
         for (int i = 0; i < 6; i++) s.w[i] = w[i];
         s.fillP = 0.66f;
@@ -209,43 +259,6 @@ isl::Style styleFor(int v) {
     return s;
 }
 
-// ---------------------------------------------------------------- the hours: the day passes over the song
-struct Hour {
-    float t, elev;              // song progress, the sun's elevation (degrees)
-    unsigned sun;
-    float sunK;
-    unsigned top, hor, low, fog;
-    float haze;                 // per meter at sea level
-};
-const Hour DAY[] = {
-    {0.00f, 64.f, 0xfff6e8, 2.15f, 0x1e6ed6, 0x9ecff0, 0x8ec4e2, 0xb0d8f0, 1.f / 16000.f},
-    {0.42f, 46.f, 0xfff2dc, 2.15f, 0x2672d4, 0xa8d2ee, 0x94c6e2, 0xb6d8ee, 1.f / 15000.f},
-    {0.66f, 24.f, 0xffe2b4, 2.1f, 0x3474c8, 0xcadcde, 0xa8c4d0, 0xd2dad8, 1.f / 13000.f},
-    {0.80f, 9.f, 0xffb46c, 2.1f, 0x45689e, 0xf2c48e, 0xc8b0a0, 0xe8c09c, 1.f / 11000.f},
-    {0.90f, 2.5f, 0xff8448, 1.9f, 0x2e4486, 0xfa9a5c, 0xa47a7c, 0xe0946e, 1.f / 9000.f},
-    {0.955f, -1.f, 0xff6638, 1.2f, 0x1e2c6c, 0xf27848, 0x7a5466, 0xb46a5e, 1.f / 9000.f},
-    {1.00f, -5.f, 0xc04a40, 0.4f, 0x0e1844, 0x8a4a5c, 0x2a2a4c, 0x3e3456, 1.f / 9000.f},
-};
-const Hour EVENING[] = {
-    {0.00f, 17.f, 0xffd298, 2.2f, 0x2a66c4, 0xf0c27c, 0xa4b0b8, 0xc8b49a, 1.f / 18000.f},
-    {0.34f, 7.f, 0xffa860, 2.1f, 0x30559e, 0xf6a866, 0xa89090, 0xd4a084, 1.f / 15000.f},
-    {0.60f, 1.5f, 0xff7a42, 1.9f, 0x2c3e82, 0xfa8a56, 0x9a7078, 0xdc8a6e, 1.f / 9500.f},
-    {0.74f, -1.f, 0xff6236, 1.1f, 0x1c2a68, 0xee7046, 0x744e64, 0xae6458, 1.f / 9000.f},
-    {0.87f, -4.f, 0xc04a40, 0.45f, 0x10184a, 0x7e4660, 0x2c2a4e, 0x3c3458, 1.f / 9000.f},
-    {1.00f, -9.f, 0x704060, 0.12f, 0x060c2c, 0x262850, 0x121632, 0x1c2040, 1.f / 9000.f},
-};
-
-// FLAT's day: a pale pastel sky (the sun's color only tints the flat light), the haze a grey blue.
-const Hour FLAT_DAY[] = {
-    {0.00f, 64.f, 0xffffff, 1.f, 0xa4d4ec, 0xb8e0f0, 0x9ccbe0, 0x92b6c8, 1.f / 5500.f},
-    {0.42f, 46.f, 0xfffaf0, 1.f, 0xa0d0ea, 0xbee0ee, 0x9ccbe0, 0x96b8c8, 1.f / 5500.f},
-    {0.66f, 24.f, 0xfff0d8, 1.f, 0x9cc8e6, 0xdce4d8, 0xb0c8d0, 0xb0bec4, 1.f / 5200.f},
-    {0.80f, 9.f, 0xffd8b0, 1.f, 0x9cb8dc, 0xf6d6b0, 0xd0bcb4, 0xc8b4b0, 1.f / 5000.f},
-    {0.90f, 2.5f, 0xffc0a0, 1.f, 0x8ca4d4, 0xf8b8a0, 0xc4a4b0, 0xc0a0b0, 1.f / 5500.f},
-    {0.955f, -1.f, 0xf0b0b0, 1.f, 0x6e7cbc, 0xe8a0a4, 0x9c8cb0, 0x9c8cb0, 1.f / 5500.f},
-    {1.00f, -5.f, 0xa8a0d0, 1.f, 0x3c4688, 0x8c7aa8, 0x5c5a8c, 0x60608c, 1.f / 5500.f},
-};
-
 // Test hooks: REFALL_ISLANDS_TOD=T holds the hour (0 midday .. 1 dusk), REFALL_ISLANDS_ALT=A holds the altitude (m),
 // REFALL_ISLANDS_S=S starts the flight S meters along the route.
 float hookTod() {
@@ -256,7 +269,7 @@ float hookAlt() {
     static const float v = std::getenv("REFALL_ISLANDS_ALT") ? (float)std::atof(std::getenv("REFALL_ISLANDS_ALT")) : -1.f;
     return v;
 }
-// REFALL_ISLANDS_PSY=K holds FLAT's drop paint at K (0 natural .. 1 all neon, between: the front on its way in).
+// REFALL_ISLANDS_PSY=K holds the drop's paint at K (0 natural .. 1 all neon, between: the front on its way in).
 float hookPsy() {
     static const float v = std::getenv("REFALL_ISLANDS_PSY") ? (float)std::atof(std::getenv("REFALL_ISLANDS_PSY")) : -1.f;
     return v;
@@ -267,9 +280,9 @@ float hookS() {
 }
 
 constexpr float BACK_Z = -0.3f;
-// FLAT: the well's and the HUD's panes, dense (a drop's neons barely through): blended in the scene's linear light,
-// the corner lines' over the frame in display colors (the same look: about 88 % in display terms)
-constexpr float FLAT_PANE_A = 0.982f, FLAT_PANE_A_DISPLAY = 0.88f;
+// The well's and the HUD's panes, dense (a drop's neons barely through): blended in the scene's linear light, the
+// corner lines' over the frame in display colors (the same look: about 88 % in display terms)
+constexpr float PANE_A = 0.982f, PANE_A_DISPLAY = 0.88f;
 
 } // namespace
 
@@ -279,18 +292,15 @@ constexpr float FLAT_PANE_A = 0.982f, FLAT_PANE_A_DISPLAY = 0.88f;
 
 bool IslandsUniverse::init(int width, int height) {
     using sh::with;
-    const std::string common = std::string(sh::COMMON) + sh::TRIP_GLSL + sh::SHADOW_GLSL;
-    progSky_ = ugl::program(ugl::FULLSCREEN_VS, with(sh::SKY_FS, sh::COMMON, sh::TRIP_GLSL).c_str(), "islands sky");
-    progTerrain_ = ugl::program(sh::TERRAIN_VS, with(sh::TERRAIN_FS, common.c_str()).c_str(), "islands terrain");
-    progObj_ = ugl::program(sh::OBJ_VS, with(sh::OBJ_FS, common.c_str()).c_str(), "islands objects");
-    progWater_ = ugl::program(ugl::FULLSCREEN_VS, with(sh::WATER_FS, sh::COMMON, sh::TRIP_GLSL).c_str(), "islands water");
-    progCloud_ = ugl::program(sh::CLOUD_VS, with(sh::CLOUD_FS, sh::COMMON, sh::TRIP_GLSL).c_str(), "islands clouds");
+    progSky_ = ugl::program(ugl::FULLSCREEN_VS, with(sh::SKY_FS, sh::COMMON, sh::PSY_GLSL).c_str(), "islands sky");
+    progTerrain_ = ugl::program(sh::TERRAIN_VS, with(sh::TERRAIN_FS, sh::COMMON, sh::PSY_GLSL).c_str(), "islands terrain");
+    progObj_ = ugl::program(sh::OBJ_VS, with(sh::OBJ_FS, sh::COMMON, sh::PSY_GLSL).c_str(), "islands objects");
+    progWater_ = ugl::program(ugl::FULLSCREEN_VS, with(sh::WATER_FS, sh::COMMON, sh::PSY_GLSL).c_str(), "islands water");
+    progCloud_ = ugl::program(sh::CLOUD_VS, with(sh::CLOUD_FS, sh::COMMON, sh::PSY_GLSL).c_str(), "islands clouds");
     progGlow_ = ugl::program(sh::GLOW_VS, sh::GLOW_FS, "islands glow");
     progFlat_ = ugl::program(sh::FLAT_VS, sh::FLAT_FS, "islands flat");
-    progGlass_ = ugl::program(sh::GLASS_VS, sh::GLASS_FS, "islands glass");
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, sh::FINAL_FS, "islands final");
     progShape_ = ugl::program(sh::SHAPE_VS, sh::SHAPE_FS, "islands shape");
-    progTrip_ = ugl::program(ugl::FULLSCREEN_VS, sh::TRIP_FS, "islands trip");
 
     // ---- the object meshes (pos, normal, aux) and their instance buffers
     for (int m = 0; m < isl::M_COUNT; m++) {
@@ -354,56 +364,6 @@ bool IslandsUniverse::init(int width, int height) {
     };
     sprite(glowVao_, glowVbo_, 2);
     sprite(cloudVao_, cloudVbo_, 2);
-    // ---- the pieces' cubes: one chamfered cube, instanced. Each vertex its corner's signs and the axes the chamfer
-    // pulls it in along: every corner of the box gives three (one on each face meeting there); the faces, the edges'
-    // chamfers and the corners' triangles join them.
-    {
-        std::vector<float> cv;
-        auto V = [&](int sx, int sy, int sz, int axis) {
-            const float v[6] = {(float)sx, (float)sy, (float)sz, axis == 0 ? 0.f : 1.f, axis == 1 ? 0.f : 1.f, axis == 2 ? 0.f : 1.f};
-            cv.insert(cv.end(), v, v + 6);
-        };
-        auto corner = [](int a, int sa, int b, int sb, int c, int sc, int* s) { s[a] = sa; s[b] = sb; s[c] = sc; };
-        int q[4][3];
-        for (int a = 0; a < 3; a++) {
-            const int b = (a + 1) % 3, c = (a + 2) % 3;
-            for (int sa = -1; sa <= 1; sa += 2) {
-                // the face
-                const int uv[4][2] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
-                for (int k = 0; k < 4; k++) corner(a, sa, b, uv[k][0], c, uv[k][1], q[k]);
-                for (int k : {0, 1, 2, 0, 2, 3}) V(q[k][0], q[k][1], q[k][2], a);
-                // the chamfer along the edge with the next axis' faces (along the third axis)
-                for (int sb = -1; sb <= 1; sb += 2) {
-                    int e0[3], e1[3];
-                    corner(a, sa, b, sb, c, -1, e0);
-                    corner(a, sa, b, sb, c, 1, e1);
-                    V(e0[0], e0[1], e0[2], a); V(e1[0], e1[1], e1[2], a); V(e1[0], e1[1], e1[2], b);
-                    V(e0[0], e0[1], e0[2], a); V(e1[0], e1[1], e1[2], b); V(e0[0], e0[1], e0[2], b);
-                }
-            }
-        }
-        for (int sx = -1; sx <= 1; sx += 2)
-            for (int sy = -1; sy <= 1; sy += 2)
-                for (int sz = -1; sz <= 1; sz += 2)
-                    for (int a = 0; a < 3; a++) V(sx, sy, sz, a);
-        cubeCount_ = (int)(cv.size() / 6);
-        glGenVertexArrays(1, &glassVao_);
-        glGenBuffers(1, &cubeVbo_);
-        glGenBuffers(1, &glassVbo_);
-        glBindVertexArray(glassVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, cubeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, cv.size() * sizeof(float), cv.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
-        glBindBuffer(GL_ARRAY_BUFFER, glassVbo_);
-        for (int i = 0; i < 3; i++) {
-            glEnableVertexAttribArray(2 + i);
-            glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 12, (void*)(sizeof(float) * 4 * i));
-            glVertexAttribDivisor(2 + i, 1);
-        }
-    }
 
     glGenVertexArrays(1, &flatVao_);
     glGenBuffers(1, &flatVbo_);
@@ -425,28 +385,6 @@ bool IslandsUniverse::init(int width, int height) {
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    // ---- the sun's shadow map
-    glGenTextures(1, &shadowTex_);
-    glBindTexture(GL_TEXTURE_2D, shadowTex_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, SHADOW_SIZE, SHADOW_SIZE, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-    glGenTextures(1, &shadowDummy_);
-    glBindTexture(GL_TEXTURE_2D, shadowDummy_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, 1, 1, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glGenFramebuffers(1, &shadowFbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex_, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     GLint maxS = 4;
     glGetIntegerv(GL_MAX_SAMPLES, &maxS);
     samples_ = std::max(1, std::min(4, (int)maxS));
@@ -456,23 +394,6 @@ bool IslandsUniverse::init(int width, int height) {
     return glGetError() == GL_NO_ERROR;
 }
 
-// The seabed's target: half resolution, or full for FLAT (its depth bands' borders are crisp, antialiased curves: at
-// half resolution a steep shelf, many meters of depth across a texel, came out stair stepped).
-void IslandsUniverse::makeSeabed(bool full) {
-    seabedFull_ = full;
-    halfW_ = std::max(1, full ? width_ : width_ / 2);
-    halfH_ = std::max(1, full ? height_ : height_ / 2);
-    seabedT_.create(halfW_, halfH_, GL_RGBA32F, GL_RGBA, GL_FLOAT, false);
-    // its depth buffer
-    if (halfDepth_) glDeleteRenderbuffers(1, &halfDepth_);
-    glGenRenderbuffers(1, &halfDepth_);
-    glBindRenderbuffer(GL_RENDERBUFFER, halfDepth_);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, halfW_, halfH_);
-    glBindFramebuffer(GL_FRAMEBUFFER, seabedT_.fbo);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, halfDepth_);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
 void IslandsUniverse::resize(int width, int height) {
     width_ = std::max(1, width);
     height_ = std::max(1, height);
@@ -480,7 +401,15 @@ void IslandsUniverse::resize(int width, int height) {
     bvp_ = ref.vp;
     beye_ = ref.eye;
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false);
-    makeSeabed(flat());
+    // the seabed's target, full resolution (the sea's bands' borders are crisp, antialiased curves: at half
+    // resolution a steep shelf, many meters of depth across a texel, came out stair stepped), and its depth buffer
+    seabedT_.create(width_, height_, GL_RGBA32F, GL_RGBA, GL_FLOAT, false);
+    if (seabedDepth_) glDeleteRenderbuffers(1, &seabedDepth_);
+    glGenRenderbuffers(1, &seabedDepth_);
+    glBindRenderbuffer(GL_RENDERBUFFER, seabedDepth_);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width_, height_);
+    glBindFramebuffer(GL_FRAMEBUFFER, seabedT_.fbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, seabedDepth_);
     if (msFbo_) {
         glDeleteFramebuffers(1, &msFbo_);
         glDeleteRenderbuffers(1, &msColor_);
@@ -507,14 +436,11 @@ IslandsUniverse::~IslandsUniverse() {
     for (unsigned b : vbos) glDeleteBuffers(1, &b);
     sceneT_.destroy();
     seabedT_.destroy();
-    if (halfDepth_) glDeleteRenderbuffers(1, &halfDepth_);
+    if (seabedDepth_) glDeleteRenderbuffers(1, &seabedDepth_);
     if (msFbo_) glDeleteFramebuffers(1, &msFbo_);
     if (msColor_) glDeleteRenderbuffers(1, &msColor_);
     if (msDepth_) glDeleteRenderbuffers(1, &msDepth_);
-    if (shadowFbo_) glDeleteFramebuffers(1, &shadowFbo_);
-    if (shadowTex_) glDeleteTextures(1, &shadowTex_);
-    if (shadowDummy_) glDeleteTextures(1, &shadowDummy_);
-    for (GLuint p : {progSky_, progTerrain_, progObj_, progWater_, progCloud_, progGlow_, progFlat_, progGlass_, progFinal_, progShape_, progTrip_})
+    for (GLuint p : {progSky_, progTerrain_, progObj_, progWater_, progCloud_, progGlow_, progFlat_, progFinal_, progShape_})
         glDeleteProgram(p);
     for (int m = 0; m < isl::M_COUNT; m++) {
         glDeleteVertexArrays(1, &meshVao_[m]);
@@ -522,22 +448,17 @@ IslandsUniverse::~IslandsUniverse() {
         glDeleteBuffers(1, &instVbo_[m]);
     }
     for (int l = 0; l < isl::LOD_COUNT; l++) glDeleteBuffers(1, &idx_[l]);
-    for (GLuint v : {glowVao_, cloudVao_, glassVao_, flatVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, glowVbo_, cloudVbo_, glassVbo_, cubeVbo_, flatVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {glowVao_, cloudVao_, flatVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, glowVbo_, cloudVbo_, flatVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
 // Song, level
 // =====================================================================================================
 
-bool IslandsUniverse::flat() const { return VARIANTS[variant_].flat; }
-vec3 IslandsUniverse::backdrop() const {
-    if (trip()) return lin(0x5a2ab8);
-    return mixDisplay(sky_.hor, lin(VARIANTS[variant_].shallow), 0.35f);
-}
-bool IslandsUniverse::trip() const { return VARIANTS[variant_].trip != 0; }
-// TRIP: the swirls' size (world meters per unit of their field), from the altitude
-float IslandsUniverse::tripScale() const { return std::min(35.f + alt_ * 0.85f, 2500.f); }
+vec3 IslandsUniverse::backdrop() const { return mixDisplay(sky_.hor, lin(VARIANTS[variant_].shallow), 0.35f); }
+// the sea's strokes' size (world meters per unit of their field), from the altitude
+float IslandsUniverse::swirlScale() const { return std::min(35.f + alt_ * 0.85f, 2500.f); }
 vec3 IslandsUniverse::pieceCol(int t) const { return lin(VARIANTS[variant_].piece[std::clamp(t, 0, 6)]); }
 
 void IslandsUniverse::setSong(const SongLook& t, float seconds) {
@@ -547,12 +468,12 @@ void IslandsUniverse::setSong(const SongLook& t, float seconds) {
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
         if (!t.hasSong) v = 0;
-        else if ((t.minor && t.brightness < 0.48f) || t.bpm < 88.f) v = 3;          // sunset
-        else if (t.bassWeight > 0.58f && t.density > 0.5f) v = 1;                  // polynesia
-        else if (t.airWeight > 0.55f && t.brightness > 0.5f && !t.minor) v = 2;    // the mediterranean
-        else if (t.brightness > 0.55f) v = 0;                                      // caribbean
-        else v = (int)(h * AUTO_VARIANTS) % AUTO_VARIANTS;
-        if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % AUTO_VARIANTS;
+        else if ((t.minor && t.brightness < 0.48f) || t.bpm < 88.f) v = 2;          // golden: the sunset
+        else if (t.bassWeight > 0.58f && t.density > 0.5f) v = 3;                  // ultraviolet: the club
+        else if (t.airWeight > 0.55f && t.brightness > 0.5f && !t.minor) v = 1;    // coral
+        else if (t.brightness > 0.55f) v = 0;                                      // lagoon
+        else v = (int)(h * VARIANT_COUNT) % VARIANT_COUNT;
+        if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
     }
     const bool changed = v != variant_ || builtVariant_ < 0;
     variant_ = v;
@@ -588,19 +509,14 @@ void IslandsUniverse::setLevel(int level, float energy, float seconds, float imp
 void IslandsUniverse::drop(float strength) {
     dropMode_ = true;
     diveT_ = 0.f;
-    swell_ = std::max(swell_, 0.4f + 0.4f * strength);
+    (void)strength;
 }
 
-// FLAT's drops: the neons wash in from the horizon toward the eye in about 1.5 s, recede the same way (back out to
+// The drops: the neons wash in from the horizon toward the eye in about 1.5 s, recede the same way (back out to
 // the horizon) at the drop's end. Held against flip flops: once in, at least 6 s; out only once the drop has been over
 // 1.5 s (a short gap between two drops stays neon); once out, at least 3 s before washing in again. The front moves
 // at a steady pace (eased at both ends), never jumps: a change of mind mid way turns it round smoothly.
 void IslandsUniverse::updatePsy(bool inDrop, float dt) {
-    if (!flat()) {
-        psyOn_ = false;
-        psyT_ = psy_ = 0.f;
-        return;
-    }
     psyHold_ += dt;
     psyOff_ = inDrop ? 0.f : psyOff_ + dt;
     if (!psyOn_ && inDrop && psyHold_ >= 3.f) {
@@ -618,8 +534,6 @@ void IslandsUniverse::updatePsy(bool inDrop, float dt) {
     if (hookPsy() >= 0.f) psy_ = hookPsy();
 }
 
-void IslandsUniverse::refresh(float strength) { swell_ = std::max(swell_, 0.15f * strength); }
-
 vec2 IslandsUniverse::project(const vec3& p) const { return layout::project(bvp_, p, width_, height_); }
 
 TransitionHints IslandsUniverse::hints() const {
@@ -629,7 +543,6 @@ TransitionHints IslandsUniverse::hints() const {
     h.light = ugl::luma(h.background) > 0.2f;
     h.ink = h.light ? lin(0x0e2238) : lin(0xf4efe4);
     h.accent = lin(V.accent);
-    if (V.trip) h.ink = lin(0xffffff);
     h.styles = TS_RIPPLE | TS_CURTAIN | TS_LUMA;
     return h;
 }
@@ -1671,7 +1584,6 @@ void IslandsUniverse::lightLanterns(int n) {
 
 void IslandsUniverse::buildClouds(float worldTime) {
     puffs_.clear();
-    cloudShadows_.clear();
     const VariantDef& V = VARIANTS[variant_];
     const double C = 1100.0;
     const double wx = 2.6 * worldTime, wz = 1.1 * worldTime;
@@ -1679,10 +1591,6 @@ void IslandsUniverse::buildClouds(float worldTime) {
     const float R = 14000.f;
     const long long i0 = (long long)std::floor((ax - R) / C), i1 = (long long)std::floor((ax + R) / C);
     const long long j0 = (long long)std::floor((az - R) / C), j1 = (long long)std::floor((az + R) / C);
-    const vec3 L = sky_.sunDir;
-    const vec3 focus = eye_ + vec3(fwd_.x, 0, fwd_.z) * std::clamp(alt_ * 1.5f, 80.f, 3000.f);
-    struct Sh { float x, z, r, a, d2; };
-    std::vector<Sh> shadows;
     for (long long j = j0; j <= j1; j++)
         for (long long i = i0; i <= i1; i++) {
             const uint32_t h = isl::hashu((uint32_t)(i * 2654435761LL) ^ (uint32_t)(j * 40503LL) ^ (uint32_t)seed_ * 7u);
@@ -1712,18 +1620,8 @@ void IslandsUniverse::buildClouds(float worldTime) {
                 p.d2 = dist * dist;
                 if (p.alpha > 0.01f) puffs_.push_back(p);
             }
-            // its shadow on the sea, where the sun casts it
-            const float ly = std::max(L.y, 0.12f);
-            const float sx = cx - L.x / ly * (base + S * 0.3f), sz = cz - L.z / ly * (base + S * 0.3f);
-            const float fx = sx - focus.x, fz = sz - focus.z;
-            shadows.push_back({sx, sz, S * 1.1f, 0.42f * saturate(L.y * 4.f), fx * fx + fz * fz});
         }
     std::sort(puffs_.begin(), puffs_.end(), [](const Puff& a, const Puff& b) { return a.d2 > b.d2; });
-    std::sort(shadows.begin(), shadows.end(), [](const Sh& a, const Sh& b) { return a.d2 < b.d2; });
-    for (size_t i = 0; i < shadows.size() && i < 24; i++) {
-        const float v[4] = {shadows[i].x, shadows[i].z, shadows[i].r, shadows[i].a};
-        cloudShadows_.insert(cloudShadows_.end(), v, v + 4);
-    }
 }
 
 void IslandsUniverse::glow(const vec3& world, float size, const vec3& col, float soft) {
@@ -1734,7 +1632,8 @@ void IslandsUniverse::glow(const vec3& world, float size, const vec3& col, float
 
 void IslandsUniverse::push(const isl::Part& p) { inst_[p.mesh].push_back(p.in); }
 
-// The islands in view: their level of detail (requested from the worker), their content, the shadow's share.
+// The islands in view (and around where the camera looks: their lights and beams reach into the view): their level
+// of detail (requested from the worker), their content.
 void IslandsUniverse::gatherIslands() {
     draws_.clear();
     for (auto& v : inst_) v.clear();
@@ -1752,7 +1651,7 @@ void IslandsUniverse::gatherIslands() {
                 for (int c = 0; c < 4; c++) p[c] /= std::max(l, 1e-6f);
             }
     }
-    const float shadowR = std::clamp(alt_ * 1.6f + 140.f, 180.f, 5000.f);
+    const float nearR = std::clamp(alt_ * 1.6f + 140.f, 180.f, 5000.f);
     const vec3 shC = eye_ + vec3(fwd_.x, 0, fwd_.z) * std::clamp(alt_ * 1.2f, 60.f, 2600.f);
     const float objDist = lerpf(4200.f, 3600.f, smoothstepf(900.f, 1500.f, alt_));
     for (const auto& Ip : world_->islands) {
@@ -1776,9 +1675,8 @@ void IslandsUniverse::gatherIslands() {
         for (auto& p : pl)
             if (p[0] * c.x + p[1] * c.y + p[2] * c.z + p[3] < -rad) { vis = false; break; }
         const float sx = I.x - shC.x, sz = I.z - shC.z;
-        const bool inShadow = std::sqrt(sx * sx + sz * sz) < shadowR + I.ext * 1.42f;
-        if (!vis && !inShadow) continue;
-        draws_.push_back({&I, dc, inShadow && vis});
+        if (!vis && std::sqrt(sx * sx + sz * sz) > nearR + I.ext * 1.42f) continue;
+        draws_.push_back({&I, dc});
         if (dmin < objDist) {
             for (const isl::Part& p : I.parts) {
                 // (each kind fades out, shrinking, over the last stretch before its cut: no pop)
@@ -1802,33 +1700,27 @@ void IslandsUniverse::syncCells(const Game& g) {
     for (int y = 0; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const bool full = g.cell(x, y).type >= 0;
-            if (full && seeds_[y][x] == 0.f) seeds_[y][x] = 0.001f + isl::hashf((uint32_t)(x * 131 + y * 977 + (int)(time_ * 10.f)));
             // (a cell of no known piece, or not the one locked there (the board filled anew): alone)
             if (full && (ids_[y][x] == 0 || (ids_[y][x] > 0 && ids_[y][x] % 8 != g.cell(x, y).type + 1))) ids_[y][x] = -1 - (y * Game::W + x);
-            if (!full) { seeds_[y][x] = 0.f; ids_[y][x] = 0; }
+            if (!full) ids_[y][x] = 0;
         }
 }
 
 void IslandsUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
-    case GameEvent::Spawn: // the new piece's glass, one seed a cell
-        for (int i = 0; i < 4; i++) pieceSeeds_[i] = 0.001f + isl::hashf((uint32_t)(i * 7919 + (int)(time_ * 1000.f) * 31 + 17));
-        break;
     case GameEvent::Lock: {
         int maxY = -1;
         for (auto& c : ev.cells) maxY = std::max(maxY, c.y);
         float x0 = 99.f, x1 = -99.f;
         for (auto& c : ev.cells)
             if (c.y == maxY) { x0 = std::min(x0, (float)c.x); x1 = std::max(x1, (float)c.x); }
-        // each cell keeps the tile it fell with (its own seed: a new one here changed its look as it settled), and
-        // its piece (its tile runs on into the piece's other cells; the cells of a bigger lock, a filled board,
-        // each alone)
+        // each cell keeps its piece (its tile runs on into the piece's other cells; the cells of a bigger lock, a
+        // filled board, each alone)
         lockCount_++;
         for (size_t i = 0; i < ev.cells.size(); i++) {
             const auto& c = ev.cells[i];
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
-            seeds_[c.y][c.x] = i < 4 ? pieceSeeds_[i] : 0.001f + isl::hashf((uint32_t)(c.x * 31 + c.y * 131 + (int)(time_ * 100.f)));
             ids_[c.y][c.x] = ev.cells.size() <= 4 ? lockCount_ * 8 + std::clamp(c.type, 0, 6) + 1 : -1 - (c.y * Game::W + c.x);
         }
         if (maxY >= Game::HIDDEN && hardPending_) {
@@ -1857,21 +1749,18 @@ void IslandsUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (!rows[y]) continue;
             for (auto& c : ev.cells) {
                 if (c.y != y) continue;
-                clearing_.push_back({c.x, y, std::clamp(c.type, 0, 6), seeds_[y][c.x] > 0.f ? seeds_[y][c.x] : 0.5f, 0.f,
+                clearing_.push_back({c.x, y, std::clamp(c.type, 0, 6), 0.f,
                                      0.018f * std::fabs(c.x - 4.5f) + 0.025f * rowK, gridMask(c.x, y)});
             }
             rowK++;
         }
-        float ns[Game::H][Game::W] = {};
         int ni[Game::H][Game::W] = {};
         int dst = Game::H - 1;
         for (int y = Game::H - 1; y >= 0; y--) {
             if (rows[y]) continue;
-            std::memcpy(ns[dst], seeds_[y], sizeof(seeds_[y]));
             std::memcpy(ni[dst], ids_[y], sizeof(ids_[y]));
             dst--;
         }
-        std::memcpy(seeds_, ns, sizeof(seeds_));
         std::memcpy(ids_, ni, sizeof(ids_));
         // the world: a flock of seabirds per clear (bigger with the rows), lanterns along the shore at dusk
         // a sailboat launched for each cleared row (its sails in the row's colors), a big catamaran for a quad
@@ -1889,7 +1778,6 @@ void IslandsUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 launchBoat(row, false);
             }
         if (lights_ > 0.25f) lightLanterns(ev.count >= 4 ? 30 : 5 * ev.count);
-        if (ev.count >= 4) swell_ = std::max(swell_, 0.3f);
         break;
     }
     case GameEvent::HardDrop: hardPending_ = true; break;
@@ -1932,58 +1820,26 @@ float IslandsUniverse::gridMask(int x, int y) const {
 }
 
 void IslandsUniverse::buildBoard(const Game& g) {
-    glass_.clear();
     flat_.clear();
     tiles_.clear();
     if (bare_) return;
     const VariantDef& V = VARIANTS[variant_];
     const vec3 back = lin(V.backing);
-    const bool fl = flat();
-    // HOLD and NEXT, the score's column and the bonus gauge in panes like the well's (TRIP: rounded, FLAT: sharp)
-    auto hudPanes = [&](const vec3& col, float a, bool round) {
-        auto pane = [&](float x, float y, float hw, float hh) {
-            quad(vec3(x, y, BACK_Z), hw, hh, col, a, round ? -0.4f / hw : 0.f, round ? -0.4f / hh : 0.f);
-        };
-        const float x0 = layout::HOLD_CENTER.x, x1 = layout::nextCenter(0).x;
-        pane(x0, 7.9f, 1.7f, 2.1f);
-        pane(x1, 4.85f, 1.7f, 5.15f);
-        pane(x0, -2.05f, 1.7f, 4.25f);                         // score, lines, level, best, the speed
-        pane(x1, layout::GAUGE_CENTER.y - 0.75f, 1.7f, 2.05f);  // the bonus gauge and its label
-    };
-    if (V.trip) {
-        // TRIP: a dark slate pane with rounded corners (the swirls barely show through: the pieces read over it), a
-        // faint violet grid; HOLD and NEXT, the score's column and the bonus gauge in matching panes
-        quad(vec3(0.f, 0.f, BACK_Z - 0.01f), 5.8f, 10.8f, lin(0x0c0620), 0.22f, 0.12f, 0.065f);
-        quad(vec3(0.f, 0.f, BACK_Z), 5.1f, 10.1f, back, 0.88f, -0.4f / 5.1f, -0.4f / 10.1f);
-        const vec3 gv = lin(0x7c5ce0);
-        const float zg = BACK_Z + 0.002f;
-        for (int i = -4; i <= 4; i++) line((float)i, -10.f, (float)i, 10.f, zg, 0.03f, gv, 0.4f);
-        for (int j = -9; j <= 9; j++) line(-5.f, (float)j, 5.f, (float)j, zg, 0.03f, gv, 0.4f);
-        hudPanes(back, 0.86f, true);
-    } else if (fl) {
-        // FLAT: a plain deep navy pane, sharp cornered, no rule, no shade, dense (the drops' neons barely show
-        // through: the pieces read over them); the HUD's columns in the same panes, the lettering pale on them.
-        // The same in the calm and in the drops: nothing fades, no ink turns over at a drop's edges.
-        quad(vec3(0.f, 0.f, BACK_Z), 5.1f, 10.1f, back, FLAT_PANE_A, 0.f, 0.f);
-        hudPanes(back, FLAT_PANE_A, false);
-    } else {
-        // the backing: a tinted pane of deep water over the scene (the sea and the islands show through, darkened),
-        // denser toward the bottom where the stack stands; a soft shade around it, a fine pale rule
-        quad(vec3(0.f, 0.f, BACK_Z - 0.01f), 6.1f, 11.1f, back * 0.4f, 0.3f, 0.16f, 0.085f);
-        quad(vec3(0.f, 0.f, BACK_Z), 5.1f, 10.1f, back, 0.8f, 0.f, 0.f);
-        quad(vec3(0.f, -4.f, BACK_Z + 0.001f), 5.1f, 6.1f, back, 0.35f, 0.f, 0.6f);
-        const vec3 rule = mixDisplay(back, lin(0xf4ecd8), 0.4f);
-        const float bx = 5.1f, by = 10.1f, zr = BACK_Z + 0.002f;
-        line(-bx, -by, bx, -by, zr, 0.035f, rule, 0.6f);
-        line(-bx, by, bx, by, zr, 0.035f, rule, 0.6f);
-        line(-bx, -by, -bx, by, zr, 0.035f, rule, 0.6f);
-        line(bx, -by, bx, by, zr, 0.035f, rule, 0.6f);
-    }
+    // a plain deep navy pane, sharp cornered, no rule, no shade, dense (the drops' neons barely show through: the
+    // pieces read over them); HOLD and NEXT, the score's column and the bonus gauge in the same panes, the lettering
+    // pale on them. The same in the calm and in the drops: nothing fades, no ink turns over at a drop's edges.
+    auto pane = [&](float x, float y, float hw, float hh) { quad(vec3(x, y, BACK_Z), hw, hh, back, PANE_A, 0.f, 0.f); };
+    pane(0.f, 0.f, 5.1f, 10.1f);
+    const float x0 = layout::HOLD_CENTER.x, x1 = layout::nextCenter(0).x;
+    pane(x0, 7.9f, 1.7f, 2.1f);
+    pane(x1, 4.85f, 1.7f, 5.15f);
+    pane(x0, -2.05f, 1.7f, 4.25f);                         // score, lines, level, best, the speed
+    pane(x1, layout::GAUGE_CENTER.y - 0.75f, 1.7f, 2.05f);  // the bonus gauge and its label
     auto dullAt = [&](int y) {
         if (overT_ < 0.f) return 0.f;
         return smoothstepf(0.f, 0.5f, overT_ - 0.05f * (float)(y - Game::HIDDEN));
     };
-    // FLAT's tile: one flat fill, the cells of a piece one shape (a side shared with a cell of the same piece runs on
+    // a tile: one flat fill, the cells of a piece one shape (a side shared with a cell of the same piece runs on
     // to the cell's edge, a corner square only where the diagonal cell is in the piece too: an inner corner stays
     // clean), over its small flat shadow offset to the bottom right
     auto flatTile = [&](const vec3& c, float sc, const vec3& col, float a, bool shadow, float maskF) {
@@ -2015,38 +1871,24 @@ void IslandsUniverse::buildBoard(const Game& g) {
             rect(tiles_, rs[i], 0.f, 0.f, c.z, col, a);
         }
     };
-    auto tile = [&](const vec3& c, float sc, int type, float seed, float dull, float glowK, float alpha, bool shadow, float mask) {
-        const vec3 col = pieceCol(type);
-        if (fl) {
-            vec3 k = col;
-            const float gr = dot(k, vec3(0.3f, 0.55f, 0.15f));
-            k = lerp(k, vec3(gr * 0.55f + 0.08f), dull);
-            k = lerp(k, vec3(1.f), glowK);
-            flatTile(c, sc, k, alpha, shadow, mask);
-            (void)seed;
-            return;
-        }
-        if (shadow) {
-            // its contact shadow, toward the sun's side
-            quad(vec3(c.x + 0.06f * sc, c.y - 0.08f * sc, BACK_Z + 0.004f), 0.57f * sc, 0.57f * sc, vec3(0.f), 0.55f * alpha, 0.4f, 0.4f);
-        }
-        GlassInst gi;
-        gi.a[0] = c.x; gi.a[1] = c.y; gi.a[2] = c.z; gi.a[3] = sc;
-        gi.b[0] = col.x; gi.b[1] = col.y; gi.b[2] = col.z; gi.b[3] = seed;
-        gi.c[0] = dull; gi.c[1] = glowK; gi.c[2] = alpha; gi.c[3] = mask;
-        glass_.push_back(gi);
+    auto tile = [&](const vec3& c, float sc, int type, float dull, float glowK, float alpha, bool shadow, float mask) {
+        vec3 k = pieceCol(type);
+        const float gr = dot(k, vec3(0.3f, 0.55f, 0.15f));
+        k = lerp(k, vec3(gr * 0.55f + 0.08f), dull);
+        k = lerp(k, vec3(1.f), glowK);
+        flatTile(c, sc, k, alpha, shadow, mask);
     };
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
             if (c.type < 0) continue;
-            tile(layout::cellPos((float)x, y - g.rowOffset(y)), 1.f, c.type, seeds_[y][x] > 0.f ? seeds_[y][x] : 0.3f, dullAt(y), 0.f, 1.f, true, gridMask(x, y));
+            tile(layout::cellPos((float)x, y - g.rowOffset(y)), 1.f, c.type, dullAt(y), 0.f, 1.f, true, gridMask(x, y));
         }
-    // the cleared rows: the glass brightens and melts away, under half a second
+    // the cleared rows: the tiles brighten and melt away, under half a second
     for (const ClearCell& cc : clearing_) {
         const float u = saturate((cc.t - cc.delay) / 0.32f);
         const float gk = smoothstepf(0.f, 0.3f, u) * (1.f - smoothstepf(0.5f, 1.f, u));
-        tile(layout::cellPos((float)cc.x, (float)cc.y), 1.f - 0.35f * u * u, cc.type, cc.seed, 0.f, gk * 0.7f, 1.f - smoothstepf(0.45f, 1.f, u), false, cc.mask);
+        tile(layout::cellPos((float)cc.x, (float)cc.y), 1.f - 0.35f * u * u, cc.type, 0.f, gk * 0.7f, 1.f - smoothstepf(0.45f, 1.f, u), false, cc.mask);
     }
     // the falling piece and its ghost
     if (g.hasPiece() && !g.over()) {
@@ -2062,7 +1904,7 @@ void IslandsUniverse::buildBoard(const Game& g) {
         for (int i = 0; i < 4; i++) {
             const auto& c = cells[i];
             if (c[1] < Game::HIDDEN - 1) continue;
-            tile(layout::cellPos(c[0] + dx, c[1] + dy), 1.f, pc.type, pieceSeeds_[i], 0.f, 0.f, 1.f, true, neighbourMask(c[0], c[1], inPiece));
+            tile(layout::cellPos(c[0] + dx, c[1] + dy), 1.f, pc.type, 0.f, 0.f, 1.f, true, neighbourMask(c[0], c[1], inPiece));
         }
         Piece gp = pc;
         gp.y = g.ghostY();
@@ -2074,14 +1916,13 @@ void IslandsUniverse::buildBoard(const Game& g) {
                     if (c[0] == x && c[1] == y) return true;
                 return false;
             };
-            // the piece's own color, a little lighter, and a faint fill: it reads over the translucent pane
-            // (FLAT: on the tiles' plane, the pastel outline over a light translucent fill)
-            const vec3 ink = mixDisplay(pieceCol(pc.type), vec3(1.f), fl ? 0.1f : 0.2f);
-            const float in = fl ? 0.06f : 0.08f, w = 0.065f, zz = fl ? 0.002f : BACK_Z + 0.008f;
+            // on the tiles' plane: the piece's pastel outline, a little lighter, over a light translucent fill
+            const vec3 ink = mixDisplay(pieceCol(pc.type), vec3(1.f), 0.1f);
+            const float in = 0.06f, w = 0.065f, zz = 0.002f;
             for (auto& c : gc)
                 if (c[1] >= Game::HIDDEN) {
                     const vec3 p = layout::cellPos((float)c[0], (float)c[1]);
-                    quad(vec3(p.x, p.y, zz - 0.001f), 0.5f, 0.5f, pieceCol(pc.type), fl ? 0.3f : 0.16f, 0.f, 0.f);
+                    quad(vec3(p.x, p.y, zz - 0.001f), 0.5f, 0.5f, pieceCol(pc.type), 0.3f, 0.f, 0.f);
                 }
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
@@ -2131,7 +1972,7 @@ void IslandsUniverse::buildBoard(const Game& g) {
         for (int i = 0; i < 4; i++) {
             const auto& c = cells[i];
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            tile(vec3(px, py, 0.f), sc, type, 0.11f + 0.17f * i + 0.05f * type, dim, 0.f, 1.f, true, neighbourMask(c[0], c[1], inPiece));
+            tile(vec3(px, py, 0.f), sc, type, dim, 0.f, 1.f, true, neighbourMask(c[0], c[1], inPiece));
         }
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.55f : 0.f);
@@ -2158,11 +1999,10 @@ void IslandsUniverse::flushShapes() {
 
 const char* IslandsUniverse::hourName() const {
     const float t = todShown_;
-    if (VARIANTS[variant_].hours == 1) {
+    if (VARIANTS[variant_].hours == GOLDEN_DAY) {
         if (t < 0.3f) return "golden hour";
         if (t < 0.66f) return "sunset";
-        if (t < 0.88f) return "dusk";
-        return "nightfall";
+        return "dusk";
     }
     if (t < 0.38f) return "midday";
     if (t < 0.64f) return "afternoon";
@@ -2171,33 +2011,17 @@ const char* IslandsUniverse::hourName() const {
     return "dusk";
 }
 
-// The HUD's inks (sRGB): a deep navy by day on a soft white halo, a warm white at dusk on a dark one.
+// The HUD's inks (sRGB): the lettering on its navy panes, a warm white all along (a faint dark halo), the accent a
+// light cyan.
 void IslandsUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
-    const VariantDef& V = VARIANTS[variant_];
-    if (V.trip) {
-        // TRIP: a deep violet navy on a faint lavender halo (over the neons), the accent violet
-        ink = hex(0x221656);
-        halo = hex(0xf4e8ff);
-        accent = hex(0x6a3ae0);
-        return;
-    }
-    if (V.flat) {
-        // FLAT: the lettering on its navy panes, a warm white all along (a faint dark halo), the accent a light cyan
-        ink = hex(0xf6f4ee);
-        halo = hex(0x0c1c30);
-        accent = hex(0x9fe0ee);
-        return;
-    }
-    // (the ink turns from navy to white quickly: never a mid grey on the dusk sky)
-    const float dark = smoothstepf(0.4f, 0.52f, night_);
-    ink = ugl::toSrgb(lerp(lin(0x0e2238), lin(0xfaf4ea), dark));
-    halo = ugl::toSrgb(lerp(lin(0xf4f8fa), lin(0x0c1426), dark));
-    accent = ugl::toSrgb(dark > 0.5f ? lin(V.accent) : mixDisplay(lin(V.accent), lin(0x000000), 0.1f));
+    ink = hex(0xf6f4ee);
+    halo = hex(0x0c1c30);
+    accent = hex(0x9fe0ee);
 }
 
-// TRIP, FLAT: dark panes under the HUD's corner lines (the song's title and tempo, the section and the universe),
+// Navy panes under the HUD's corner lines (the song's title and tempo, the section and the universe),
 // from the boxes the host letters them in, so they read over the busy sea (drawn over the frame, display colors).
-void IslandsUniverse::tripCornerPanes(const Frame& f) {
+void IslandsUniverse::cornerPanes(const Frame& f) {
     struct Box { float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f, a = 0.f; } top, bottom;
     for (size_t i = 0; i < f.hud.size() && i < f.hudBoxes->size(); i++) {
         const HudText& h = f.hud[i];
@@ -2209,14 +2033,12 @@ void IslandsUniverse::tripCornerPanes(const Frame& f) {
         b->a = std::max(b->a, saturate(h.alpha * 3.f));
     }
     flat_.clear();
-    // (FLAT: sharp cornered, in its well's navy and density)
-    const bool fl = flat();
-    const float s = height_ / 1080.f, pad = 14.f * s, rad = fl ? 0.f : 14.f * s;
+    // (sharp cornered, in the well's navy and density)
+    const float pad = 14.f * height_ / 1080.f;
     for (const Box* b : {&top, &bottom}) {
         if (b->a <= 0.f) continue;
         const float hw = (b->x1 - b->x0) * 0.5f + pad, hh = (b->y1 - b->y0) * 0.5f + pad;
-        quad(vec3((b->x0 + b->x1) * 0.5f, (b->y0 + b->y1) * 0.5f, 0.f), hw, hh, fl ? hex(VARIANTS[variant_].backing) : hex(0x1c2038),
-             (fl ? FLAT_PANE_A_DISPLAY : 0.86f) * b->a, -rad / hw, -rad / hh);
+        quad(vec3((b->x0 + b->x1) * 0.5f, (b->y0 + b->y1) * 0.5f, 0.f), hw, hh, hex(VARIANTS[variant_].backing), PANE_A_DISPLAY * b->a, 0.f, 0.f);
     }
     if (flat_.empty()) return;
     glEnable(GL_BLEND);
@@ -2249,8 +2071,8 @@ void IslandsUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels)
 }
 
 // The lettering, by the host (text.hpp): Outfit Medium for the names and labels, Light for the numbers and hints,
-// Playfair Display Italic for the song, the notices and the hour after the universe's name; deep navy by day on a
-// soft white halo, a warm white at dusk.
+// Playfair Display Italic for the song, the notices and the hour after the universe's name; a warm white on the navy
+// panes, a faint dark halo.
 void IslandsUniverse::hudLine(const HudText& h, text::Line& out) {
     const float s = height_ / 1080.f;
     vec3 ink, halo, accent;
@@ -2290,26 +2112,8 @@ void IslandsUniverse::hudLine(const HudText& h, text::Line& out) {
         break;
     default: put(light, h.text, base * 0.82f, base * 0.03f, h.accent ? accent : ink, alpha); break;
     }
-    if (trip()) {
-        // TRIP: the song's title white on the violet sky, its tempo and key yellow, HOLD and NEXT pale in their
-        // dark panes; the rest deep violet navy (a dark halo under the light inks, a faint pale one under the dark)
-        const bool pane = h.role == HUD_LABEL && (h.text == "HOLD" || h.text == "NEXT");
-        // (the tempo and key line is an accented one: its accent the yellow, so the host letters it yellow)
-        const vec3 c = h.role == HUD_TITLE || pane ? hex(0xffffff)
-                       : h.role == HUD_INFO ? (h.accent ? hex(0xffe24a) : hex(0xfff6d0)) : vec3(-1.f);
-        if (c.x >= 0.f) {
-            for (text::Span& sp : out.spans) sp.ink = c;
-            halo = hex(0x1a0a40);
-        }
-        out.look.halo = halo;
-        out.look.haloA = c.x >= 0.f ? 0.45f : 0.35f;
-        out.look.haloW = 0.095f;
-        out.look.haloSmooth = true;
-        out.alpha = 1.f - smoothstepf(0.4f, 0.9f, bridge_.amount);
-        return;
-    }
     out.look.halo = halo;
-    out.look.haloA = flat() ? 0.22f : 0.7f; // (FLAT: plain navy letters, a faint halo only over the darker greens)
+    out.look.haloA = 0.35f;
     out.look.haloW = 0.095f;
     out.look.haloSmooth = true;
     out.alpha = 1.f - smoothstepf(0.4f, 0.9f, bridge_.amount);
@@ -2322,14 +2126,10 @@ void IslandsUniverse::hudLine(const HudText& h, text::Line& out) {
 void IslandsUniverse::setCommon(GLuint p) {
     const VariantDef& V = VARIANTS[variant_];
     set3f(p, "uSunDir", sky_.sunDir);
-    set3f(p, "uSunCol", sky_.sunCol);
     set3f(p, "uSkyTop", sky_.top);
     set3f(p, "uSkyHor", sky_.hor);
     set3f(p, "uSkyLow", sky_.low);
     set3f(p, "uFogCol", sky_.fog);
-    const vec3 amb = mixDisplay(sky_.top, sky_.hor, 0.5f) * (0.55f + 0.1f * swell_);
-    set3f(p, "uAmb", amb);
-    set3f(p, "uBounce", lin(V.shallow) * 0.12f * saturate(sky_.sunCol.x / 2.f) + amb * 0.1f);
     set3f(p, "uEye", eye_);
     set1f(p, "uCurv", curv_);
     set1f(p, "uTime", worldTime_);
@@ -2337,21 +2137,23 @@ void IslandsUniverse::setCommon(GLuint p) {
     set1f(p, "uHaze", sky_.haze);
     set1f(p, "uHazeH", 950.f);
     set1f(p, "uDip", std::sqrt(2.f * alt_ * curv_));
-    set1f(p, "uFlat", flat() ? 1.f : 0.f);
     set3f(p, "uFlatLit", flatLit_);
     set3f(p, "uFlatShade", flatShade_);
-    set1f(p, "uTrip", V.trip ? 1.f : 0.f);
-    set1f(p, "uPsy", flat() ? psy_ : 0.f);
+    // the strokes, the drop
+    set1f(p, "uPsy", psy_);
     set1f(p, "uFlow", flowT_);
     set1f(p, "uPulse", pulse_);
-    set1f(p, "uTripScale", tripScale());
-    ugl::set2f(p, "uTripO", tripO_.x, tripO_.y);
-    const int nc = (int)(cloudShadows_.size() / 4);
-    set1i(p, "uNumClouds", nc);
-    if (nc > 0) glUniform4fv(ugl::U(p, "uClouds"), nc, cloudShadows_.data());
+    set1f(p, "uSwirl", swirlScale());
+    ugl::set2f(p, "uSwirlO", swirlO_.x, swirlO_.y);
+    float neon[NEON_COUNT * 3];
+    for (int i = 0; i < NEON_COUNT; i++) {
+        const vec3 c = lin(V.neon[i]);
+        neon[i * 3] = c.x; neon[i * 3 + 1] = c.y; neon[i * 3 + 2] = c.z;
+    }
+    glUniform3fv(ugl::U(p, "uNeon"), NEON_COUNT, neon);
 }
 
-void IslandsUniverse::drawTerrain(GLuint prog, int mode, bool shadowPass) {
+void IslandsUniverse::drawTerrain(GLuint prog, int mode) {
     const VariantDef& V = VARIANTS[variant_];
     glUseProgram(prog);
     set1i(prog, "uMode", mode);
@@ -2361,20 +2163,13 @@ void IslandsUniverse::drawTerrain(GLuint prog, int mode, bool shadowPass) {
     set3f(prog, "uJungle", lin(V.jungle));
     set3f(prog, "uRock", lin(V.rock));
     set3f(prog, "uCliff", lin(V.cliff));
-    set3f(prog, "uSeabed", lin(V.seabed));
-    set3f(prog, "uReefA", lin(V.reefA));
-    set3f(prog, "uReefB", lin(V.reefB));
-    set3f(prog, "uDry", lin(V.dry));
-    set1f(prog, "uDryK", V.dryK);
     set3f(prog, "uFoam", vec3(0.95f, 0.97f, 1.f));
-    const GLint uOff = ugl::U(prog, "uOff"), uSeed = ugl::U(prog, "uSeed"), uIsleR = ugl::U(prog, "uIsleR"), uFallA = ugl::U(prog, "uFallA"), uFallW = ugl::U(prog, "uFallW");
+    const GLint uOff = ugl::U(prog, "uOff"), uSeed = ugl::U(prog, "uSeed"), uFallA = ugl::U(prog, "uFallA"), uFallW = ugl::U(prog, "uFallW");
     for (const Draw& d : draws_) {
-        if (shadowPass && !d.shadow) continue;
         const isl::Island& I = *d.I;
         if (mode == 1 && I.type == isl::T_ISLET && d.dist > 6000.f) continue;
         glUniform3f(uOff, I.x - eye_.x, -eye_.y, I.z - eye_.z);
         glUniform1f(uSeed, (float)(I.seed % 997u) * 0.37f);
-        glUniform1f(uIsleR, I.R);
         glUniform1f(uFallA, I.fallA);
         glUniform1f(uFallW, I.fallW);
         glBindVertexArray(I.vao);
@@ -2416,20 +2211,15 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         lvT_ = std::min(1.f, lvT_ + dt / lvDur_);
         lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
     }
-    const float wp = smoothstepf(1.1f, 2.f, lv_);
-    swell_ = approach(swell_, 0.f, 0.35f, dt);
-    kickIn_ = approach(kickIn_, 0.f, 5.f, dt);
-    // the glitter on the sea at a peak: on the beat grid (every two beats), and the kicks
+    // the drop's beat (every two beats: the dolphins' leaps)
     if (!f.paused && music.hasSong) {
         const double hb = std::floor(music.beat / 2.0 + 1e-4);
         if (lastHalf_ < 0.0 || hb < lastHalf_ - 8.0) lastHalf_ = hb;
         if (hb > lastHalf_) {
             lastHalf_ = hb;
-            if (wp > 0.3f) sparkle_ = std::max(sparkle_, 0.6f * wp);
             dropBeat(60.0 / std::max(60.f, music.bpm));
         }
     }
-    sparkle_ = std::max(approach(sparkle_, 0.f, 2.5f, dt), kickIn_ * wp * 0.8f);
     std::string section;
     for (const HudText& h : f.hud)
         if (h.role == HUD_SECTION) section = h.text;
@@ -2439,7 +2229,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         const float target = inDrop && overT_ < 0.f ? 1.f : 0.f;
         dropK_ = approach(dropK_, target, target > dropK_ ? 1.2f : 0.4f, dt);
         if (dropK_ < 0.03f) pods_.clear();
-        // (FLAT: the song plan's drop, music.inDrop, which ends a little before the section does: the neons have
+        // (the neons: the song plan's drop, music.inDrop, which ends a little before the section does: they have
         // receded by its end)
         updatePsy((music.hasSong ? music.inDrop : dropMode_) && overT_ < 0.f && !f.paused, f.paused ? 0.f : dt);
     }
@@ -2451,8 +2241,8 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         tod_ = t;
         if (!todInit_) { todShown_ = tod_; todInit_ = true; }
         todShown_ = std::fabs(tod_ - todShown_) > 0.2f ? approach(todShown_, tod_, 0.4f, dt) : approach(todShown_, tod_, 2.f, dt);
-        const Hour* H = V.hours == 1 ? EVENING : V.hours == 2 ? FLAT_DAY : DAY;
-        const int HN = V.hours == 1 ? (int)(sizeof(EVENING) / sizeof(Hour)) : V.hours == 2 ? (int)(sizeof(FLAT_DAY) / sizeof(Hour)) : (int)(sizeof(DAY) / sizeof(Hour));
+        const Hour* H = V.hours;
+        const int HN = V.hourCount;
         int i = 0;
         while (i + 1 < HN - 1 && H[i + 1].t < todShown_) i++;
         const Hour& a = H[i];
@@ -2467,32 +2257,18 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         sky_.low = mixDisplay(lin(a.low), lin(b.low), u);
         sky_.fog = mixDisplay(lin(a.fog), lin(b.fog), u);
         sky_.haze = lerpf(a.haze, b.haze, u);
-        lights_ = V.hours == 1 ? smoothstepf(0.45f, 0.75f, todShown_) : smoothstepf(0.82f, 0.95f, todShown_);
-        night_ = V.hours == 1 ? smoothstepf(0.62f, 0.85f, todShown_) : smoothstepf(0.9f, 1.f, todShown_);
+        lights_ = smoothstepf(0.82f, 0.95f, todShown_);
+        night_ = smoothstepf(0.9f, 1.f, todShown_);
         // slow motion: a glassy blue hour, the sea calm
         sky_.sunCol = lerp(sky_.sunCol, sky_.sunCol * vec3(0.6f, 0.7f, 0.95f) * 0.75f, slow_);
         sky_.hor = lerp(sky_.hor, mixDisplay(sky_.hor, lin(0x8aa8d0), 0.55f), slow_);
         sky_.top = lerp(sky_.top, mixDisplay(sky_.top, lin(0x3a5a9a), 0.5f), slow_);
         sky_.fog = lerp(sky_.fog, mixDisplay(sky_.fog, lin(0x9ab4d4), 0.5f), slow_);
-        // the drop: a real golden hour (a low warm sun, long shadows, golden glitter, a warm sky under a blue zenith)
-        const float gk = smoothstepf(0.f, 1.f, dropK_) * (1.f - lights_) * (1.f - slow_);
-        if (gk > 0.f) {
-            const float e = std::asin(std::clamp(sky_.sunDir.y, -1.f, 1.f));
-            const float e2 = lerpf(e, std::min(e, 0.2f), gk);
-            const vec3 h = normalize(vec3(sky_.sunDir.x, 0.f, sky_.sunDir.z));
-            sky_.sunDir = normalize(h * std::cos(e2) + vec3(0, std::sin(e2), 0));
-            sky_.sunCol = lerp(sky_.sunCol, lin(0xffb05a) * 2.3f, gk);
-            sky_.hor = mixDisplay(sky_.hor, lin(0xf6c070), gk * 0.7f);
-            sky_.low = mixDisplay(sky_.low, lin(0xd0a888), gk * 0.5f);
-            sky_.fog = mixDisplay(sky_.fog, lin(0xe8b880), gk * 0.5f);
-            sky_.haze *= 1.f - 0.5f * gk;
-            sky_.top = mixDisplay(sky_.top, lin(0x2462c8), gk * 0.5f);
-        }
     }
 
-    // FLAT's two tones: the sun's color only tints them (a warm light late in the day), dimmer and bluer once the sun
-    // is down; the side away from the sun a cool shade of it
-    if (flat()) {
+    // the two tones: the sun's color only tints them (a warm light late in the day), dimmer and bluer once the sun is
+    // down; the side away from the sun a cool shade of it
+    {
         const vec3 sc = sky_.sunCol;
         const vec3 tint = sc / std::max(std::max(sc.x, sc.y), std::max(sc.z, 1e-3f));
         const float day = smoothstepf(-0.08f, 0.2f, sky_.sunDir.y);
@@ -2506,10 +2282,10 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     const bool flying = camInit_;
     fly(dt, wdt, section);
     if (flying) {
-        // (TRIP: the swirls' field carried along with the eye, at their size here)
-        const float sc = tripScale();
-        tripO_.x += (eye_.x - eyeWas.x) / sc;
-        tripO_.y += (eye_.z - eyeWas.z) / sc;
+        // (the strokes' field carried along with the eye, at their size here)
+        const float sc = swirlScale();
+        swirlO_.x += (eye_.x - eyeWas.x) / sc;
+        swirlO_.y += (eye_.z - eyeWas.z) / sc;
     }
     // the setup tilts the view down from the sky onto the sea, the teardown back up (the look only, not the flight)
     {
@@ -2521,10 +2297,9 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     curv_ = lerpf(1.f / 6.4e6f, 1.f / 1.3e5f, smoothstepf(250.f, 2600.f, alt_));
-    const bool trip = V.trip != 0;
-    if (trip || flat()) {
-        // TRIP: the swirls flow on their own clock (a little faster with the energy and the level, never fast); a
-        // soft swell on each beat (a smooth bump, no edge: the bands breathe, nothing flickers)
+    {
+        // the strokes flow on their own clock (a little faster with the energy and the level, never fast); a soft
+        // swell on each beat (a smooth bump, no edge: the bands breathe, nothing flickers)
         flowT_ += wdt * (0.55f + 0.35f * energy_ + 0.15f * lv_);
         float pk = 0.f;
         if (music.hasSong && !f.paused) {
@@ -2537,15 +2312,10 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         const vec3 fh = normalize(vec3(fwd_.x, 0.f, fwd_.z)), rh = normalize(vec3(right_.x, 0.f, right_.z));
         const vec3 want = fh * std::cos(0.36f) + rh * std::sin(0.36f);
         const float wy = std::atan2(want.z, want.x);
-        if (!tripSunInit_) { tripSunYaw_ = wy; tripSunInit_ = true; }
-        tripSunYaw_ = wrapPi(tripSunYaw_ + wrapPi(wy - tripSunYaw_) * (1.f - std::exp(-2.f * dt)));
+        if (!ringSunInit_) { ringSunYaw_ = wy; ringSunInit_ = true; }
+        ringSunYaw_ = wrapPi(ringSunYaw_ + wrapPi(wy - ringSunYaw_) * (1.f - std::exp(-2.f * dt)));
         const float el = 0.1f + std::sqrt(2.f * alt_ * curv_);
-        tripSun_ = vec3(std::cos(tripSunYaw_) * std::cos(el), std::sin(el), std::sin(tripSunYaw_) * std::cos(el));
-        // the facets' two tones: a light from the sun's side, high up (TRIP; FLAT keeps the hour's sun: its tones'
-        // shapes stay the same through a drop)
-        const float le = 0.85f;
-        if (trip)
-            sky_.sunDir = normalize(vec3(std::cos(tripSunYaw_ + PI) * std::cos(le), std::sin(le), std::sin(tripSunYaw_ + PI) * std::cos(le)));
+        ringSun_ = vec3(std::cos(ringSunYaw_) * std::cos(el), std::sin(el), std::sin(ringSunYaw_) * std::cos(el));
     }
     world_->update(eye_, s_, std::clamp(alt_ * 6.f, 9000.f, 14000.f));
     if (std::fabs(eye_.x) > 50000.f || std::fabs(eye_.z) > 50000.f) {
@@ -2579,7 +2349,6 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         sp.p = sp.p + sp.v * wdt;
     }
     sparks_.erase(std::remove_if(sparks_.begin(), sparks_.end(), [](const Spark& sp) { return sp.t > sp.life; }), sparks_.end());
-    sparkle_ = std::max(sparkle_, 0.45f * dropK_ * (1.f - lights_));
     for (Lantern& l : lanterns_) l.t += dt;
     lanterns_.erase(std::remove_if(lanterns_.begin(), lanterns_.end(), [&](const Lantern& l) {
                         const float dx = l.p.x - eye_.x, dz = l.p.z - eye_.z;
@@ -2748,60 +2517,11 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, inst_[m].size() * sizeof(Inst), inst_[m].data(), GL_STREAM_DRAW);
     }
 
-    // ---- The sun's shadow: around where the camera looks, snapped to its texels.
-    const vec3 L = sky_.sunDir.y > 0.06f ? sky_.sunDir : normalize(vec3(sky_.sunDir.x, 0.06f, sky_.sunDir.z));
-    const float shadowR = std::clamp(alt_ * 1.6f + 140.f, 180.f, 5000.f);
-    const bool shadowOn = !trip && !flat() && sky_.sunDir.y > -0.02f; // (FLAT, TRIP: no shadows)
-    {
-        vec3 c = vec3(fwd_.x, 0, fwd_.z) * std::clamp(alt_ * 1.2f, 60.f, 2600.f) - vec3(0, eye_.y, 0);
-        const vec3 up = std::fabs(L.y) > 0.98f ? vec3(0, 0, 1) : vec3(0, 1, 0);
-        mat4 lv = mat4::lookAt(vec3(0, 0, 0), L * -1.f, up);
-        // snap the center to the map's texels (steady shadows while flying)
-        const vec4 lc = lv * vec4(c, 1.f);
-        const float texel = 2.f * shadowR / SHADOW_SIZE;
-        const float sx = std::floor(lc.x / texel) * texel, sy = std::floor(lc.y / texel) * texel;
-        const float depth = shadowR + 900.f;
-        lightVp_ = mat4::ortho(sx - shadowR, sx + shadowR, sy - shadowR, sy + shadowR, -lc.z - depth, -lc.z + depth) * lv;
-    }
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
-    if (shadowOn) {
-        glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
-        glViewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
-        glClearDepth(1.0);
-        glClear(GL_DEPTH_BUFFER_BIT);
-        glEnable(GL_POLYGON_OFFSET_FILL);
-        glPolygonOffset(1.5f, 2.f);
-        glActiveTexture(GL_TEXTURE7);
-        glBindTexture(GL_TEXTURE_2D, shadowDummy_);
-        glActiveTexture(GL_TEXTURE0);
-        glUseProgram(progTerrain_);
-        set1i(progTerrain_, "uShadow", 7);
-        setMat(progTerrain_, "uVP", lightVp_);
-        set1f(progTerrain_, "uCurv", curv_);
-        drawTerrain(progTerrain_, 3, true);
-        glUseProgram(progObj_);
-        set1i(progObj_, "uShadow", 7);
-        setMat(progObj_, "uVP", lightVp_);
-        set3f(progObj_, "uEye", eye_);
-        set1f(progObj_, "uCurv", curv_);
-        set1f(progObj_, "uTime", worldTime_);
-        set1i(progObj_, "uMode", 3);
-        drawObjects(progObj_);
-        glDisable(GL_POLYGON_OFFSET_FILL);
-    }
-    auto bindShadow = [&](GLuint p) {
-        setMat(p, "uLightVP", lightVp_);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, shadowTex_);
-        set1i(p, "uShadow", 1);
-        set1f(p, "uSoft", 0.9f / SHADOW_SIZE * std::clamp(400.f / shadowR, 0.4f, 2.5f));
-        set1f(p, "uShadowOn", shadowOn ? 1.f : 0.f);
-        glActiveTexture(GL_TEXTURE0);
-    };
     auto objUniforms = [&](GLuint p) {
         setCommon(p);
         set1f(p, "uWind", 0.4f + 0.6f * lv_ * 0.5f);
@@ -2822,19 +2542,16 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
             }
             glUniform3fv(ugl::U(p, "uSailPal"), 7, pal);
         }
-        bindShadow(p);
     };
 
-    // ---- The seabed (half resolution, full for FLAT): the terrain under the water, its distance (the sea's bands by depth).
-    if (seabedFull_ != flat()) makeSeabed(flat());
+    // ---- The seabed: the terrain under the water, its height and distance (the sea's bands by depth).
     seabedT_.bind();
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(progTerrain_);
     setCommon(progTerrain_);
-    bindShadow(progTerrain_);
     setMat(progTerrain_, "uVP", vp_);
-    drawTerrain(progTerrain_, 1, false);
+    drawTerrain(progTerrain_, 1);
     // ---- The main pass (multisampled): the sky, the islands, their content, the sea, the clouds, the glows.
     glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
     glViewport(0, 0, width_, height_);
@@ -2847,13 +2564,13 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     setCommon(progSky_);
     setMat(progSky_, "uInvVP", invVp_);
     set1f(progSky_, "uStars", night_);
-    set3f(progSky_, "uTripSun", tripSun_);
+    set3f(progSky_, "uRingSun", ringSun_);
     ugl::drawFullscreen();
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
     glUseProgram(progTerrain_);
     setMat(progTerrain_, "uVP", vp_);
-    drawTerrain(progTerrain_, 0, false);
+    drawTerrain(progTerrain_, 0);
     glUseProgram(progObj_);
     objUniforms(progObj_);
     setMat(progObj_, "uVP", vp_);
@@ -2868,13 +2585,9 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, seabedT_.tex);
     set1i(progWater_, "uSeabed", 0);
     ugl::set2f(progWater_, "uInvRes", 1.f / width_, 1.f / height_);
-    set1f(progWater_, "uSeabedScale", seabedFull_ ? 1.f : 0.5f);
     set3f(progWater_, "uShallow", lin(V.shallow));
     set3f(progWater_, "uDeep", lin(V.deep));
-    set3f(progWater_, "uFoam", flat() ? lin(V.sandWet) : vec3(0.96f, 0.98f, 1.f));
-    set1f(progWater_, "uWave", V.wave * (0.75f + 0.25f * lv_ + 0.2f * energy_));
-    set1f(progWater_, "uSparkle", sparkle_);
-    set1f(progWater_, "uCalm", slow_);
+    set3f(progWater_, "uFoam", lin(V.sandWet));
     {
         // the nearest boats' wakes
         std::vector<std::pair<float, const Boat*>> near;
@@ -2933,18 +2646,10 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         setMat(progCloud_, "uVP", vp_);
         set3f(progCloud_, "uRight", right_);
         set3f(progCloud_, "uUp", up_);
-        set3f(progCloud_, "uFwd", fwd_);
-        const vec3 amb = mixDisplay(sky_.top, sky_.hor, 0.6f);
-        // lit by the sun (warm and strong when it is low: the clouds glow at the golden hour), shaded by the sky
-        const float lowSun = 1.f - smoothstepf(0.05f, 0.45f, sky_.sunDir.y);
-        if (flat()) { // (FLAT: white puffs in the flat light, their undersides a pale tone of the sky)
-            const vec3 lit = lerp(vec3(1.f), flatLit_, 0.5f) * 0.97f;
-            set3f(progCloud_, "uCloudLit", lit);
-            set3f(progCloud_, "uCloudShade", mixDisplay(lit, sky_.top, 0.3f));
-        } else {
-            set3f(progCloud_, "uCloudLit", sky_.sunCol * (0.42f + 0.25f * lowSun) + amb * (0.75f - 0.3f * lowSun));
-            set3f(progCloud_, "uCloudShade", mixDisplay(amb, sky_.top, 0.35f * lowSun) * 0.72f + lin(V.shallow) * 0.04f);
-        }
+        // white puffs in the flat light, their undersides a pale tone of the sky
+        const vec3 lit = lerp(vec3(1.f), flatLit_, 0.5f) * 0.97f;
+        set3f(progCloud_, "uCloudLit", lit);
+        set3f(progCloud_, "uCloudShade", mixDisplay(lit, sky_.top, 0.3f));
         glBindVertexArray(cloudVao_);
         glBindBuffer(GL_ARRAY_BUFFER, cloudVbo_);
         glBufferData(GL_ARRAY_BUFFER, pv.size() * sizeof(float), pv.data(), GL_STREAM_DRAW);
@@ -2958,7 +2663,6 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         glDepthMask(GL_FALSE);
         glUseProgram(progGlow_);
         setMat(progGlow_, "uVP", vp_);
-        set1f(progGlow_, "uFlat", flat() ? 1.f : 0.f);
         set3f(progGlow_, "uRight", right_);
         set3f(progGlow_, "uUp", up_);
         glBindVertexArray(glowVao_);
@@ -2967,26 +2671,6 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         glDrawArraysInstanced(GL_TRIANGLES, 0, 6, (GLsizei)(glows_.size() / 8));
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
-    }
-
-    // ---- TRIP: the psychedelic filter over the flat render (the well drawn after it, untouched)
-    if (trip) {
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, msFbo_);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, sceneT_.fbo);
-        glBlitFramebuffer(0, 0, width_, height_, 0, 0, width_, height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-        glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
-        glViewport(0, 0, width_, height_);
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_BLEND);
-        glUseProgram(progTrip_);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
-        set1i(progTrip_, "uScene", 0);
-        set1f(progTrip_, "uFlow", flowT_);
-        set1f(progTrip_, "uWarp", 0.0022f);
-        set1f(progTrip_, "uHue", 0.22f * std::sin(flowT_ * TAU / 45.f));
-        ugl::set2f(progTrip_, "uAspect", (float)width_ / height_, 1.f);
-        ugl::drawFullscreen();
     }
 
     // ---- The well, through the layout's camera.
@@ -3003,44 +2687,10 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, flat_.size() * sizeof(float), flat_.data(), GL_STREAM_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(flat_.size() / 11));
         if (!tiles_.empty()) {
-            // FLAT's tiles: over their shadows, their alpha marks the pieces (kept out of the bridge's color)
+            // the tiles: over their shadows, their alpha marks the pieces (kept out of the bridge's color)
             glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             glBufferData(GL_ARRAY_BUFFER, tiles_.size() * sizeof(float), tiles_.data(), GL_STREAM_DRAW);
             glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(tiles_.size() / 11));
-        }
-        if (!glass_.empty()) {
-            // the cubes (depth tested among themselves): their color blends over the backing, their alpha marks the
-            // pieces (kept out of the grade)
-            glEnable(GL_DEPTH_TEST);
-            glDepthMask(GL_TRUE);
-            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-            glUseProgram(progGlass_);
-            setMat(progGlass_, "uVP", bvp_);
-            set3f(progGlass_, "uEyeB", beye_);
-            set1f(progGlass_, "uTrip", trip ? 1.f : 0.f);
-            ugl::set2f(progGlass_, "uCube", trip ? 0.3f : 0.8f, trip ? 0.07f : 0.1f);
-            // lit by the scene's sun as the world's camera sees it (board x right, y up, z toward the eye), kept a
-            // little in front and above so the faces toward the eye and the tops never sink into the dark
-            const vec3 sd = sky_.sunDir;
-            vec3 l(dot(sd, right_), dot(sd, up_), -dot(sd, fwd_));
-            l.y = std::max(l.y, 0.3f);
-            l.z = std::max(l.z, 0.45f);
-            l = normalize(l);
-            set3f(progGlass_, "uKeyDir", l);
-            // the sun's color (golden in the drop, warm at dusk; at night warm lanterns), scaled so that the faces
-            // toward the eye show the piece's own color; the sky for the shade
-            const vec3 sc = sky_.sunCol;
-            const vec3 tint = sc / std::max(std::max(sc.x, sc.y), std::max(sc.z, 1e-3f));
-            vec3 key = lerp(vec3(1.f), tint, 0.65f) * lerpf(0.82f, 1.f, saturate(sc.y / 1.5f));
-            key = lerp(key, vec3(1.f, 0.78f, 0.55f) * 0.85f, night_ * 0.7f);
-            set3f(progGlass_, "uKeyCol", key * (0.66f / std::max(l.z, 0.3f)));
-            const vec3 st = sky_.top / std::max(std::max(sky_.top.x, sky_.top.y), std::max(sky_.top.z, 1e-3f));
-            set3f(progGlass_, "uAmb", lerp(vec3(0.34f, 0.35f, 0.38f), st * 0.38f, 0.5f));
-            glBindVertexArray(glassVao_);
-            glBindBuffer(GL_ARRAY_BUFFER, glassVbo_);
-            glBufferData(GL_ARRAY_BUFFER, glass_.size() * sizeof(GlassInst), glass_.data(), GL_STREAM_DRAW);
-            glDrawArraysInstanced(GL_TRIANGLES, 0, cubeCount_, (GLsizei)glass_.size());
-            glDisable(GL_DEPTH_TEST);
         }
         glDisable(GL_BLEND);
     }
@@ -3056,9 +2706,6 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     set1i(progFinal_, "uScene", 0);
-    set1f(progFinal_, "uExposure", lerpf(0.95f, 1.5f, night_) * (1.f + 0.07f * swell_));
-    set1f(progFinal_, "uSat", 1.14f);
-    set1f(progFinal_, "uFlatGrade", flat() || trip ? 1.f : 0.f); // (FLAT, TRIP: display colors, no grade)
     set1f(progFinal_, "uSlow", slow_ * 0.45f);
     set3f(progFinal_, "uSlowTint", vec3(0.84f, 0.92f, 1.08f));
     set1f(progFinal_, "uDim", dimT_);
@@ -3068,7 +2715,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progFinal_, "uBridgeInk", bridge_.ink);
     ugl::drawFullscreen();
 
-    if ((trip || flat()) && !bare_ && f.hudBoxes) tripCornerPanes(f);
+    if (!bare_ && f.hudBoxes) cornerPanes(f);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     drawHud(game, f.panels);
@@ -3097,7 +2744,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_islands() {
     static const UniverseEntry e{
-        "ISLANDS", "a flight over an endless tropical archipelago in flattened low poly, like drone footage; the pieces are low poly cubes",
+        "ISLANDS", "a flight over an endless tropical archipelago as a flat vector illustration, like drone footage, repainted in neons in the drops; the pieces flat pastel tiles",
         [] { return std::unique_ptr<Universe>(new IslandsUniverse()); },
         // bright, airy, flowing songs suit the flight best; it fits most songs
         [](const SongLook& l) { return 0.85f + 0.2f * l.brightness + 0.1f * l.airWeight; },
@@ -3105,6 +2752,8 @@ const UniverseEntry& universe_islands() {
             std::vector<std::string> v;
             for (const VariantDef& x : VARIANTS) v.push_back(x.name);
             return v;
-        }()};
+        }(),
+        false,
+        FORMER_VARIANTS};
     return e;
 }

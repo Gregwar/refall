@@ -55,9 +55,8 @@ struct Style {
     float w[6];          // weights of the island types for the fillers (VOLCANO CAY ATOLL ISLET VILLAGE VILLA)
     int heroBag[8];      // the hero sequence (types; -1 ends it; 100 + type: an orbit around it, 200: a gap)
     float fillP;         // a filler island in a cell
-    bool dry;            // Mediterranean: olives and cypresses, white cube villages, narrow shelves, more cliffs
-    bool thatch;         // Polynesian: overwater bungalows on most villages, peaks in the atolls
-    bool flat;           // FLAT: a few trees only (the greens plain flat fills)
+    bool dry;            // limestone (GOLDEN): olives and cypresses, white cube villages, narrow shelves, more cliffs
+    bool thatch;         // atolls (CORAL): overwater bungalows on most villages, peaks in the atolls
     vec3 villageWalls[4];
     vec3 roof, hull[3], sailCol, canvas[3], accentWood;
 };
