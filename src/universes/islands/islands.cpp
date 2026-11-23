@@ -286,8 +286,8 @@ float hookS() {
 
 constexpr float BACK_Z = -0.3f;
 // The well's pane, dense (a drop's neons barely through), and the HUD's, lighter (about 88 % and 62 % in
-// display terms): blended in the scene's linear light, the corner lines' over the frame in display colors
-constexpr float PANE_A = 0.982f, HUD_PANE_A = 0.88f, PANE_A_DISPLAY = 0.62f;
+// display terms), blended in the scene's linear light (the corner lines, the title and the section, have none)
+constexpr float PANE_A = 0.982f, HUD_PANE_A = 0.88f;
 
 } // namespace
 
@@ -1876,24 +1876,22 @@ void IslandsUniverse::buildBoard(const Game& g) {
             rect(tiles_, rs[i], 0.f, 0.f, c.z, col, a);
         }
     };
-    auto tile = [&](const vec3& c, float sc, int type, float dull, float glowK, float alpha, bool shadow, float mask) {
+    auto tile = [&](const vec3& c, float sc, int type, float dull, float alpha, bool shadow, float mask) {
         vec3 k = pieceCol(type);
         const float gr = dot(k, vec3(0.3f, 0.55f, 0.15f));
         k = lerp(k, vec3(gr * 0.55f + 0.08f), dull);
-        k = lerp(k, vec3(1.f), glowK);
         flatTile(c, sc, k, alpha, shadow, mask);
     };
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
             if (c.type < 0) continue;
-            tile(layout::cellPos((float)x, y - g.rowOffset(y)), 1.f, c.type, dullAt(y), 0.f, 1.f, true, gridMask(x, y));
+            tile(layout::cellPos((float)x, y - g.rowOffset(y)), 1.f, c.type, dullAt(y), 1.f, true, gridMask(x, y));
         }
-    // the cleared rows: the tiles brighten and melt away, under half a second
+    // the cleared rows: the tiles shrink and melt away in their own colours, under half a second
     for (const ClearCell& cc : clearing_) {
         const float u = saturate((cc.t - cc.delay) / 0.32f);
-        const float gk = smoothstepf(0.f, 0.3f, u) * (1.f - smoothstepf(0.5f, 1.f, u));
-        tile(layout::cellPos((float)cc.x, (float)cc.y), 1.f - 0.35f * u * u, cc.type, 0.f, gk * 0.7f, 1.f - smoothstepf(0.45f, 1.f, u), false, cc.mask);
+        tile(layout::cellPos((float)cc.x, (float)cc.y), 1.f - 0.35f * u * u, cc.type, 0.f, 1.f - smoothstepf(0.45f, 1.f, u), false, cc.mask);
     }
     // the falling piece and its ghost
     if (g.hasPiece() && !g.over()) {
@@ -1909,7 +1907,7 @@ void IslandsUniverse::buildBoard(const Game& g) {
         for (int i = 0; i < 4; i++) {
             const auto& c = cells[i];
             if (c[1] < Game::HIDDEN - 1) continue;
-            tile(layout::cellPos(c[0] + dx, c[1] + dy), 1.f, pc.type, 0.f, 0.f, 1.f, true, neighbourMask(c[0], c[1], inPiece));
+            tile(layout::cellPos(c[0] + dx, c[1] + dy), 1.f, pc.type, 0.f, 1.f, true, neighbourMask(c[0], c[1], inPiece));
         }
         Piece gp = pc;
         gp.y = g.ghostY();
@@ -1978,7 +1976,7 @@ void IslandsUniverse::buildBoard(const Game& g) {
         for (int i = 0; i < 4; i++) {
             const auto& c = cells[i];
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            tile(vec3(px, py, 0.f), sc, type, dim, 0.f, 1.f, true, neighbourMask(c[0], c[1], inPiece));
+            tile(vec3(px, py, 0.f), sc, type, dim, 1.f, true, neighbourMask(c[0], c[1], inPiece));
         }
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.55f : 0.f);
@@ -2023,40 +2021,6 @@ void IslandsUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
     ink = hex(0xf6f4ee);
     halo = hex(0x0c1c30);
     accent = hex(0x9fe0ee);
-}
-
-// Navy panes under the HUD's corner lines (the song's title and tempo, the section and the universe),
-// from the boxes the host letters them in, so they read over the busy sea (drawn over the frame, display colors).
-void IslandsUniverse::cornerPanes(const Frame& f) {
-    struct Box { float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f, a = 0.f; } top, bottom;
-    for (size_t i = 0; i < f.hud.size() && i < f.hudBoxes->size(); i++) {
-        const HudText& h = f.hud[i];
-        Box* b = h.role == HUD_TITLE || h.role == HUD_INFO ? &top : h.role == HUD_SECTION || h.role == HUD_UNIVERSE ? &bottom : nullptr;
-        const vec4& r = (*f.hudBoxes)[i];
-        if (!b || h.alpha < 0.01f || r.z <= r.x || r.w <= r.y) continue;
-        b->x0 = std::min(b->x0, r.x); b->y0 = std::min(b->y0, r.y);
-        b->x1 = std::max(b->x1, r.z); b->y1 = std::max(b->y1, r.w);
-        b->a = std::max(b->a, saturate(h.alpha * 3.f));
-    }
-    flat_.clear();
-    // (sharp cornered, in the well's navy and density)
-    const float pad = 14.f * height_ / 1080.f;
-    for (const Box* b : {&top, &bottom}) {
-        if (b->a <= 0.f) continue;
-        const float hw = (b->x1 - b->x0) * 0.5f + pad, hh = (b->y1 - b->y0) * 0.5f + pad;
-        quad(vec3((b->x0 + b->x1) * 0.5f, (b->y0 + b->y1) * 0.5f, 0.f), hw, hh, hex(VARIANTS[variant_].backing), PANE_A_DISPLAY * b->a, 0.f, 0.f);
-    }
-    if (flat_.empty()) return;
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glUseProgram(progFlat_);
-    setMat(progFlat_, "uVP", mat4::ortho(0.f, (float)width_, (float)height_, 0.f, -1.f, 1.f));
-    glBindVertexArray(flatVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, flatVbo_);
-    glBufferData(GL_ARRAY_BUFFER, flat_.size() * sizeof(float), flat_.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(flat_.size() / 11));
-    glDisable(GL_BLEND);
-    flat_.clear();
 }
 
 // The panels (the lettering: hudLine).
@@ -2722,7 +2686,6 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progFinal_, "uBridgeInk", bridge_.ink);
     ugl::drawFullscreen();
 
-    if (!bare_ && f.hudBoxes) cornerPanes(f);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     drawHud(game, f.panels);

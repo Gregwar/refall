@@ -193,7 +193,6 @@ private:
     // ---- The sea's strokes: their clock (faster with the energy), the soft beat swell, their field under the eye;
     // the ringed sun's heading
     float swirlScale() const;
-    void cornerPanes(const Frame& f);
     vec2 swirlO_{0.f, 0.f};
     float flowT_ = 0.f, pulse_ = 0.f, ringSunYaw_ = 0.f;
     bool ringSunInit_ = false;
