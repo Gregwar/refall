@@ -25,6 +25,9 @@
 // sky, faceted clouds.
 // The pieces are low poly cubes: one chamfered cube per cell in its piece's color, seen in perspective, flat shaded by
 // the scene's sun, its corners nudged by its seed, running on into the cells of the same piece (one block a piece).
+// FLAT (a variant only when asked for) draws the same world as a flat vector illustration: each surface one flat fill
+// in two tones by the sun (smooth normals, a crisp terminator), a white surf rim, slate peaks, a pale sky with flat
+// puffs, a flat haze, no shadow map; a plain translucent well, flat pastel tiles over a small offset shadow.
 #include "universes/islands/islands.hpp"
 
 #include <algorithm>
