@@ -148,12 +148,12 @@ const VariantDef VARIANTS[] = {
      0x121432, {0x67f7ff, 0xffe279, 0xd297ff, 0x7df7a9, 0xff7d94, 0x94b6ff, 0xffb46f}, 0xffae4a, false},
     // FLAT (only when asked for: --universe ISLANDS:FLAT): the Caribbean as a flat vector illustration: flat fills,
     // a white surf rim round the beaches, slate mountains, a pale sky with flat white puffs, distant islands faded to
-    // grey blue, the sea's strokes in tints of blue; a plain translucent blue well, flat pastel tiles with a small
-    // offset shadow; navy lettering. In the drops, TRIP's neons over the same shapes.
+    // grey blue, the sea's strokes in tints of blue; a plain dense navy well, flat pastel tiles with a small
+    // offset shadow; the HUD in navy panes, pale lettering. In the drops, TRIP's neons over the same shapes.
     {"FLAT", 0xe9d49d, 0xeeede9, 0x7cc256, 0x3f8c5c, 0x4c6a72, 0x787661, 0xe6dcc0, 0xc4806c, 0x6e9048, 0xa4a052, 0.f,
      0x45cdd9, 0x3db6d1, {0.85f, 0.16f, 0.1f}, 9.f, 1.f,
      0x4f9e22, 0x7cbc30, 0x6e6a4c, 0x4f9a3c, 0x3a7e40, 0.42f, 2,
-     0x1a4a70, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0x1e4e6c, true},
+     0x0c1c30, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0x1e4e6c, true},
     // TRIP: the same flight rendered flat and through a psychedelic filter: the sea and the greens marbled neon
     // bands flowing slowly, violet sand ringed in orange, a deep violet sky under a huge ringed sun, zebra palms;
     // the pieces soft pastels in a dark slate well
@@ -267,6 +267,9 @@ float hookS() {
 }
 
 constexpr float BACK_Z = -0.3f;
+// FLAT: the well's and the HUD's panes, dense (a drop's neons barely through): blended in the scene's linear light,
+// the corner lines' over the frame in display colors (the same look: about 88 % in display terms)
+constexpr float FLAT_PANE_A = 0.982f, FLAT_PANE_A_DISPLAY = 0.88f;
 
 } // namespace
 
@@ -1936,26 +1939,33 @@ void IslandsUniverse::buildBoard(const Game& g) {
     const VariantDef& V = VARIANTS[variant_];
     const vec3 back = lin(V.backing);
     const bool fl = flat();
+    // HOLD and NEXT, the score's column and the bonus gauge in panes like the well's (TRIP: rounded, FLAT: sharp)
+    auto hudPanes = [&](const vec3& col, float a, bool round) {
+        auto pane = [&](float x, float y, float hw, float hh) {
+            quad(vec3(x, y, BACK_Z), hw, hh, col, a, round ? -0.4f / hw : 0.f, round ? -0.4f / hh : 0.f);
+        };
+        const float x0 = layout::HOLD_CENTER.x, x1 = layout::nextCenter(0).x;
+        pane(x0, 7.9f, 1.7f, 2.1f);
+        pane(x1, 4.85f, 1.7f, 5.15f);
+        pane(x0, -2.05f, 1.7f, 4.25f);                         // score, lines, level, best, the speed
+        pane(x1, layout::GAUGE_CENTER.y - 0.75f, 1.7f, 2.05f);  // the bonus gauge and its label
+    };
     if (V.trip) {
         // TRIP: a dark slate pane with rounded corners (the swirls barely show through: the pieces read over it), a
         // faint violet grid; HOLD and NEXT, the score's column and the bonus gauge in matching panes
-        auto pane = [&](float x, float y, float hw, float hh, float a) {
-            quad(vec3(x, y, BACK_Z), hw, hh, back, a, -0.4f / hw, -0.4f / hh);
-        };
         quad(vec3(0.f, 0.f, BACK_Z - 0.01f), 5.8f, 10.8f, lin(0x0c0620), 0.22f, 0.12f, 0.065f);
-        pane(0.f, 0.f, 5.1f, 10.1f, 0.88f);
+        quad(vec3(0.f, 0.f, BACK_Z), 5.1f, 10.1f, back, 0.88f, -0.4f / 5.1f, -0.4f / 10.1f);
         const vec3 gv = lin(0x7c5ce0);
         const float zg = BACK_Z + 0.002f;
         for (int i = -4; i <= 4; i++) line((float)i, -10.f, (float)i, 10.f, zg, 0.03f, gv, 0.4f);
         for (int j = -9; j <= 9; j++) line(-5.f, (float)j, 5.f, (float)j, zg, 0.03f, gv, 0.4f);
-        const float x0 = layout::HOLD_CENTER.x, x1 = layout::nextCenter(0).x;
-        pane(x0, 7.9f, 1.7f, 2.1f, 0.86f);
-        pane(x1, 4.85f, 1.7f, 5.15f, 0.86f);
-        pane(x0, -2.05f, 1.7f, 4.25f, 0.86f);                         // score, lines, level, best, the speed
-        pane(x1, layout::GAUGE_CENTER.y - 0.75f, 1.7f, 2.05f, 0.86f);  // the bonus gauge and its label
+        hudPanes(back, 0.86f, true);
     } else if (fl) {
-        // FLAT: a plain translucent blue pane, sharp cornered, no rule, no shade: the scene shows through
-        quad(vec3(0.f, 0.f, BACK_Z), 5.1f, 10.1f, back, 0.7f, 0.f, 0.f);
+        // FLAT: a plain deep navy pane, sharp cornered, no rule, no shade, dense (the drops' neons barely show
+        // through: the pieces read over them); the HUD's columns in the same panes, the lettering pale on them.
+        // The same in the calm and in the drops: nothing fades, no ink turns over at a drop's edges.
+        quad(vec3(0.f, 0.f, BACK_Z), 5.1f, 10.1f, back, FLAT_PANE_A, 0.f, 0.f);
+        hudPanes(back, FLAT_PANE_A, false);
     } else {
         // the backing: a tinted pane of deep water over the scene (the sea and the islands show through, darkened),
         // denser toward the bottom where the stack stands; a soft shade around it, a fine pale rule
@@ -2171,15 +2181,21 @@ void IslandsUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
         accent = hex(0x6a3ae0);
         return;
     }
+    if (V.flat) {
+        // FLAT: the lettering on its navy panes, a warm white all along (a faint dark halo), the accent a light cyan
+        ink = hex(0xf6f4ee);
+        halo = hex(0x0c1c30);
+        accent = hex(0x9fe0ee);
+        return;
+    }
     // (the ink turns from navy to white quickly: never a mid grey on the dusk sky)
-    // (FLAT: the scene stays light at dusk, the ink navy all along)
-    const float dark = flat() ? 0.f : smoothstepf(0.4f, 0.52f, night_);
-    ink = ugl::toSrgb(lerp(lin(flat() ? 0x0b2038 : 0x0e2238), lin(0xfaf4ea), dark));
+    const float dark = smoothstepf(0.4f, 0.52f, night_);
+    ink = ugl::toSrgb(lerp(lin(0x0e2238), lin(0xfaf4ea), dark));
     halo = ugl::toSrgb(lerp(lin(0xf4f8fa), lin(0x0c1426), dark));
     accent = ugl::toSrgb(dark > 0.5f ? lin(V.accent) : mixDisplay(lin(V.accent), lin(0x000000), 0.1f));
 }
 
-// TRIP: dark rounded panes under the HUD's corner lines (the song's title and tempo, the section and the universe),
+// TRIP, FLAT: dark panes under the HUD's corner lines (the song's title and tempo, the section and the universe),
 // from the boxes the host letters them in, so they read over the busy sea (drawn over the frame, display colors).
 void IslandsUniverse::tripCornerPanes(const Frame& f) {
     struct Box { float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f, a = 0.f; } top, bottom;
@@ -2193,11 +2209,14 @@ void IslandsUniverse::tripCornerPanes(const Frame& f) {
         b->a = std::max(b->a, saturate(h.alpha * 3.f));
     }
     flat_.clear();
-    const float s = height_ / 1080.f, pad = 14.f * s, rad = 14.f * s;
+    // (FLAT: sharp cornered, in its well's navy and density)
+    const bool fl = flat();
+    const float s = height_ / 1080.f, pad = 14.f * s, rad = fl ? 0.f : 14.f * s;
     for (const Box* b : {&top, &bottom}) {
         if (b->a <= 0.f) continue;
         const float hw = (b->x1 - b->x0) * 0.5f + pad, hh = (b->y1 - b->y0) * 0.5f + pad;
-        quad(vec3((b->x0 + b->x1) * 0.5f, (b->y0 + b->y1) * 0.5f, 0.f), hw, hh, hex(0x1c2038), 0.86f * b->a, -rad / hw, -rad / hh);
+        quad(vec3((b->x0 + b->x1) * 0.5f, (b->y0 + b->y1) * 0.5f, 0.f), hw, hh, fl ? hex(VARIANTS[variant_].backing) : hex(0x1c2038),
+             (fl ? FLAT_PANE_A_DISPLAY : 0.86f) * b->a, -rad / hw, -rad / hh);
     }
     if (flat_.empty()) return;
     glEnable(GL_BLEND);
@@ -3049,7 +3068,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progFinal_, "uBridgeInk", bridge_.ink);
     ugl::drawFullscreen();
 
-    if (trip && !bare_ && f.hudBoxes) tripCornerPanes(f);
+    if ((trip || flat()) && !bare_ && f.hudBoxes) tripCornerPanes(f);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     drawHud(game, f.panels);
