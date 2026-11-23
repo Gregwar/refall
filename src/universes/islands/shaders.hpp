@@ -78,8 +78,9 @@ uniform float uPulse;       // a soft swell on the beat (smooth: no flicker)
 uniform float uTripScale;   // the swirls' size (world meters per noise unit)
 uniform vec2 uTripO;        // the field's coordinates under the eye (carried along as it flies, so the swirls stay
                             // anchored to the sea, and a change of size zooms about the eye, never slides)
-// the field's coordinates of a point of the sea (k: how much larger the swirls are there)
-vec2 tripP(vec2 wp, float k) { return uTripO / k + (wp - uEye.xz) / (uTripScale * k); }
+// the field's coordinates of a point of the sea (k: how much larger the swirls are there, about the eye: 1 near it,
+// where they stay anchored to the sea)
+vec2 tripP(vec2 wp, float k) { return uTripO + (wp - uEye.xz) / (uTripScale * k); }
 vec3 tl(vec3 c) { return pow(c, vec3(2.2)); }
 float fbm3(vec2 p) {
     float s = 0.0, a = 0.5;
@@ -299,10 +300,15 @@ void main() {
         // (the field and its footprint out of the material's branch: derivatives need every pixel of the quad)
         vec2 r;
         vec2 wp = vRel.xz + uEye.xz;
-        float m = marble(tripP(wp, 1.4) + 31.0, uFlow * 0.8, r);
+        float m = marble(tripP(wp, 1.0) / 1.4 + 31.0, uFlow * 0.8, r);
         float v = m * 2.6 + r.y * 0.6 + 0.03 * uFlow;
         float vw = fwidth(v);
         if (h >= 0.0 && rockK <= 0.45 && vegK > 0.5 && sandK < 0.75) col = landBands(v, vw);
+        // the peaks above the forest flat, one color an island (orange, violet or a lime green), like painted hills
+        if (h > 24.0 + 10.0 * tone && rockK <= 0.45 && vegK > 0.5) {
+            float k = fract(uSeed * 0.618);
+            col = tl(k < 0.4 ? vec3(1.0, 0.45, 0.2) : k < 0.75 ? vec3(0.6, 0.25, 0.92) : vec3(0.55, 0.9, 0.25));
+        }
         float side = dot(N, uSunDir) > 0.25 ? 1.0 : 0.8;
         frag = vec4(col * side, 0.0);
         return;
@@ -489,7 +495,7 @@ void main() {
     vec3 treeCol = vec3(0.0);
     if (uTrip > 0.5) {
         vec2 r;
-        float m = marble(tripP(world.xz, 1.4) + 31.0, uFlow * 0.8, r);
+        float m = marble(tripP(world.xz, 1.0) / 1.4 + 31.0, uFlow * 0.8, r);
         float v = m * 2.6 + r.y * 0.6 + 0.03 * uFlow;
         treeCol = landBands(v + 0.18, fwidth(v));
     }

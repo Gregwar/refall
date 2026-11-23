@@ -1872,7 +1872,7 @@ void IslandsUniverse::buildBoard(const Game& g) {
             quad(vec3(x, y, BACK_Z), hw, hh, back, a, -0.4f / hw, -0.4f / hh);
         };
         quad(vec3(0.f, 0.f, BACK_Z - 0.01f), 5.8f, 10.8f, lin(0x0c0620), 0.22f, 0.12f, 0.065f);
-        pane(0.f, 0.f, 5.1f, 10.1f, 0.72f);
+        pane(0.f, 0.f, 5.1f, 10.1f, 0.76f);
         quad(vec3(0.f, -4.f, BACK_Z + 0.001f), 5.1f, 6.1f, back, 0.2f, 0.f, 0.6f);
         const vec3 gv = lin(0x7c5ce0);
         const float zg = BACK_Z + 0.002f;
