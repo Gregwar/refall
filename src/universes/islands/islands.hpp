@@ -52,7 +52,10 @@ private:
     vec3 eye_{0, 60, 0}, fwd_{1, 0, 0}, up_{0, 1, 0}, right_{0, 0, 1};
     float curv_ = 0.f, near_ = 0.5f, far_ = 40000.f, fov_ = 50.f;
     void fly(float dt, float wdt, const std::string& section);
-    float floorAhead(const vec3& from, float yaw, float v) const;
+    float floorAhead(const vec3& from, float yaw, float v, float& hard) const;
+    float tgtPrev_ = 0.f, tgtVel_ = 0.f;   // the floor ahead (log) last frame, its rate
+    Spring hardS_;                         // the least altitude now (see floorAhead), eased in
+    float clear_ = 60.f;                   // the eye's height over the ground (and what stands on it) under it
 
     mat4 view_, proj_, vp_, invVp_, lightVp_;
     mat4 bvp_;                             // the board's (the layout's)
@@ -72,7 +75,11 @@ private:
         vec3 sailCol{1, 1, 1}, jibCol{1, 1, 1}, launchP{0, 0, 0}, prevP{0, 0, 0};
         float prevS = -1.f;                // (the pop check, REFALL_ISLANDS_POPCHECK)
         double sb = 0.0;
-        bool big = false;
+        bool big = false, place = false;   // (place: put it at its place in the fleet, unseen)
+        // the helm: its size as drawn (fully grown), the course it wants and the one it steers, how much of the
+        // water ahead is open on that one, the open run on its present heading, the next look around
+        float size = 1.f, goal = 0.f, want = 0.f, open = 1.f, ahead = 1e9f, plan = 0.f;
+        float check = 0.f;                 // the next look at the water under it (and at its place in the fleet)
     };
     std::vector<Boat> boats_;
     std::vector<Boat> fleet_;
@@ -93,7 +100,15 @@ private:
     void releaseFlockAt(const vec3& c, int n);
     void updateBoats(float dt);
     void spawnBoat(bool initial);
+    // keeping to open water (the land and what stands in it): a hull's footprint, a course's free run, the helm
+    bool seaClear(float x, float z, float r, float depth) const;
+    bool aground(const Boat& b) const;
+    float seaRun(const Boat& b, float head, float look, float keep) const;
+    std::vector<vec3> track_;              // the camera's track ahead (the fleet keeps off it)
+    float trackDist(const vec3& q, vec3* nearest = nullptr) const;
+    void steer(Boat& b, float goal, float cruise, float keep, float dt);
     void boatParts(const Boat& b);
+    float boatTop(const Boat& b, float* reach = nullptr) const;
     struct Plane { bool on = false; vec3 p{0, 0, 0}, v{0, 0, 0}; float bank = 0, t = 0; } plane_;
     float planeWait_ = 15.f;
     void updatePlane(float dt);

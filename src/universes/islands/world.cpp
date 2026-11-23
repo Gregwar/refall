@@ -560,15 +560,25 @@ Ground groundAt(const Island& I, float lx, float lz) {
     return g;
 }
 
+// The grid's vertices jittered (not on the border): the facets of the flat shading irregular, low poly.
+static float gridJitter(const Island& I, int n, float step, int i, int j, uint32_t k) {
+    if (i == 0 || j == 0 || i == n - 1 || j == n - 1) return 0.f;
+    return (hashf(I.seed * 7919u + (uint32_t)(j * n + i) * 2654435761u + k) - 0.5f) * 0.62f * step;
+}
+
+// A vertex's height: the ground there, the grid's border sinking into the deep (so no edge shows).
+static float gridHeight(const Ground& g0, const Island& I, float x, float z) {
+    float h = g0.h;
+    const float e = std::max(std::fabs(x), std::fabs(z)) / I.ext;
+    if (h < 0.f) h = lerpf(h, -45.f, ss(0.82f, 1.f, e));
+    return h;
+}
+
 std::vector<float> buildTerrain(const Island& I, int n) {
     std::vector<float> h((size_t)n * n);
     std::vector<Ground> gr((size_t)n * n);
     const float step = 2.f * I.ext / (n - 1);
-    // the grid's vertices jittered (not on the border): the facets of the flat shading irregular, low poly
-    auto jit = [&](int i, int j, uint32_t k) {
-        if (i == 0 || j == 0 || i == n - 1 || j == n - 1) return 0.f;
-        return (hashf(I.seed * 7919u + (uint32_t)(j * n + i) * 2654435761u + k) - 0.5f) * 0.62f * step;
-    };
+    auto jit = [&](int i, int j, uint32_t k) { return gridJitter(I, n, step, i, j, k); };
     std::vector<float> px((size_t)n * n), pz((size_t)n * n);
     for (int j = 0; j < n; j++)
         for (int i = 0; i < n; i++) {
@@ -576,9 +586,7 @@ std::vector<float> buildTerrain(const Island& I, int n) {
             px[(size_t)j * n + i] = x;
             pz[(size_t)j * n + i] = z;
             Ground g = groundAt(I, x, z);
-            // the grid's border sinks into the deep, so no edge shows
-            const float e = std::max(std::fabs(x), std::fabs(z)) / I.ext;
-            if (g.h < 0.f) g.h = lerpf(g.h, -45.f, ss(0.82f, 1.f, e));
+            g.h = gridHeight(g, I, x, z);
             gr[(size_t)j * n + i] = g;
             h[(size_t)j * n + i] = g.h;
         }
@@ -605,6 +613,50 @@ std::vector<float> buildTerrain(const Island& I, int n) {
             o[10] = ao;
         }
     return v;
+}
+
+float drawnHeight(const Island& I, float lx, float lz) {
+    // (the grid's triangles, as the index buffer splits each quad: a c b, b c d; a vertex strays up to 0.31 steps
+    // from its place, so the point is in a quad of the 3 x 3 around its cell)
+    const int n = LOD_N[std::max(I.lod, 0)];
+    const float step = 2.f * I.ext / (float)(n - 1);
+    const int ci = (int)std::floor((lx + I.ext) / step), cj = (int)std::floor((lz + I.ext) / step);
+    if (ci < -1 || cj < -1 || ci > n - 1 || cj > n - 1) return -45.f;
+    float vx[4][4], vz[4][4], vh[4][4];
+    bool have[4][4] = {};
+    auto vert = [&](int a, int b) { // (a, b in 0..3: vertex ci - 1 + a, cj - 1 + b)
+        if (have[a][b]) return;
+        const int i = ci - 1 + a, j = cj - 1 + b;
+        const float x = -I.ext + (float)i * step + gridJitter(I, n, step, i, j, 1u);
+        const float z = -I.ext + (float)j * step + gridJitter(I, n, step, i, j, 2u);
+        vx[a][b] = x;
+        vz[a][b] = z;
+        vh[a][b] = gridHeight(groundAt(I, x, z), I, x, z);
+        have[a][b] = true;
+    };
+    auto tri = [&](int a0, int b0, int a1, int b1, int a2, int b2, float& out) {
+        vert(a0, b0); vert(a1, b1); vert(a2, b2);
+        const float x0 = vx[a0][b0], z0 = vz[a0][b0], x1 = vx[a1][b1], z1 = vz[a1][b1], x2 = vx[a2][b2], z2 = vz[a2][b2];
+        const float det = (z1 - z2) * (x0 - x2) + (x2 - x1) * (z0 - z2);
+        if (std::fabs(det) < 1e-9f) return false;
+        const float w0 = ((z1 - z2) * (lx - x2) + (x2 - x1) * (lz - z2)) / det;
+        const float w1 = ((z2 - z0) * (lx - x2) + (x0 - x2) * (lz - z2)) / det;
+        const float w2 = 1.f - w0 - w1;
+        const float eps = -1e-4f;
+        if (w0 < eps || w1 < eps || w2 < eps) return false;
+        out = w0 * vh[a0][b0] + w1 * vh[a1][b1] + w2 * vh[a2][b2];
+        return true;
+    };
+    for (int db = 0; db < 3; db++)
+        for (int da = 0; da < 3; da++) {
+            const int i = ci - 1 + da, j = cj - 1 + db;
+            if (i < 0 || j < 0 || i >= n - 1 || j >= n - 1) continue;
+            float h;
+            // (quad corners: a (i, j), b (i + 1, j), c (i, j + 1), d (i + 1, j + 1))
+            if (tri(da, db, da, db + 1, da + 1, db, h)) return h;
+            if (tri(da + 1, db, da, db + 1, da + 1, db + 1, h)) return h;
+        }
+    return -45.f;
 }
 
 // =====================================================================================================
@@ -1378,18 +1430,60 @@ float World::terrain(float x, float z) const {
     return h;
 }
 
-float World::obstacle(float x, float z) const {
-    float h = 0.f;
+float World::obstacle(float x, float z) const { return std::max(0.f, solid(x, z)); }
+
+// (the terrain of one island at a point, and what stands on it there; h unchanged off its grid)
+static void solidOf(const Island& I, float x, float z, float& h) {
+    const float lx = x - I.x, lz = z - I.z;
+    if (std::fabs(lx) > I.ext || std::fabs(lz) > I.ext) return;
+    h = std::max(h, heightAt(I, lx, lz));
+    for (const Obst& o : I.obst) {
+        const float dx = o.x - x, dz = o.z - z;
+        if (dx * dx + dz * dz < o.r * o.r) h = std::max(h, o.top);
+    }
+}
+
+float World::solid(float x, float z) const {
+    float h = -45.f;
+    for (const auto& I : islands) solidOf(*I, x, z, h);
+    return h;
+}
+
+float World::solidAmong(const std::vector<const Island*>& list, float x, float z) {
+    float h = -45.f;
+    for (const Island* I : list) solidOf(*I, x, z, h);
+    return h;
+}
+
+void World::islandsNear(float x, float z, float r, std::vector<const Island*>& out) const {
+    out.clear();
+    for (const auto& I : islands)
+        if (std::fabs(x - I->x) < I->ext + r && std::fabs(z - I->z) < I->ext + r) out.push_back(I.get());
+}
+
+float World::groundMax(float x, float z, float r) const {
+    float h = -45.f;
     for (const auto& I : islands) {
         const float lx = x - I->x, lz = z - I->z;
-        if (std::fabs(lx) > I->ext || std::fabs(lz) > I->ext) continue;
-        h = std::max(h, heightAt(*I, lx, lz));
+        if (std::fabs(lx) > I->ext + r || std::fabs(lz) > I->ext + r) continue;
+        h = std::max(h, drawnHeight(*I, lx, lz));
+        if (r > 0.f)
+            for (int k = 0; k < 6; k++) {
+                const float a = (float)k * (TAU / 6.f);
+                h = std::max(h, drawnHeight(*I, lx + std::cos(a) * r, lz + std::sin(a) * r));
+            }
         for (const Obst& o : I->obst) {
-            const float dx = o.x - x, dz = o.z - z;
-            if (dx * dx + dz * dz < o.r * o.r) h = std::max(h, o.top);
+            const float dx = o.x - x, dz = o.z - z, rr = o.r + r;
+            if (dx * dx + dz * dz < rr * rr) h = std::max(h, o.top);
         }
     }
     return h;
+}
+
+bool World::landNear(float x, float z, float r) const {
+    for (const auto& I : islands)
+        if (std::fabs(x - I->x) < I->ext + r && std::fabs(z - I->z) < I->ext + r) return true;
+    return false;
 }
 
 void World::rebase(float dx, float dz) {
