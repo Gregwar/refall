@@ -1375,16 +1375,8 @@ void MarblesUniverse::drawBoard(const Game& g, float world) {
             if (cells[i][1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
             put(w.x, w.y, TILE_H, TILE_R, pal_.piece[type], 1.f, hashf((float)nextId_, i + 10.f) * TAU, glow, mseed(type, hashf((float)nextId_, (float)i)), 1);
-            // it glows a little as it falls, a trail of its light above it (over the cells it left)
-            const vec3 c = pal_.piece[type];
-            putFx(w.x, w.y, 0.85f, 0.f, c, 0.16f * (1.f - bb), 0);
-            bool top = true;
-            for (int j = 0; j < 4; j++) top = top && !(cells[j][0] == cells[i][0] && cells[j][1] == cells[i][1] - 1);
-            if (top) {
-                const float half = 1.25f;
-                const float y0 = w.y + 0.46f, yc = std::min(y0 + half, 10.f), hl = std::max(0.f, yc - y0);
-                if (hl > 0.05f) putFx(w.x, y0 + hl, 0.34f, 0.f, c, 0.34f * (1.f - bb), 3, hl / 0.34f);
-            }
+            // it glows a little as it falls (no trail)
+            putFx(w.x, w.y, 0.85f, 0.f, pal_.piece[type], 0.16f * (1.f - bb), 0);
         }
     }
     (void)world;
@@ -1652,7 +1644,7 @@ void MarblesUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The well, the stack, the falling piece (none of the game in a break's frame: the table alone).
     if (!f.bare) drawBoard(game, world);
     flush();
-    flushFx();   // (the falling piece's glow and trail, over the glass)
+    flushFx();   // (the falling piece's glow, over the glass)
     // ---- Previews: small tiles and marbles.
     if (!f.bare) {
         auto preview = [&](int type, vec2 center, float sc, float alpha) {
