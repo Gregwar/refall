@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "universe.hpp"
@@ -15,6 +16,9 @@ struct UniverseEntry {
     std::function<float(const SongLook&)> affinity;
     std::vector<std::string> variants; // the variants' names (upper case), in index order (at least one)
     bool hidden = false;   // never picked at random (test universes); --universe and the viewer still reach it
+    // variants renamed or merged: their former names (upper case) and the index each now loads as (a saved setting,
+    // a campaign or a --universe naming one still works)
+    std::vector<std::pair<std::string, int>> formerVariants = {};
 };
 
 namespace universes {

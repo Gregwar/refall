@@ -710,6 +710,7 @@ struct Furn {
             add(M_LUMP, MAT_FOLIAGE, vec3(wx, g + 2.6f * sc, wz), vec3(4.2f * sc, 2.8f * sc, 4.f * sc), qYaw(rnd() * 6.f), vec3(0.3f, 0.36f, 0.22f), 1.f);
             obst(wx, wz, 2.5f * sc, g + 4.2f * sc);
         } else {
+            if (rnd() > 0.2f) return; // (a few trees only: the greens are plain flat fills)
             add(M_LUMP, MAT_FOLIAGE, vec3(wx, g + 2.4f * sc, wz), vec3(8.f * sc, 7.f * sc, 8.f * sc), qYaw(rnd() * 6.f), vec3(1.f), 0.f);
             obst(wx, wz, 4.f * sc, g + 6.f * sc);
         }

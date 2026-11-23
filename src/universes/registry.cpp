@@ -73,6 +73,8 @@ int parse(const std::string& spec, int* variant) {
     const auto& vs = entry(u).variants;
     for (size_t k = 0; k < vs.size(); k++)
         if (v == vs[k]) *variant = (int)k;
+    for (const auto& fv : entry(u).formerVariants) // a former name: the variant it became
+        if (*variant < 0 && v == fv.first) *variant = fv.second;
     for (size_t k = 0; k < vs.size() && *variant < 0; k++) // a part of the name is enough ("vector:amber")
         if (!v.empty() && vs[k].find(v) != std::string::npos) *variant = (int)k;
     if (*variant < 0 && !v.empty() && std::isdigit((unsigned char)v[0])) *variant = std::atoi(v.c_str());

@@ -1,6 +1,6 @@
 #pragma once
-// ISLANDS: one continuous flight over an endless tropical archipelago, like drone footage, behind the well, in
-// flattened low poly; the pieces are low poly cubes (see islands.cpp).
+// ISLANDS: one continuous flight over an endless tropical archipelago, like drone footage, behind the well, as a flat
+// vector illustration; its drops repainted in neons; the pieces flat pastel tiles (see islands.cpp).
 #include <memory>
 #include <string>
 #include <vector>
@@ -17,10 +17,8 @@ public:
     void setSong(const SongLook& look, float seconds) override;
     void setLevel(int level, float energy, float seconds, float impact) override;
     void drop(float strength) override;
-    void refresh(float strength) override;
     void onEvent(const GameEvent& ev, const Game& game) override;
     void setBonus(bool on) override { slowOn_ = on; }
-    void kick(float amount) override { kickIn_ = std::max(kickIn_, amount); }
     void render(const Frame& f, GLuint fbo) override;
     vec2 project(const vec3& p) const override;
     TransitionHints hints() const override;
@@ -57,10 +55,9 @@ private:
     Spring hardS_;                         // the least altitude now (see floorAhead), eased in
     float clear_ = 60.f;                   // the eye's height over the ground (and what stands on it) under it
 
-    mat4 view_, proj_, vp_, invVp_, lightVp_;
+    mat4 view_, proj_, vp_, invVp_;
     mat4 bvp_;                             // the board's (the layout's)
     vec3 beye_;                            // its eye (board space)
-    int cubeCount_ = 0;                    // the pieces' cube mesh (vertices)
 
     // ---- Life: boats, the seaplane, the birds, the clouds, the lanterns.
     struct Boat {
@@ -88,7 +85,7 @@ private:
     void updateFleet(float dt);
     void popCheck(std::vector<Boat>& list, const char* what, float dt);
     vec3 seaPointInBand(int side, float dist) const;
-    // ---- The drop: the regatta (spinnakers, the fleet racing), golden light, dolphins, fireworks at dusk.
+    // ---- The drop: the regatta (spinnakers, the fleet racing), dolphins, fireworks at dusk (and the neons).
     float dropK_ = 0.f;
     struct Dolphin { vec3 off; float t0 = -9.f, dur = 1.f, size = 2.4f, seed = 0.f; };
     struct Pod { float relF = 60.f, relS = 30.f; std::vector<Dolphin> d; };
@@ -128,7 +125,6 @@ private:
     void lightLanterns(int n);
     struct Puff { vec3 rel; float r, seed, alpha, base, shade, d2; };
     std::vector<Puff> puffs_;
-    std::vector<float> cloudShadows_;
     void buildClouds(float worldTime);
 
     // ---- Per-frame geometry.
@@ -137,25 +133,22 @@ private:
     void glow(const vec3& world, float size, const vec3& col, float soft = 0.3f);
     void push(const isl::Part& p);
     void gatherIslands();
-    struct Draw { isl::Island* I; float dist; bool shadow; };
+    struct Draw { isl::Island* I; float dist; };
     std::vector<Draw> draws_;
 
     // ---- The well.
-    float seeds_[22][10] = {};
-    float pieceSeeds_[4] = {0.17f, 0.3f, 0.43f, 0.56f}; // the falling piece's cells' tiles, kept when it locks
     int ids_[22][10] = {};      // each cell's piece (its lock's number * 8 + its type + 1; 0 empty, < 0 alone): its tile
                                 // runs on into its piece's other cells
     int lockCount_ = 0;
     float gridMask(int x, int y) const;
     void syncCells(const Game& g);
     void buildBoard(const Game& g);
-    struct GlassInst { float a[4], b[4], c[4]; };
-    std::vector<GlassInst> glass_;
-    struct ClearCell { int x, y, type; float seed, t, delay, mask; };
+    struct ClearCell { int x, y, type; float t, delay, mask; };
     std::vector<ClearCell> clearing_;
     struct Grain { vec3 p, v; float t, life, size; };
     std::vector<Grain> grains_;
     std::vector<float> flat_;
+    std::vector<float> tiles_;             // the pieces' tiles (flat_'s format, drawn over it)
     void quad(const vec3& c, float hw, float hh, const vec3& col, float a, float sx, float sy);
     void line(float x0, float y0, float x1, float y1, float z, float w, const vec3& col, float a);
     vec3 pieceCol(int type) const;
@@ -171,23 +164,18 @@ private:
 
     // ---- GL.
     GLuint progSky_ = 0, progTerrain_ = 0, progObj_ = 0, progWater_ = 0, progCloud_ = 0, progGlow_ = 0, progFlat_ = 0,
-           progGlass_ = 0, progFinal_ = 0, progShape_ = 0;
+           progFinal_ = 0, progShape_ = 0;
     GLuint meshVao_[isl::M_COUNT] = {}, meshVbo_[isl::M_COUNT] = {}, instVbo_[isl::M_COUNT] = {};
     int meshCount_[isl::M_COUNT] = {};
     GLuint idx_[isl::LOD_COUNT] = {};
     int idxCount_[isl::LOD_COUNT] = {};
-    GLuint quadVbo_ = 0, glowVao_ = 0, glowVbo_ = 0, cloudVao_ = 0, cloudVbo_ = 0, glassVao_ = 0, glassVbo_ = 0, cubeVbo_ = 0, flatVao_ = 0,
-           flatVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
+    GLuint quadVbo_ = 0, glowVao_ = 0, glowVbo_ = 0, cloudVao_ = 0, cloudVbo_ = 0, flatVao_ = 0, flatVbo_ = 0, shapeVao_ = 0,
+           shapeVbo_ = 0;
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0;
-    GLuint shadowFbo_ = 0, shadowTex_ = 0;
-    // a 1x1 shadow map for the shadow pass's own draws: their uShadow must name a shadow texture that isn't the one
-    // being drawn (WebGL refuses a sampler left on another kind of texture, or on the target)
-    GLuint shadowDummy_ = 0;
     ugl::Target sceneT_, seabedT_;
-    GLuint halfDepth_ = 0;
-    int samples_ = 4, halfW_ = 1, halfH_ = 1;
-    static constexpr int SHADOW_SIZE = 4096;
-    void drawTerrain(GLuint prog, int mode, bool shadowPass);
+    GLuint seabedDepth_ = 0;
+    int samples_ = 4;
+    void drawTerrain(GLuint prog, int mode);
     void drawObjects(GLuint prog);
     void setCommon(GLuint p);
 
@@ -200,6 +188,21 @@ private:
     Sky sky_;
     float lights_ = 0.f, night_ = 0.f;
     vec3 backdrop() const;
+    // the two flat tones (lit, in shade)
+    vec3 flatLit_{1.f, 1.f, 1.f}, flatShade_{0.78f, 0.82f, 0.9f};
+    // ---- The sea's strokes: their clock (faster with the energy), the soft beat swell, their field under the eye;
+    // the ringed sun's heading
+    float swirlScale() const;
+    void cornerPanes(const Frame& f);
+    vec2 swirlO_{0.f, 0.f};
+    float flowT_ = 0.f, pulse_ = 0.f, ringSunYaw_ = 0.f;
+    bool ringSunInit_ = false;
+    vec3 ringSun_{1, 0.1f, 0};
+    // ---- The drops: the variant's neons washing over the same shapes (psy_: the front, 0 natural .. 1 all neon;
+    // its state held a while against flip flops)
+    float psyT_ = 0.f, psy_ = 0.f, psyHold_ = 100.f, psyOff_ = 0.f;
+    bool psyOn_ = false;
+    void updatePsy(bool inDrop, float dt);
 
     // ---- Staging: continuous level 0 calm .. 2 peak.
     int level_ = 1;
@@ -207,7 +210,6 @@ private:
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     float energy_ = 0.5f;
     bool dropMode_ = false;
-    float swell_ = 0.f, kickIn_ = 0.f, sparkle_ = 0.f;
     double lastHalf_ = -1.0;
     float time_ = 0.f, worldTime_ = 0.f;
     bool slowOn_ = false;
