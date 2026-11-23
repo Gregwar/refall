@@ -67,10 +67,11 @@ float cloudShadow(vec2 p) {
 )";
 
 // ---------------------------------------------------------------- TRIP: the psychedelic variant's flat neon look
-// The world drawn flat (one color per material, two flat tones by the facet's side, no haze), the sea and the greens
-// turned into marbled bands of neon: a domain-warped noise in world space (anchored to the sea, its size from the
-// altitude) flowing slowly, its iso-bands mapped through a neon palette, crisp but antialiased (and blended to the
-// palette's mean where they get finer than a pixel). The colors are display colors (sRGB), made linear here.
+// The world drawn flat (one color per material, two flat tones by the facet's side, no haze), every coast ringed, the
+// land in bold fills, the sea a few broad liquid strokes of neon: a gently warped noise in world space (anchored to
+// the sea, its size from the altitude) flowing slowly, its iso-bands mapped through three hues, crisp but antialiased
+// (and a calm tint where they get finer than a pixel, and far away). The colors are display colors (sRGB), made
+// linear here.
 inline const char* TRIP_GLSL = R"(
 uniform float uTrip;        // 1: the TRIP look
 uniform float uFlow;        // its clock: the swirls' flow (faster with the music's energy)
@@ -82,33 +83,21 @@ uniform vec2 uTripO;        // the field's coordinates under the eye (carried al
 // where they stay anchored to the sea)
 vec2 tripP(vec2 wp, float k) { return uTripO + (wp - uEye.xz) / (uTripScale * k); }
 vec3 tl(vec3 c) { return pow(c, vec3(2.2)); }
-float fbm3(vec2 p) {
-    float s = 0.0, a = 0.5;
-    for (int i = 0; i < 3; i++) { s += a * n2(p); p = p * 2.07 + vec2(11.3, 7.9); a *= 0.5; }
-    return s / 0.875;
-}
-// the marbled field: the noise seen through two flowing warps (r: the second warp, for the bands' drift)
-float marble(vec2 p, float t, out vec2 r) {
-    vec2 q = vec2(fbm3(p + vec2(0.0, 0.11 * t)), fbm3(p + vec2(5.2, 1.3) - vec2(0.07 * t, 0.0)));
-    r = vec2(fbm3(p + 3.2 * q + vec2(1.7, 9.2) + 0.09 * t), fbm3(p + 3.2 * q + vec2(8.3, 2.8) - 0.06 * t));
-    return fbm3(p + 3.6 * r);
-}
 // a step from a to b at x = e, antialiased over w
 vec3 tstep(vec3 a, vec3 b, float x, float e, float w) { return mix(a, b, smoothstep(e - w, e + w, x)); }
-// the sea's bands, calmer: a hue path there and back (turquoise, green, yellow green, a peach orange, back), so
-// neighbouring bands are close in hue; soft edges, one thin deep teal line in the troughs (the marbling's grain)
-vec3 seaCalm(float v, float w) {
+// the sea, simple: a few broad smooth bands of three hues on a path there and back (turquoise, acid green, orange,
+// back: orange never meets turquoise), crisp but antialiased edges, no lines; finer than a pixel or far away, a calm
+// tint between them
+float fbm2(vec2 p) { return (n2(p) * 0.667 + n2(p * 2.03 + vec2(11.3, 7.9)) * 0.333); }
+vec3 seaSimple(float v, float w, float far) {
     float x = abs(fract(v) * 2.0 - 1.0);
-    float aa = max(w * 1.2, 1e-4);
-    vec3 teal = tl(vec3(0.08, 0.6, 0.66)), turq = tl(vec3(0.13, 0.82, 0.72)), green = tl(vec3(0.45, 0.88, 0.22));
-    vec3 yg = tl(vec3(0.74, 0.93, 0.28)), peach = tl(vec3(1.0, 0.66, 0.3));
-    vec3 c = teal;
-    c = tstep(c, turq, x, 0.05, aa);
-    c = tstep(c, green, x, 0.36, aa);
-    c = tstep(c, yg, x, 0.62, aa);
-    c = tstep(c, peach, x, 0.84, aa);
-    vec3 mean = turq * 0.33 + green * 0.27 + yg * 0.22 + peach * 0.14 + teal * 0.04;
-    return mix(c, mean, smoothstep(0.06, 0.3, w));
+    float aa = max(w * 2.0, 1e-4);
+    vec3 turq = tl(vec3(0.14, 0.8, 0.74)), green = tl(vec3(0.5, 0.88, 0.22)), orange = tl(vec3(1.0, 0.58, 0.22));
+    vec3 c = turq;
+    c = tstep(c, green, x, 0.38, aa);
+    c = tstep(c, orange, x, 0.74, aa);
+    vec3 calm = tl(vec3(0.3, 0.84, 0.5));
+    return mix(c, calm, max(smoothstep(0.08, 0.3, w), far));
 }
 // the land far away: one violet, a flat silhouette over the sea (aerial perspective)
 vec3 tripFar(vec3 c, float dist) {
@@ -596,17 +585,16 @@ void main() {
     col *= light;
     col = mix(col, uSkyHor * light * 0.9, 0.12);
     if (uTrip > 0.5) {
-        // TRIP: the sea all marbled neon bands, flowing, ringing the islands near their shores (the depth bends the
-        // bands round them), an orange ring at the waterline
-        vec2 r;
-        // (the bands a little wider far away: calmer toward the horizon, like long strokes)
-        // (marbling: parallel bands, combed by the warps; so there are bands everywhere, none of the noise's flat
-        // patches)
+        // TRIP: the sea in broad neon strokes, flowing, bending round the islands near their shores
+        // (simple: a few broad strokes, one gentle warp of a smooth noise, larger far away, a calm tint toward the
+        // horizon; the islands and the boats are the busy things)
         float tf = t / (alt * 10.0 + 250.0);
-        vec2 p = tripP(wp, 1.6 * (1.0 + t / (alt * 4.0 + 60.0) + tf * tf));
-        float m = marble(p, uFlow, r);
-        float v = dot(p, vec2(0.6, 0.8)) * 1.1 + m * 2.8 + r.x * 0.9 + 0.6 * exp(-depthV / 9.0) + 0.03 * uFlow + 0.04 * uPulse;
-        col = seaCalm(v * 0.75, fwidth(v * 0.75));
+        vec2 p = tripP(wp, 1.7 * (1.0 + t / (alt * 4.0 + 60.0) + tf * tf));
+        float ft = uFlow;
+        vec2 q = vec2(fbm2(p + vec2(0.0, 0.05 * ft)), fbm2(p + vec2(5.2, 1.3) - vec2(0.04 * ft, 0.0)));
+        float v = fbm2(p + 1.7 * q + vec2(0.025 * ft, -0.02 * ft)) * 5.5 + 0.45 * exp(-depthV / 9.0) + 0.015 * ft + 0.03 * uPulse;
+        float far = smoothstep(alt * 6.0 + 300.0, alt * 30.0 + 3500.0, t);
+        col = seaSimple(v, fwidth(v), far);
         // every coast ringed: an orange band on the shallows, a dark violet line outside it
         col = mix(col, tl(vec3(0.3, 0.1, 0.55)), 1.0 - edge(depthV, 3.4));
         col = mix(col, tl(vec3(1.0, 0.5, 0.16)), 1.0 - edge(depthV, 2.5));
