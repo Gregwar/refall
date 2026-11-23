@@ -172,7 +172,7 @@ private:
 
     // ---- GL.
     GLuint progSky_ = 0, progTerrain_ = 0, progObj_ = 0, progWater_ = 0, progCloud_ = 0, progGlow_ = 0, progFlat_ = 0,
-           progGlass_ = 0, progFinal_ = 0, progShape_ = 0;
+           progGlass_ = 0, progFinal_ = 0, progShape_ = 0, progTrip_ = 0;
     GLuint meshVao_[isl::M_COUNT] = {}, meshVbo_[isl::M_COUNT] = {}, instVbo_[isl::M_COUNT] = {};
     int meshCount_[isl::M_COUNT] = {};
     GLuint idx_[isl::LOD_COUNT] = {};
@@ -206,6 +206,14 @@ private:
     // FLAT: the vector illustration (flat fills in two tones, flat pastel tiles, navy lettering)
     bool flat() const;
     vec3 flatLit_{1.f, 1.f, 1.f}, flatShade_{0.78f, 0.82f, 0.9f};
+    // ---- TRIP: the swirls' clock (faster with the energy), the soft beat swell, the ringed sun's heading
+    bool trip() const;
+    float tripScale() const;
+    void tripCornerPanes(const Frame& f);
+    vec2 tripO_{0.f, 0.f};
+    float flowT_ = 0.f, pulse_ = 0.f, tripSunYaw_ = 0.f;
+    bool tripSunInit_ = false;
+    vec3 tripSun_{1, 0.1f, 0};
 
     // ---- Staging: continuous level 0 calm .. 2 peak.
     int level_ = 1;
