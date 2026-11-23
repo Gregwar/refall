@@ -644,20 +644,61 @@ void IslandsUniverse::Spring::step(float target, float omega, float dt) {
     v = nv;
 }
 
-// The altitude the route ahead needs: over every hill, palm and roof the camera must pass, with a margin, and an
-// easy climb toward it (it rises well before).
-float IslandsUniverse::floorAhead(const vec3& from, float yaw, float v) const {
-    (void)from; (void)yaw;
+// The altitude the route ahead needs: over every hill, palm, roof and boat the camera must pass, with a margin, and
+// an easy climb toward it (it rises well before); `hard`, the least it may be now (the same with a steeper climb, a
+// support under the flight: never into a slope the easy climb was too slow for). The ground as drawn (its facets stand above the
+// height function where it dips between their vertices), around the route, a little along the view too (no
+// hillside right in front of the lens), and the boats where they will be when the camera gets there.
+float IslandsUniverse::floorAhead(const vec3& from, float yaw, float v, float& hard) const {
     float need = 3.2f;
+    hard = 0.f;
     const float reach = std::max(500.f, v * 14.f);
+    // (what is this near held at its full height: a sample's spacing, and the lag of the spring easing it in)
+    const float slack = 6.f + 0.7f * v;
+    std::vector<const Boat*> near;
+    for (const std::vector<Boat>* list : {&boats_, &fleet_})
+        for (const Boat& b : *list) {
+            const float dx = b.p.x - from.x, dz = b.p.z - from.z;
+            if (boatTop(b) > 0.f && dx * dx + dz * dz < 400.f * 400.f) near.push_back(&b);
+        }
     for (int i = 0; i <= 70; i++) {
         const float d = i < 40 ? i * 6.f : 240.f + (i - 40) * (reach - 240.f) / 30.f;
         const isl::RoutePt r = world_->route(s_ + d);
-        const float h = world_->obstacle(r.x, r.z);
-        if (h <= 0.3f) continue;
-        need = std::max(need, h + 5.f - d * 0.26f);
+        // (around the samples near, where the eye and its near plane will be; along the line further on)
+        const float h = i < 40 ? world_->groundMax(r.x, r.z, d < slack + 18.f ? 4.f : 0.f) : world_->obstacle(r.x, r.z);
+        if (h > 0.3f) {
+            need = std::max(need, h + 5.f - d * 0.26f);
+            hard = std::max(hard, h + 2.5f - std::max(0.f, d - slack) * 0.6f);
+        }
+        if (i < 40)
+            for (const Boat* b : near) {
+                const float t = d / std::max(v, 1.f);
+                const vec3 at = b->p + vec3(std::cos(b->head), 0.f, std::sin(b->head)) * (b->speed * std::min(t, 8.f));
+                float rad;
+                const float top = boatTop(*b, &rad);
+                rad += 0.6f * b->speed * std::min(t, 8.f);
+                const float dx = at.x - r.x, dz = at.z - r.z;
+                if (dx * dx + dz * dz < rad * rad) {
+                    need = std::max(need, top + 4.f - d * 0.26f);
+                    hard = std::max(hard, top + 2.5f - std::max(0.f, d - slack) * 0.6f);
+                }
+            }
+    }
+    for (int i = 1; i <= 8; i++) {
+        const float d = i * 8.f;
+        const float h = world_->groundMax(from.x + std::cos(yaw) * d, from.z + std::sin(yaw) * d, 0.f);
+        if (h > 0.3f) need = std::max(need, h + 3.f - d * 0.3f);
     }
     return need;
+}
+
+// The top of a boat's mast (or cabin) and how far it reaches around (with a margin), as drawn, or as it will be
+// drawn once grown while it fades in (a boat appearing under the camera must not lift it at once); 0 when gone.
+float IslandsUniverse::boatTop(const Boat& b, float* reach) const {
+    const float k = b.appear < 1.f && b.sink <= 0.f ? std::max(b.scale, b.size) : b.scale;
+    if (reach) *reach = k > 0.02f ? 0.6f * b.len * k + 4.f : 0.f;
+    const float top = b.kind == 0 ? 0.9f + 1.35f * b.len : b.kind == 1 ? 1.2f + 1.3f * b.len : b.kind == 2 ? 2.2f : 1.2f;
+    return k > 0.02f ? top * k : 0.f;
 }
 
 void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
@@ -693,7 +734,8 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     }
     if (hookAlt() > 0.f) target = std::log(hookAlt());
     // ahead: the terrain and what stands on it
-    const float fl = floorAhead(eye_, yaw_, vel_);
+    float hard = 0.f;
+    const float fl = floorAhead(vec3(world_->route(s_).x, 0.f, world_->route(s_).z), yaw_, vel_, hard);
     if (std::log(fl) > target) {
         target = std::log(fl);
         omega = std::max(omega, 0.75f);
@@ -704,14 +746,15 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     }
     logAlt_.step(target, omega, wdt);
     alt_ = std::exp(logAlt_.x);
-    // never into a hill
-    const float here = world_->obstacle(eye_.x, eye_.z) + 2.2f;
-    if (alt_ < here) {
-        alt_ = here;
-        logAlt_.x = std::log(alt_);
-        logAlt_.v = std::max(logAlt_.v, 0.f);
+    // the least altitude, as a support under the flight (smooth: its own fast spring, and a soft max with the
+    // altitude wanted; sampled at points along the route, it would rise in small steps as a narrow peak or a palm
+    // passes from one sample to the next; the check under the eye below holds the margin meanwhile)
+    if (!camInit_) { hardS_.x = hard; hardS_.v = 0.f; }
+    hardS_.step(hard, 4.f, wdt);
+    {
+        const float x = hardS_.x - alt_;
+        alt_ += 0.5f * (x + std::sqrt(x * x + 1.f));
     }
-
     // ---- the speed: from the altitude (the same sense of speed high and low) and the music
     float vT = (9.f + 3.f * std::sqrt(alt_)) * (0.62f + 0.42f * lv_ + 0.25f * energy_ + 0.2f * dropK_) * (hero && hero->orbit ? 0.85f : 1.f) * lerpf(1.f, 0.35f, slow_);
     {
@@ -729,6 +772,26 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     const isl::RoutePt rp = world_->route(s_);
     const isl::RoutePt ra = world_->route(s_ + std::max(30.f, vel_ * 1.6f));
     eye_ = vec3(rp.x, alt_, rp.z);
+    // never into a hill, a roof, a boat: the eye kept above the ground as drawn where it is now (the floor ahead
+    // makes it climb well before; this only catches what it missed), with room for the near plane
+    {
+        float here = std::max(0.f, world_->groundMax(eye_.x, eye_.z, 4.f));
+        for (const std::vector<Boat>* list : {&boats_, &fleet_})
+            for (const Boat& b : *list) {
+                float rad;
+                const float top = boatTop(b, &rad);
+                const float dx = b.p.x - eye_.x, dz = b.p.z - eye_.z;
+                if (dx * dx + dz * dz < rad * rad) here = std::max(here, top);
+            }
+        here += 2.5f;
+        if (alt_ < here) {
+            alt_ = here;
+            eye_.y = alt_;
+            logAlt_.x = std::log(alt_);
+            logAlt_.v = std::max(logAlt_.v, 0.f);
+        }
+        clear_ = alt_ - (here - 2.5f);
+    }
     const float travel = 0.5f * (rp.head + ra.head);
 
     // ---- the view: the island passed kept in the band beside the well
@@ -2223,7 +2286,8 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     }
 
     // ---- The camera's matrices (the eye at the origin).
-    near_ = std::clamp(alt_ * 0.06f, 0.25f, 40.f);
+    // (the near plane well inside the clearance over the ground: high over a summit, it never cuts into the hill)
+    near_ = std::clamp(std::min(alt_ * 0.06f, clear_ * 0.4f), 0.25f, 40.f);
     far_ = std::clamp(std::sqrt(2.f * alt_ / curv_) + 12000.f, 16000.f, 60000.f);
     fov_ = lerpf(52.f, 48.f, smoothstepf(200.f, 2000.f, alt_));
     view_ = mat4::lookAt(vec3(0, 0, 0), fwd_, up_);

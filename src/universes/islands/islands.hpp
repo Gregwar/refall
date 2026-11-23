@@ -52,7 +52,9 @@ private:
     vec3 eye_{0, 60, 0}, fwd_{1, 0, 0}, up_{0, 1, 0}, right_{0, 0, 1};
     float curv_ = 0.f, near_ = 0.5f, far_ = 40000.f, fov_ = 50.f;
     void fly(float dt, float wdt, const std::string& section);
-    float floorAhead(const vec3& from, float yaw, float v) const;
+    float floorAhead(const vec3& from, float yaw, float v, float& hard) const;
+    Spring hardS_;                         // the least altitude now (see floorAhead), eased in
+    float clear_ = 60.f;                   // the eye's height over the ground (and what stands on it) under it
 
     mat4 view_, proj_, vp_, invVp_, lightVp_;
     mat4 bvp_;                             // the board's (the layout's)
@@ -105,6 +107,7 @@ private:
     float trackDist(const vec3& q, vec3* nearest = nullptr) const;
     void steer(Boat& b, float goal, float cruise, float keep, float dt);
     void boatParts(const Boat& b);
+    float boatTop(const Boat& b, float* reach = nullptr) const;
     struct Plane { bool on = false; vec3 p{0, 0, 0}, v{0, 0, 0}; float bank = 0, t = 0; } plane_;
     float planeWait_ = 15.f;
     void updatePlane(float dt);
