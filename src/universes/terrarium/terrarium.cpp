@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <unordered_map>
 
 #include "layout.hpp"
@@ -326,6 +327,31 @@ float neonFlick(float s, float t, float flicker) {
     return f;
 }
 
+// The neighbours of a cell of the same piece, as the pieces' mask (1 left, 2 right, 4 up, 8 down, 16 up left, 32 up
+// right, 64 down left, 128 down right; up on screen: the row above).
+template <class F> int neighbourMask(int x, int y, F same) {
+    const int d[8][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}};
+    int m = 0;
+    for (int k = 0; k < 8; k++)
+        if (same(x + d[k][0], y + d[k][1])) m |= 1 << k;
+    return m;
+}
+// A piece's seed, from its id (the falling piece's the id it will lock with)
+float pieceSeed(int id) { return (float)((splitmix64((uint64_t)(id + 1000003)) >> 40) & 0xFFFF) / 65536.f; }
+// a piece's cells' places in it: from their smallest x and y
+void piecePlaces(const int (*k)[2], int& mx, int& my) {
+    mx = 99; my = 99;
+    for (int i = 0; i < 4; i++) { mx = std::min(mx, k[i][0]); my = std::min(my, k[i][1]); }
+}
+// A piece's cell's mask, from the piece's four cells.
+int pieceMask(const int (*k)[2], int x, int y) {
+    return neighbourMask(x, y, [&](int a, int b) {
+        for (int i = 0; i < 4; i++)
+            if (k[i][0] == a && k[i][1] == b) return true;
+        return false;
+    });
+}
+
 } // namespace
 
 const std::vector<Slot>& TerrariumUniverse::slots() const { return SLOT_LISTS[wrapV(variant_)]; }
@@ -369,7 +395,7 @@ bool TerrariumUniverse::init(int width, int height) {
         }
     };
     instanced(spriteVao_, spriteVbo_, 3, sizeof(SpriteInst));
-    instanced(cellVao_, cellVbo_, 3, sizeof(CellInst));
+    instanced(cellVao_, cellVbo_, 4, sizeof(CellInst));
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
     glBindVertexArray(shapeVao_);
@@ -1066,14 +1092,66 @@ void TerrariumUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         break;
     }
+    case GameEvent::Lock: {
+        // each cell keeps its piece (the cells of a bigger lock, a filled board, each alone)
+        lockCount_++;
+        int mx = 99, my = 99;
+        for (auto& c : ev.cells) { mx = std::min(mx, c.x); my = std::min(my, c.y); }
+        for (auto& c : ev.cells) {
+            if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+            ids_[c.y][c.x] = ev.cells.size() <= 4 ? lockCount_ * 8 + std::clamp(c.type, 0, 6) + 1 : -1 - (c.y * Game::W + c.x);
+            lx_[c.y][c.x] = (signed char)(c.x - mx);
+            ly_[c.y][c.x] = (signed char)(c.y - my);
+        }
+        break;
+    }
     case GameEvent::Clear: {
         bool rows[Game::H] = {};
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) rows[c.y] = true;
+        // a cleared cell stays joined to the cells of its piece cleared with it: they shrink away together, toward
+        // the center of their shape
+        auto clearing = [&](int a, int b, int id) {
+            return id > 0 && a >= 0 && a < Game::W && b >= 0 && b < Game::H && rows[b] && ids_[b][a] == id;
+        };
         for (auto& cl : ev.cells) {
-            if (cl.y < Game::HIDDEN) continue;
+            if (cl.y < Game::HIDDEN || cl.y >= Game::H || cl.x < 0 || cl.x >= Game::W) continue;
             const vec3 p = layout::cellPos((float)cl.x, (float)cl.y);
-            fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), 0.f});
+            const int id = ids_[cl.y][cl.x];
+            const int m = neighbourMask(cl.x, cl.y, [&](int a, int b) { return clearing(a, b, id); });
+            bool seen[Game::H][Game::W] = {};
+            int q[Game::H * Game::W][2], n = 0;
+            float sx = 0.f, sy = 0.f;
+            q[n][0] = cl.x; q[n][1] = cl.y; n++;
+            seen[cl.y][cl.x] = true;
+            for (int i = 0; i < n; i++) {
+                const int x = q[i][0], y = q[i][1];
+                sx += x; sy += y;
+                const int d[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+                for (auto& k : d)
+                    if (clearing(x + k[0], y + k[1], id) && !seen[y + k[1]][x + k[0]]) {
+                        seen[y + k[1]][x + k[0]] = true;
+                        q[n][0] = x + k[0]; q[n][1] = y + k[1]; n++;
+                    }
+            }
+            const vec3 o = layout::cellPos(sx / n, sy / n);
+            fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), 0.f, m, o.x, o.y, pieceSeed(id), (float)lx_[cl.y][cl.x], (float)ly_[cl.y][cl.x]});
+        }
+        // the pieces' ids follow their rows down
+        {
+            int ni[Game::H][Game::W] = {};
+            signed char nx[Game::H][Game::W] = {}, ny[Game::H][Game::W] = {};
+            int dst = Game::H - 1;
+            for (int y = Game::H - 1; y >= 0; y--) {
+                if (rows[y]) continue;
+                std::memcpy(ni[dst], ids_[y], sizeof(ids_[y]));
+                std::memcpy(nx[dst], lx_[y], sizeof(lx_[y]));
+                std::memcpy(ny[dst], ly_[y], sizeof(ly_[y]));
+                dst--;
+            }
+            std::memcpy(ids_, ni, sizeof(ids_));
+            std::memcpy(lx_, nx, sizeof(lx_));
+            std::memcpy(ly_, ny, sizeof(ly_));
         }
         // seeds: from inside the jar, behind the cleared rows, drifting down to the soil (or out onto the bench once
         // the glass is broken); once the lab is overgrown, a puff of pollen from what grows in view
@@ -1105,7 +1183,11 @@ void TerrariumUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells) {
             if (c.y < Game::HIDDEN || c.x < 0 || c.x >= Game::W || c.y >= Game::H) continue;
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
-            overCells_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), (float)c.y});
+            const int id = ids_[c.y][c.x];
+            const int m = id > 0 ? neighbourMask(c.x, c.y, [&](int a, int b) {
+                return a >= 0 && a < Game::W && b >= 0 && b < Game::H && ids_[b][a] == id && game.cell(a, b).type >= 0;
+            }) : 0;
+            overCells_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), (float)c.y, m, p.x, p.y, pieceSeed(id), (float)lx_[c.y][c.x], (float)ly_[c.y][c.x]});
         }
         break;
     }
@@ -1117,31 +1199,58 @@ void TerrariumUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // Pieces
 // =====================================================================================================
 
-void TerrariumUniverse::cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float seed) {
+void TerrariumUniverse::cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float seed, int mask, float lx, float ly) {
     if (alpha <= 0.003f) return;
-    cells_.push_back({{x, y, half, seed}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, 0.f, 0.f}});
+    cells_.push_back({{x, y, half, seed}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, 0.f, (float)mask}, {lx, ly, 0.f, 0.f}});
+}
+
+void TerrariumUniverse::syncCells(const Game& g) {
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) {
+            const bool full = g.cell(x, y).type >= 0;
+            // (a cell of no known piece, or not the one locked there (the board filled anew): alone)
+            if (full && (ids_[y][x] == 0 || (ids_[y][x] > 0 && ids_[y][x] % 8 != g.cell(x, y).type + 1))) {
+                ids_[y][x] = -1 - (y * Game::W + x);
+                lx_[y][x] = ly_[y][x] = 0;
+            }
+            if (!full) ids_[y][x] = 0;
+        }
+}
+
+// A stack cell's mask (a row still falling after a clear joins its piece's cells once it has landed).
+int TerrariumUniverse::gridMask(const Game& g, int x, int y) const {
+    const int id = ids_[y][x];
+    if (id <= 0) return 0;
+    return neighbourMask(x, y, [&](int a, int b) {
+        return a >= 0 && a < Game::W && b >= 0 && b < Game::H && ids_[b][a] == id &&
+               std::fabs(g.rowOffset(b) - g.rowOffset(y)) < 1e-3f;
+    });
 }
 
 void TerrariumUniverse::buildBoard(const Game& g) {
+    syncCells(g);
     auto tintOf = [&](int t) { return pal_.piece[std::clamp(t, 0, 6)]; };
-    auto seedOf = [](int x, int y) { return (float)((x * 7 + y * 13) % 17) / 17.f; };
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
             if (c.type < 0) continue;
             const float off = g.rowOffset(y);
             const vec3 p = layout::cellPos((float)x, y - off);
-            cell(p.x, p.y, 0.5f, tintOf(c.type), 1.f, 0, 0.f, seedOf(x, y));
+            cell(p.x, p.y, 0.5f, tintOf(c.type), 1.f, 0, 0.f, pieceSeed(ids_[y][x]), gridMask(g, x, y), lx_[y][x], ly_[y][x]);
         }
     // game over: the shards dull from the top down
     if (overT_ >= 0.f)
         for (const Fading& o : overCells_) {
             const float rowFrac = (o.t - Game::HIDDEN) / (float)(Game::H - Game::HIDDEN);
             const float k = smoothstepf(rowFrac * 0.6f, rowFrac * 0.6f + 0.3f, over_);
-            cell(o.x, o.y, 0.5f, tintOf(o.type), 1.f - 0.4f * smoothstepf(0.7f, 1.f, over_), 0, 0.f, 0.f);
+            cell(o.x, o.y, 0.5f, tintOf(o.type), 1.f - 0.4f * smoothstepf(0.7f, 1.f, over_), 0, 0.f, o.seed, o.mask, o.lx, o.ly);
             cells_.back().c[2] = k;
         }
-    for (const Fading& f : fading_) cell(f.x, f.y, 0.5f, tintOf(f.type), 1.f, 0, saturate(f.t / CLEAR_T), 0.f);
+    // the cleared cells: shrinking away together toward their shape's center
+    for (const Fading& f : fading_) {
+        const float e = saturate(f.t / CLEAR_T), s = 1.f - 0.7f * smoothstepf(0.f, 1.f, e);
+        cell(f.cx + (f.x - f.cx) * s, f.cy + (f.y - f.cy) * s, 0.5f * s, tintOf(f.type), 1.f, 0, e, f.seed, f.mask, f.lx, f.ly);
+    }
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -1154,21 +1263,27 @@ void TerrariumUniverse::buildBoard(const Game& g) {
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                cell(w.x, w.y, 0.5f, tintOf(p.type), 0.55f, 1, 0.f, 0.f);
+                cell(w.x, w.y, 0.5f, tintOf(p.type), 0.55f, 1, 0.f, 0.f, pieceMask(gc, c[0], c[1]), 0.f, 0.f);
             }
         }
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+        // (its seed the id it will lock with, its cells' places the ones they will keep)
+        const float sd = pieceSeed((lockCount_ + 1) * 8 + std::clamp(p.type, 0, 6) + 1);
+        int mx, my;
+        piecePlaces(cells, mx, my);
         for (auto& c : cells) {
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            cell(w.x, w.y, 0.5f, tintOf(p.type), 1.f, 0, 0.f, seedOf(c[0], c[1]));
+            cell(w.x, w.y, 0.5f, tintOf(p.type), 1.f, 0, 0.f, sd, pieceMask(cells, c[0], c[1]), (float)(c[0] - mx), (float)(c[1] - my));
         }
     }
-    auto preview = [&](int type, vec2 center, float sc, float alpha) {
+    auto preview = [&](int type, vec2 center, float sc, float alpha, float sd) {
         if (type < 0) return;
         Piece p{type, 0, 0, 0};
         int cells[4][2];
         g.pieceCells(p, cells);
+        int mx, my;
+        piecePlaces(cells, mx, my);
         float minx = 9, maxx = -9, miny = 9, maxy = -9;
         for (auto& c : cells) {
             minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
@@ -1176,13 +1291,15 @@ void TerrariumUniverse::buildBoard(const Game& g) {
         }
         for (auto& c : cells) {
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            cell(px, py, 0.5f * sc, tintOf(type), alpha, 0, 0.f, seedOf(c[0], c[1]));
+            cell(px, py, 0.5f * sc, tintOf(type), alpha, 0, 0.f, sd, pieceMask(cells, c[0], c[1]), (float)(c[0] - mx), (float)(c[1] - my));
         }
     };
-    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
+    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f,
+            pieceSeed(std::max(0, g.holdType()) + 7));
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+        // (the next ones already their seeds: the ids they will lock with)
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, pieceSeed((lockCount_ + 2 + i) * 8 + std::clamp(g.next(i), 0, 6) + 1));
     }
 }
 

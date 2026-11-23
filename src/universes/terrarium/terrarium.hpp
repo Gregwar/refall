@@ -133,12 +133,22 @@ private:
     std::vector<Mote> motes_;
 
     // ---- Pieces.
-    struct CellInst { float a[4], b[4], c[4]; };
+    struct CellInst { float a[4], b[4], c[4], d[4]; };
     std::vector<CellInst> cells_;
-    void cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float seed);
+    // (mask: its neighbours of the same piece, 1 left, 2 right, 4 up, 8 down, 16 up left, 32 up right, 64 down
+    // left, 128 down right; the cells of a piece one shard)
+    // (seed: its piece's; lx, ly: the cell's place in its piece: its look the piece's own, the same falling and locked)
+    void cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float seed, int mask, float lx, float ly);
     void buildBoard(const Game& g);
-    struct Fading { float x, y; int type; float t; };
+    struct Fading { float x, y; int type; float t; int mask; float cx, cy, seed, lx, ly; }; // (cx, cy: its shape's center)
     std::vector<Fading> fading_, overCells_;
+    // each locked cell's piece (its lock's number * 8 + its type + 1; 0 empty, < 0 alone): the cells of a piece one
+    // shard, their ids following their rows down on a clear
+    int ids_[Game::H][Game::W] = {};
+    signed char lx_[Game::H][Game::W] = {}, ly_[Game::H][Game::W] = {};   // each cell's place in its piece
+    int lockCount_ = 0;
+    void syncCells(const Game& g);
+    int gridMask(const Game& g, int x, int y) const;
     struct SpriteInst { float a[4], b[4], c[4]; };
     std::vector<SpriteInst> sprites_;
     void sprite(vec2 p, float size, const vec3& col, float alpha, int mode, float param = 0.f, float param2 = 0.f);

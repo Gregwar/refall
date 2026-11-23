@@ -1416,26 +1416,34 @@ void main() {
 )";
 
 // ------------------------------------------------------------------------------------------------ pieces: glass
-// Each cell a shard of the jar's fogged glass: a clean rounded square of its piece's tint, frosted (a fine grain, soft
-// clouds), deeper in tint at its thick edges, a cool sheen across it and a bright bevel on its top left, a crisp
-// darker rim; a crack or two across it, and moss growing in the cracks (more of it as the song goes on), now and then
-// a cushion of it in a corner; a soft contact shadow under it.
+// The cells of a piece are one shard of the jar's fogged glass: a clean shape of its piece's tint (a side shared with
+// a cell of the same piece runs on into it, an inner corner fills only where the diagonal cell is in the piece too,
+// only the shape's outer corners rounded), frosted (a fine grain, soft clouds), deeper in tint at its thick outer
+// edges, a cool sheen, a bright bevel on its top left, a crisp darker rim; a crack running across the whole shard
+// (through the middles of the sides its cells share, branching, never closing on itself), moss growing in tufts along it (more of it as the song goes
+// on), now and then a cushion of moss in an outer corner; a soft contact shadow under it. Each pixel is drawn once:
+// a cell's quad stops at a side it shares, so no seam shows, even translucent.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, seed
 layout(location = 2) in vec4 aB; // tint rgb, alpha
-layout(location = 3) in vec4 aC; // mode (0 block, 1 ghost), erase 0..1, dull, -
+layout(location = 3) in vec4 aC; // mode (0 block, 1 ghost), erase 0..1, dull, the same-piece neighbours' mask
+layout(location = 4) in vec4 aD; // the cell's place in its piece (x, y down), -, -
 uniform mat4 uVP;
 out vec2 vLocal;
 flat out vec4 vA;
 flat out vec4 vB;
 flat out vec4 vC;
-const float EXT = 1.2; // (room for the contact shadow)
+flat out vec4 vD;
 void main() {
-    vec2 wp = aA.xy + aPos * aA.z * EXT;
-    vLocal = aPos * 0.5 * EXT;
-    vA = aA; vB = aB; vC = aC;
-    gl_Position = uVP * vec4(wp, 0.0, 1.0);
+    // the cell spans -0.5..0.5, the quad 0.1 past it (the contact shadow, the antialiased edge), but only to a side
+    // without a neighbour of the same piece
+    int m = int(aC.w + 0.5);
+    vec2 l = aPos * vec2(aPos.x < 0.0 ? ((m & 1) != 0 ? 0.5 : 0.6) : ((m & 2) != 0 ? 0.5 : 0.6),
+                         aPos.y > 0.0 ? ((m & 4) != 0 ? 0.5 : 0.6) : ((m & 8) != 0 ? 0.5 : 0.6));
+    vLocal = l;
+    vA = aA; vB = aB; vC = aC; vD = aD;
+    gl_Position = uVP * vec4(aA.xy + l * 2.0 * aA.z, 0.0, 1.0);
 }
 )";
 inline const char* CELL_FS = R"(#version 330 core
@@ -1443,28 +1451,42 @@ in vec2 vLocal;
 flat in vec4 vA;
 flat in vec4 vB;
 flat in vec4 vC;
+flat in vec4 vD;
 out vec4 frag;
 uniform float uBridge, uMossAmt;
 uniform vec3 uBridgeInk, uLightC, uMossA, uMossB;
 float sdBoxR(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
 float segD(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
-// a point on the square's edge (t: 0..4 around it)
-vec2 onEdge(float t) {
-    t = mod(t, 4.0);
-    float f = fract(t) * 0.8 - 0.4;
-    if (t < 1.0) return vec2(f, -0.46);
-    if (t < 2.0) return vec2(0.46, f);
-    if (t < 3.0) return vec2(-f, 0.46);
+// the piece's shape around this cell (its mask m), shifted by o: a row and a column running on into the neighbours,
+// the corners filled where both sides and the diagonal are in the piece
+float shapeD(vec2 q, int m) {
+    const float h = 0.45, E = 0.75, R = 0.1;
+    vec2 lo = vec2((m & 1) != 0 ? -E : -h, (m & 8) != 0 ? -E : -h);
+    vec2 hi = vec2((m & 2) != 0 ? E : h, (m & 4) != 0 ? E : h);
+    float d = min(sdBoxR(q - vec2(lo.x + hi.x, 0.0) * 0.5, vec2(hi.x - lo.x, 2.0 * h) * 0.5, R),
+                  sdBoxR(q - vec2(0.0, lo.y + hi.y) * 0.5, vec2(2.0 * h, hi.y - lo.y) * 0.5, R));
+    if ((m & 21) == 21) d = min(d, sdBoxR(q - vec2(-0.5, 0.5), vec2(0.5), 0.0));
+    if ((m & 38) == 38) d = min(d, sdBoxR(q - vec2(0.5, 0.5), vec2(0.5), 0.0));
+    if ((m & 73) == 73) d = min(d, sdBoxR(q - vec2(-0.5, -0.5), vec2(0.5), 0.0));
+    if ((m & 138) == 138) d = min(d, sdBoxR(q - vec2(0.5, -0.5), vec2(0.5), 0.0));
+    return d;
+}
+// a point on an outer side (s: 0 bottom, 1 right, 2 top, 3 left; f along it)
+vec2 onSide(int s, float f) {
+    f = f * 0.6 - 0.3;
+    if (s == 0) return vec2(f, -0.46);
+    if (s == 1) return vec2(0.46, f);
+    if (s == 2) return vec2(-f, 0.46);
     return vec2(-0.46, -f);
 }
 void main() {
     int mode = int(vC.x + 0.5);
+    int m = int(vC.w + 0.5);
     float erase = vC.y;
     float aa = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
-    float shrink = 1.0 - 0.7 * smoothstep(0.0, 1.0, erase);
-    vec2 q = vLocal / shrink;
-    float d = sdBoxR(q, vec2(0.45), 0.1);
-    float inside = 1.0 - smoothstep(-aa, aa, d * shrink);
+    vec2 q = vLocal;
+    float d = shapeD(q, m);
+    float inside = 1.0 - smoothstep(-aa, aa, d);
     vec3 t = vB.rgb;
     if (mode == 1) {
         float ring = 1.0 - smoothstep(0.022, 0.022 + aa * 1.5, abs(d + 0.035));
@@ -1474,57 +1496,78 @@ void main() {
         return;
     }
     // the contact shadow, down and right, outside the shard only
-    float ds = sdBoxR(q - vec2(0.045, -0.06), vec2(0.45), 0.1);
+    float ds = shapeD(q - vec2(0.045, -0.06), m);
     float shadow = (1.0 - smoothstep(-0.02, 0.08, ds)) * (1.0 - inside) * 0.55 * (1.0 - smoothstep(0.0, 0.5, erase));
-    vec2 sd = vA.xy * vec2(0.173, 0.291) + vA.w;
-    float h0 = hash(floor(sd * 13.0) + 0.5), h1 = hash(floor(sd * 7.0) + 3.1), h2 = hash(floor(sd * 5.0) + 7.7);
+    // the pattern is the piece's own (its seed, the cell's place in it): the same as it falls, lands and sits in the
+    // stack, running on across its cells
+    vec2 cellP = vec2(vD.x, -vD.y);
+    float h0 = hash(cellP + vA.w * 61.3 + 0.5), h1 = hash(cellP + vA.w * 37.1 + 3.1), h2 = hash(cellP + vA.w * 17.9 + 7.7);
+    vec2 P = cellP + q + vec2(fract(vA.w * 13.7), fract(vA.w * 7.3)) * 40.0;
+    const float S = 1.0;
     // frosted glass: milky in its middle (its tint softened), clear and deep in tint at its thick edges, lighter where
     // the light comes through (top left), soft clouds, a fine grain
     float e = sat(-d / 0.16);
     float lum = dot(t, vec3(0.3, 0.5, 0.2));
     vec3 milk = mix(t, vec3(lum) * 1.15 + 0.08, 0.32);
-    float cloud = fbm(q * 2.4 + sd * 11.0);
+    float cloud = fbm(P * S * 2.4 + 3.7);
     vec3 c = milk * (0.88 + 0.22 * smoothstep(0.25, 0.8, cloud));
-    c *= 0.86 + 0.24 * sat(dot(q, vec2(-0.55, 0.55)) + 0.5);
-    c *= 0.95 + 0.07 * hash(floor((q + sd) * 80.0));
+    c *= 0.95 + 0.07 * hash(floor(P * S * 80.0));
     // the thick edge: clear, its tint deep, a bright line inside it where its facet catches the light
     vec3 deep = t * t * 0.95 + t * 0.06;
     c = mix(deep, c, smoothstep(0.0, 0.75, e));
-    float facet = smoothstep(0.09, 0.0, abs(-d - 0.075)) * sat(dot(normalize(q + 1e-5), vec2(-0.6, 0.8)) + 0.2);
+    vec2 gn = normalize(vec2(shapeD(q + vec2(0.01, 0.0), m) - d, shapeD(q + vec2(0.0, 0.01), m) - d) + 1e-6);
+    float facet = smoothstep(0.09, 0.0, abs(-d - 0.075)) * sat(dot(gn, vec2(-0.6, 0.8)) + 0.2);
     c += mix(uLightC, t, 0.25) * facet * 0.35;
     // a soft sheen across it
-    float sheen = smoothstep(0.1, 0.0, abs(dot(q, vec2(0.7071, 0.7071)) - 0.16 + 0.2 * h0)) * 0.12;
+    float sheen = smoothstep(0.1, 0.0, abs(fract(dot(cellP + q, vec2(0.7071, 0.7071)) * 0.33 + 0.3) - 0.5)) * 0.1;
     c += mix(uLightC, t, 0.4) * sheen * e;
-    // the cracks: one across it, a second branching off on some
-    vec2 a0 = onEdge(h0 * 4.0), b0 = onEdge(h0 * 4.0 + 1.6 + 0.9 * h1);
-    vec2 k0 = mix(a0, b0, 0.4 + 0.2 * h2) + vec2(h1 - 0.5, h2 - 0.5) * 0.22;
+    // the crack: through the middles of the sides shared with the piece's other cells (the neighbours do the same:
+    // it runs on across the shard), to an outer side where the cell has a single neighbour or none
+    vec2 sh[4];
+    int ns = 0;
+    // (a tree over the piece's cells, never a loop: a cell joins its left neighbour, or else the one below it)
+    if ((m & 1) != 0) sh[ns++] = vec2(-0.5, 0.0);
+    if ((m & 2) != 0) sh[ns++] = vec2(0.5, 0.0);
+    if ((m & 4) != 0 && (m & 16) == 0) sh[ns++] = vec2(0.0, 0.5);
+    if ((m & 8) != 0 && (m & 1) == 0) sh[ns++] = vec2(0.0, -0.5);
+    vec2 a0, b0;
+    if (ns == 0) { a0 = onSide(int(h0 * 4.0), h1); b0 = onSide((int(h0 * 4.0) + 2) % 4, h2); }
+    else if (ns == 1) {
+        a0 = sh[0];
+        // the opposite side (or a neighbouring one)
+        int s = abs(a0.x) > 0.1 ? (a0.x < 0.0 ? 1 : 3) : (a0.y < 0.0 ? 2 : 0);
+        if (h1 > 0.6) s = (s + 1) % 4;
+        b0 = onSide(s, h2);
+    } else { a0 = sh[0]; b0 = sh[1]; }
+    vec2 k0 = (a0 + b0) * 0.5 + vec2(h1 - 0.5, h2 - 0.5) * 0.18;
     float dc = min(segD(q, a0, k0), segD(q, k0, b0));
-    float along = length(q - a0);
-    if (h1 > 0.6) {
-        vec2 c1 = onEdge(h0 * 4.0 + 2.9 + 0.5 * h2);
-        dc = min(dc, segD(q, k0, mix(k0, c1, 0.6)));
-    }
+    if (ns >= 3) dc = min(dc, segD(q, k0, sh[2]));
+    if (ns >= 4) dc = min(dc, segD(q, k0, sh[3]));
+    float along = length(P * S - floor(P * S));
     float crackW = 0.007 + aa * 0.6;
     float crk = smoothstep(crackW, crackW * 0.3, dc) * inside;
-    // moss in the cracks (fuzzy, in tufts along them, wider as the song goes on), a cushion in a corner on some
-    float fuzz = vnoise(q * 30.0 + sd * 5.0);
-    float tufts = smoothstep(0.35, 0.65, vnoise(vec2(along * 7.0, h0 * 9.0)));
+    // moss along the crack, in tufts (wider as the song goes on); a cushion in an outer corner on some
+    float fuzz = vnoise(P * S * 30.0);
+    float tufts = smoothstep(0.35, 0.65, vnoise(P * S * 3.5 + h0 * 9.0));
     float wM = (0.01 + 0.055 * uMossAmt * tufts) * (0.65 + 0.7 * fuzz);
     float mossC = smoothstep(wM, wM * 0.45, dc) * smoothstep(0.02, 0.18, uMossAmt) * (0.35 + 0.65 * tufts);
-    vec2 corner = vec2(h2 > 0.5 ? 0.45 : -0.45, -0.45);
+    bool right = h2 > 0.5;
+    bool outer = (m & 8) == 0 && (m & (right ? 2 : 1)) == 0;
+    vec2 corner = vec2(right ? 0.45 : -0.45, -0.45);
     float cr = length(q - corner) - (0.05 + 0.2 * uMossAmt * step(0.55, h1)) * (0.7 + 0.6 * fuzz);
-    float mossK = smoothstep(0.012, -0.012, cr) * step(0.55, h1) * smoothstep(0.1, 0.35, uMossAmt);
+    float mossK = smoothstep(0.012, -0.012, cr) * step(0.55, h1) * smoothstep(0.1, 0.35, uMossAmt) * (outer ? 1.0 : 0.0);
     float mossM = max(mossC, mossK) * inside;
     // the crack itself: a bright line where its faces catch the light, a dark hairline beside it
     c = mix(c, mix(t, vec3(1.0), 0.8), crk * 0.8);
-    float side = segD(q - vec2(0.012, -0.012), a0, k0);
-    c *= 1.0 - 0.35 * smoothstep(crackW, 0.0, min(side, segD(q - vec2(0.012, -0.012), k0, b0))) * inside * (1.0 - crk);
-    vec3 mc = mix(uMossB * 0.7, uMossA * 0.85, smoothstep(0.3, 0.8, vnoise(q * 55.0 + sd)) * 0.7 + 0.3 * fuzz);
-    mc *= 0.8 + 0.35 * step(0.72, hash(floor(q * 95.0 + sd)));
+    vec2 qs = q - vec2(0.012, -0.012);
+    float side = min(segD(qs, a0, k0), segD(qs, k0, b0));
+    c *= 1.0 - 0.35 * smoothstep(crackW, 0.0, side) * inside * (1.0 - crk);
+    vec3 mc = mix(uMossB * 0.7, uMossA * 0.85, smoothstep(0.3, 0.8, vnoise(P * S * 55.0)) * 0.7 + 0.3 * fuzz);
+    mc *= 0.8 + 0.35 * step(0.72, hash(floor(P * S * 95.0)));
     c = mix(c, mc, mossM);
     // the rim: a thin bright bevel on its top left, a crisp darker line all round
     float edgeIn = 1.0 - smoothstep(0.0, 0.04, -d);
-    c = mix(c, mix(t, vec3(1.0), 0.75), edgeIn * sat(dot(normalize(q + 1e-5), vec2(-0.6, 0.8))) * 0.65);
+    c = mix(c, mix(t, vec3(1.0), 0.75), edgeIn * sat(dot(gn, vec2(-0.6, 0.8))) * 0.65);
     c = mix(c, t * 0.32, 1.0 - smoothstep(0.0, 0.026 + aa, -d));
     c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.5);
     float dull = vC.z;
