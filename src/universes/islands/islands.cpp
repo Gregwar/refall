@@ -1837,9 +1837,12 @@ void IslandsUniverse::buildBoard(const Game& g) {
     pane(0.f, 0.f, 5.1f, 10.1f, PANE_A);
     const float x0 = layout::HOLD_CENTER.x, x1 = layout::nextCenter(0).x;
     pane(x0, 7.9f, 1.7f, 2.1f);
-    pane(x1, 4.85f, 1.7f, 5.15f);
-    pane(x0, -2.05f, 1.7f, 4.25f);                         // score, lines, level, best, the speed
-    pane(x1, layout::GAUGE_CENTER.y - 0.75f, 1.7f, 2.05f);  // the bonus gauge and its label
+    pane(x0, -2.05f, 1.7f, 4.25f); // score, lines, level, best, the speed
+    {
+        // NEXT and the bonus gauge (and its label) in one pane
+        const float top = 10.f, bottom = layout::GAUGE_CENTER.y - 2.8f;
+        pane(x1, (top + bottom) * 0.5f, 1.7f, (top - bottom) * 0.5f);
+    }
     auto dullAt = [&](int y) {
         if (overT_ < 0.f) return 0.f;
         return smoothstepf(0.f, 0.5f, overT_ - 0.05f * (float)(y - Game::HIDDEN));
