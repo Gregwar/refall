@@ -76,6 +76,10 @@ uniform float uTrip;        // 1: the TRIP look
 uniform float uFlow;        // its clock: the swirls' flow (faster with the music's energy)
 uniform float uPulse;       // a soft swell on the beat (smooth: no flicker)
 uniform float uTripScale;   // the swirls' size (world meters per noise unit)
+uniform vec2 uTripO;        // the field's coordinates under the eye (carried along as it flies, so the swirls stay
+                            // anchored to the sea, and a change of size zooms about the eye, never slides)
+// the field's coordinates of a point of the sea (k: how much larger the swirls are there)
+vec2 tripP(vec2 wp, float k) { return uTripO / k + (wp - uEye.xz) / (uTripScale * k); }
 vec3 tl(vec3 c) { return pow(c, vec3(2.2)); }
 float fbm3(vec2 p) {
     float s = 0.0, a = 0.5;
@@ -106,7 +110,7 @@ vec3 seaBands(float v, float w) {
     c = tstep(c, green, x, 0.865, aa);
     // finer than a pixel: the palette's mean
     vec3 mean = green * 0.35 + turq * 0.27 + orange * 0.29 + (lime + violet + magenta) * 0.03;
-    return mix(c, mean, smoothstep(0.12, 0.4, w));
+    return mix(c, mean, smoothstep(0.06, 0.3, w));
 }
 // the greens' bands: acid green, teal, a yellow line
 vec3 landBands(float v, float w) {
@@ -118,7 +122,7 @@ vec3 landBands(float v, float w) {
     c = tstep(c, yellow, x, 0.86, aa);
     c = tstep(c, green, x, 0.92, aa);
     vec3 mean = green * 0.5 + teal * 0.42 + yellow * 0.08;
-    return mix(c, mean, smoothstep(0.12, 0.4, w));
+    return mix(c, mean, smoothstep(0.06, 0.3, w));
 }
 // an object's color pushed to neon: saturated, the whites to pale pastels (by its seed)
 vec3 tripNeon(vec3 a, float seed) {
@@ -295,7 +299,7 @@ void main() {
         // (the field and its footprint out of the material's branch: derivatives need every pixel of the quad)
         vec2 r;
         vec2 wp = vRel.xz + uEye.xz;
-        float m = marble(wp / (uTripScale * 0.7) + 31.0, uFlow * 0.8, r);
+        float m = marble(tripP(wp, 1.4) + 31.0, uFlow * 0.8, r);
         float v = m * 2.6 + r.y * 0.6 + 0.03 * uFlow;
         float vw = fwidth(v);
         if (h >= 0.0 && rockK <= 0.45 && vegK > 0.5 && sandK < 0.75) col = landBands(v, vw);
@@ -485,7 +489,7 @@ void main() {
     vec3 treeCol = vec3(0.0);
     if (uTrip > 0.5) {
         vec2 r;
-        float m = marble(world.xz / (uTripScale * 0.7) + 31.0, uFlow * 0.8, r);
+        float m = marble(tripP(world.xz, 1.4) + 31.0, uFlow * 0.8, r);
         float v = m * 2.6 + r.y * 0.6 + 0.03 * uFlow;
         treeCol = landBands(v + 0.18, fwidth(v));
     }
@@ -609,9 +613,10 @@ void main() {
         // (the bands a little wider far away: calmer toward the horizon, like long strokes)
         // (marbling: parallel bands, combed by the warps; so there are bands everywhere, none of the noise's flat
         // patches)
-        vec2 p = wp / (uTripScale * 0.5 * (1.0 + t / (alt * 7.0 + 100.0)));
+        float tf = t / (alt * 10.0 + 250.0);
+        vec2 p = tripP(wp, 1.0 + t / (alt * 4.0 + 60.0) + tf * tf);
         float m = marble(p, uFlow, r);
-        float v = dot(p, vec2(0.6, 0.8)) * 2.2 + m * 4.0 + r.x * 1.2 + 1.1 * exp(-depthV / 7.0) + 0.035 * uFlow + 0.05 * uPulse;
+        float v = dot(p, vec2(0.6, 0.8)) * 1.7 + m * 4.0 + r.x * 1.2 + 1.1 * exp(-depthV / 7.0) + 0.035 * uFlow + 0.05 * uPulse;
         col = seaBands(v, fwidth(v));
         col = mix(col, tl(vec3(1.0, 0.53, 0.18)), 1.0 - edge(depthV, 1.6));
     }

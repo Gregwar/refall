@@ -491,6 +491,8 @@ vec3 IslandsUniverse::backdrop() const {
     return mixDisplay(sky_.hor, lin(VARIANTS[variant_].shallow), 0.35f);
 }
 bool IslandsUniverse::trip() const { return VARIANTS[variant_].trip != 0; }
+// TRIP: the swirls' size (world meters per unit of their field), from the altitude
+float IslandsUniverse::tripScale() const { return std::min(35.f + alt_ * 0.85f, 2500.f); }
 vec3 IslandsUniverse::pieceCol(int t) const { return lin(VARIANTS[variant_].piece[std::clamp(t, 0, 6)]); }
 
 void IslandsUniverse::setSong(const SongLook& t, float seconds) {
@@ -2167,7 +2169,8 @@ void IslandsUniverse::setCommon(GLuint p) {
     set1f(p, "uTrip", V.trip ? 1.f : 0.f);
     set1f(p, "uFlow", flowT_);
     set1f(p, "uPulse", pulse_);
-    set1f(p, "uTripScale", std::clamp(alt_ * 2.2f, 40.f, 5000.f));
+    set1f(p, "uTripScale", tripScale());
+    ugl::set2f(p, "uTripO", tripO_.x, tripO_.y);
     const int nc = (int)(cloudShadows_.size() / 4);
     set1i(p, "uNumClouds", nc);
     if (nc > 0) glUniform4fv(ugl::U(p, "uClouds"), nc, cloudShadows_.data());
@@ -2310,7 +2313,15 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     }
 
     // ---- The flight, the world streaming around it.
+    const vec3 eyeWas = eye_;
+    const bool flying = camInit_;
     fly(dt, wdt, section);
+    if (flying) {
+        // (TRIP: the swirls' field carried along with the eye, at their size here)
+        const float sc = tripScale();
+        tripO_.x += (eye_.x - eyeWas.x) / sc;
+        tripO_.y += (eye_.z - eyeWas.z) / sc;
+    }
     // the setup tilts the view down from the sky onto the sea, the teardown back up (the look only, not the flight)
     {
         const float in = 1.f - smoothstepf(0.f, 0.8f, f.setup), out = smoothstepf(0.05f, 0.95f, f.teardown);

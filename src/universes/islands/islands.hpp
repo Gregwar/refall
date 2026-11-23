@@ -202,6 +202,8 @@ private:
     vec3 backdrop() const;
     // ---- TRIP: the swirls' clock (faster with the energy), the soft beat swell, the ringed sun's heading
     bool trip() const;
+    float tripScale() const;
+    vec2 tripO_{0.f, 0.f};
     float flowT_ = 0.f, pulse_ = 0.f, tripSunYaw_ = 0.f;
     bool tripSunInit_ = false;
     vec3 tripSun_{1, 0.1f, 0};
