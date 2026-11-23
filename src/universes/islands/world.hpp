@@ -57,6 +57,7 @@ struct Style {
     float fillP;         // a filler island in a cell
     bool dry;            // Mediterranean: olives and cypresses, white cube villages, narrow shelves, more cliffs
     bool thatch;         // Polynesian: overwater bungalows on most villages, peaks in the atolls
+    bool flat;           // FLAT: a few trees only (the greens plain flat fills)
     vec3 villageWalls[4];
     vec3 roof, hull[3], sailCol, canvas[3], accentWood;
 };

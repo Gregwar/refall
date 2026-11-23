@@ -156,6 +156,7 @@ private:
     struct Grain { vec3 p, v; float t, life, size; };
     std::vector<Grain> grains_;
     std::vector<float> flat_;
+    std::vector<float> tiles_;             // FLAT's tiles (flat_'s format, drawn over it)
     void quad(const vec3& c, float hw, float hh, const vec3& col, float a, float sx, float sy);
     void line(float x0, float y0, float x1, float y1, float z, float w, const vec3& col, float a);
     vec3 pieceCol(int type) const;
@@ -200,6 +201,9 @@ private:
     Sky sky_;
     float lights_ = 0.f, night_ = 0.f;
     vec3 backdrop() const;
+    // FLAT: the vector illustration (flat fills in two tones, flat pastel tiles, navy lettering)
+    bool flat() const;
+    vec3 flatLit_{1.f, 1.f, 1.f}, flatShade_{0.78f, 0.82f, 0.9f};
 
     // ---- Staging: continuous level 0 calm .. 2 peak.
     int level_ = 1;
