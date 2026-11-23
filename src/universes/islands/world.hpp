@@ -105,6 +105,9 @@ Ground groundAt(const Island& I, float lx, float lz);
 inline float heightAt(const Island& I, float lx, float lz) { return groundAt(I, lx, lz).h; }
 // The terrain grid of an island (N x N vertices over [-ext, ext]^2, local coordinates).
 std::vector<float> buildTerrain(const Island& I, int n);
+// The island's terrain as drawn at a local point: its grid at the level of detail uploaded (flat facets between
+// jittered vertices, which stand above the height function where it dips between them); -45 off the grid.
+float drawnHeight(const Island& I, float lx, float lz);
 
 // ---------------------------------------------------------------- the route and the archipelago
 struct RoutePt { float x, z, head, curv; double s; };
@@ -127,6 +130,16 @@ public:
     // The highest thing at a point (terrain and what stands on it), and the terrain alone.
     float obstacle(float x, float z) const;
     float terrain(float x, float z) const;
+    // The terrain or what stands on it (below the sea too: the depth where nothing stands).
+    float solid(float x, float z) const;
+    // The ground as drawn (the islands' facets) at (x, z) and at six points around it at r, the highest, and what
+    // stands within r of it (the obstacles).
+    float groundMax(float x, float z, float r) const;
+    // An island's grid within r of (x, z) (else only the open sea's floor there: a quick test before the others);
+    // the islands whose grids are, and solid() among those only (many tests in one place).
+    bool landNear(float x, float z, float r) const;
+    void islandsNear(float x, float z, float r, std::vector<const Island*>& out) const;
+    static float solidAmong(const std::vector<const Island*>& list, float x, float z);
     // Moves everything by (-dx, -dz) (the camera stays near the origin).
     void rebase(float dx, float dz);
     const Hero* heroNear(double s, double ahead, double behind) const;

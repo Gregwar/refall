@@ -560,8 +560,17 @@ void IslandsUniverse::buildWorld() {
     s_ = hookS();
     camInit_ = false;
     builtVariant_ = variant_;
-    // the world near the start, at once (later islands stream in)
+    // the world around the start, all of it at once (later islands stream in a few a frame): the first boats are
+    // placed on a sea whose islands are all there
     world_->update(vec3(0, 60, 0), s_, 9000.f);
+    {
+        const isl::RoutePt r0 = world_->route(s_);
+        for (int i = 0; i < 80; i++) {
+            const size_t n = world_->islands.size();
+            world_->update(vec3(r0.x, 60, r0.z), s_, 9000.f);
+            if (i > 4 && world_->islands.size() == n) break;
+        }
+    }
     fleet_.clear();
     pods_.clear();
     sparks_.clear();
@@ -577,6 +586,7 @@ void IslandsUniverse::buildWorld() {
             b.latN = (rng_.chance(0.5f) ? 1.f : -1.f) * rng_.range(60.f, 260.f);
             b.launchT = 99.f;
             b.unfurl = 1.f;
+            b.place = true;
         }
         flocks_.clear();
     }
@@ -779,6 +789,117 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
 // Life: boats, the seaplane, birds, lanterns, clouds
 // =====================================================================================================
 
+// The water is open at (x, z) for a hull reaching r around it: deeper than `depth` there and at eight points around
+// it, nothing standing in it either (jetties, stilts, rocks).
+bool IslandsUniverse::seaClear(float x, float z, float r, float depth) const {
+    if (!world_->landNear(x, z, r)) return true;
+    if (world_->solid(x, z) > -depth) return false;
+    for (int k = 0; k < 8; k++) {
+        const float a = (float)k * (TAU / 8.f);
+        if (world_->solid(x + std::cos(a) * r, z + std::sin(a) * r) > -depth) return false;
+    }
+    return true;
+}
+
+// A boat touching land: the water under its middle, bow, stern or sides (its hull as drawn) too shallow, by the
+// height function or by the facets drawn (coarser far away).
+bool IslandsUniverse::aground(const Boat& b) const {
+    const vec3 d(std::cos(b.head), 0.f, std::sin(b.head)), sd(-d.z, 0.f, d.x);
+    const float L = 0.5f * b.len * b.size, W = 0.5f * b.beam * b.size;
+    if (!world_->landNear(b.p.x, b.p.z, L + W)) return false;
+    const vec3 pts[5] = {b.p, b.p + d * L, b.p - d * L, b.p + sd * W, b.p - sd * W};
+    for (const vec3& q : pts)
+        if (world_->solid(q.x, q.z) > -0.3f || world_->groundMax(q.x, q.z, 0.f) > -0.3f) return true;
+    return false;
+}
+
+// How far from the camera's track (the route it flies, from a little behind it to well ahead) a point is.
+float IslandsUniverse::trackDist(const vec3& q, vec3* nearest) const {
+    float best = 1e9f;
+    for (size_t i = 0; i + 1 < track_.size(); i++) {
+        const vec3 a = track_[i], ab = track_[i + 1] - a;
+        const float t = std::clamp(dot(q - a, ab) / std::max(dot(ab, ab), 1e-4f), 0.f, 1.f);
+        const vec3 c = a + ab * t;
+        const float dd = length(vec3(q.x - c.x, 0.f, q.z - c.z));
+        if (dd < best) {
+            best = dd;
+            if (nearest) *nearest = c;
+        }
+    }
+    return best;
+}
+
+// How far a boat can sail on a heading (up to `look`): open water under its bow and a margin on each side of its
+// hull all along, and (keep > 0) never nearer the camera's track than that, unless it is moving away from it (the
+// camera overtakes the fleet: a boat stays off its way, and one caught on it gets off).
+float IslandsUniverse::seaRun(const Boat& b, float head, float look, float keep) const {
+    const vec3 d(std::cos(head), 0.f, std::sin(head)), sd(-d.z, 0.f, d.x);
+    const float S = b.len * b.size;
+    const float bow = 0.5f * S + 2.f, half = 0.5f * b.beam * b.size + 2.f + 0.12f * S;
+    const float depth = b.kind == 3 ? 0.4f : 1.f;
+    static std::vector<const isl::Island*> near; // (the islands along the way, once: many tests there)
+    world_->islandsNear(b.p.x + d.x * (0.5f * look + bow), b.p.z + d.z * (0.5f * look + bow), 0.5f * look + bow + half, near);
+    const bool land = !near.empty();
+    if (!land && keep <= 0.f) return look;
+    auto solid = [&](const vec3& q) { return isl::World::solidAmong(near, q.x, q.z); };
+    float prevTrack = keep > 0.f ? trackDist(b.p) : 0.f;
+    if (prevTrack > look + bow + half + keep) keep = 0.f; // (far from it whatever the heading)
+    if (!land && keep <= 0.f) return look;
+    const int n = std::clamp((int)(look / std::max(8.f, bow)), 6, 18); // (steps short enough not to miss a reef's spit)
+    for (int i = 1; i <= n; i++) {
+        const float t = look * (float)i / (float)n;
+        const vec3 q = b.p + d * (t + bow);
+        const vec3 l = q - sd * half, r = q + sd * half;
+        bool closed = land && (solid(q) > -depth || solid(l) > -depth || solid(r) > -depth);
+        if (keep > 0.f && !closed) {
+            const float td = trackDist(q);
+            closed = td < keep && td < prevTrack;
+            prevTrack = td;
+        }
+        if (closed) return look * (float)(i - 1) / (float)n;
+    }
+    return look;
+}
+
+// The helm: a boat only ever moves along its heading (bow first, never sideways). A few times a second it looks for
+// the open heading nearest the course it wants (land and a margin ahead, far enough to turn before the shore), it
+// turns toward it no faster than its rate (the rudder eased in and out), and it slows down while the way is closed.
+void IslandsUniverse::steer(Boat& b, float goal, float cruise, float keep, float dt) {
+    const float rate = (b.kind == 2 ? 0.45f : b.kind == 3 ? 0.6f : 0.28f) / std::sqrt(std::max(1.f, b.size));
+    const float look = std::min(650.f, b.len * b.size * 1.2f + std::max(b.speed, 0.5f * cruise) * (6.f + 2.f / rate));
+    b.plan -= dt;
+    if (b.plan <= 0.f) {
+        b.plan = 0.12f + 0.05f * std::fmod(b.len * 7.13f, 1.f);
+        float best = goal, bestCost = 1e9f, longest = -1.f, longestH = b.head;
+        auto consider = [&](float h) {
+            const float run = seaRun(b, h, look, keep);
+            if (run > longest + 1e-3f) { longest = run; longestH = h; }
+            if (run < look) return;
+            // (the nearest the course wanted, and a little the nearest its heading: it keeps to the side it took)
+            const float cost = std::fabs(std::remainder(h - goal, TAU)) + 0.25f * std::fabs(std::remainder(h - b.head, TAU));
+            if (cost < bestCost) { bestCost = cost; best = h; }
+        };
+        consider(goal);
+        if (bestCost > 1e8f) {
+            static const float fan[] = {0.3f, 0.6f, 0.9f, 1.25f, 1.6f, 2.f, 2.5f};
+            for (float o : fan) { consider(b.head + o); consider(b.head - o); }
+            consider(b.head + PI);
+        }
+        b.open = bestCost < 1e8f ? 1.f : longest / look;
+        b.want = bestCost < 1e8f ? best : longestH;
+        b.ahead = seaRun(b, b.head, look, keep);
+    }
+    const float maxRate = rate * (b.open < 1.f ? 1.6f : 1.f);
+    const float wantRate = std::clamp(std::remainder(b.want - b.head, TAU) * 0.8f, -maxRate, maxRate);
+    b.turn += std::clamp(wantRate - b.turn, -maxRate * 1.5f * dt, maxRate * 1.5f * dt);
+    b.head += b.turn * dt;
+    // (never faster than it could stop short of what is ahead on its present heading: it brakes while it turns away,
+    // boxed in it comes to a stop and comes about)
+    const float v = std::min(cruise * (b.open < 1.f ? lerpf(0.3f, 0.8f, b.open) : 1.f), b.ahead / 4.f);
+    b.speed = approach(b.speed, v, b.speed > v ? 1.5f : 0.8f, dt);
+    b.p = b.p + vec3(std::cos(b.head), 0.f, std::sin(b.head)) * (b.speed * dt);
+}
+
 void IslandsUniverse::spawnBoat(bool initial) {
     for (int tries = 0; tries < 16; tries++) {
         Boat b;
@@ -810,10 +931,17 @@ void IslandsUniverse::spawnBoat(bool initial) {
             const float d = initial ? rng_.range(150.f, 2600.f) : rng_.range(1300.f, 3000.f);
             const float a = yaw_ + rng_.range(-1.f, 1.f);
             p = vec3(eye_.x + std::cos(a) * d, 0.f, eye_.z + std::sin(a) * d);
-            if (world_->terrain(p.x, p.z) > -3.f) continue;
             b.kind = r < 0.45f ? 0 : r < 0.62f ? 1 : 2;
             b.head = rng_.range(0.f, TAU);
         }
+        switch (b.kind) {
+        case 0: b.len = rng_.range(9.f, 13.f); b.beam = b.len * 0.32f; b.cruise = rng_.range(3.f, 5.f); break;
+        case 1: b.len = rng_.range(11.f, 14.f); b.beam = b.len * 0.5f; b.cruise = rng_.range(3.5f, 5.5f); break;
+        case 2: b.len = rng_.range(7.f, 10.f); b.beam = b.len * 0.34f; b.cruise = rng_.range(11.f, 17.f); break;
+        default: b.len = 4.f; b.beam = 0.65f; b.cruise = 1.2f; break;
+        }
+        // its whole hull on open water with a margin around it (in the shallows, water deep enough to float)
+        if (!seaClear(p.x, p.z, 0.65f * b.len + 2.f, shallow ? (b.kind == 3 ? 0.4f : 0.8f) : 3.f)) continue;
         if (!initial) {
             // never born inside the view unless far in the haze (and even then it fades in)
             const vec3 d(p.x - eye_.x, 0.f, p.z - eye_.z);
@@ -825,14 +953,9 @@ void IslandsUniverse::spawnBoat(bool initial) {
         b.scale = b.appear; // (born invisible: its first frame must not show it at full size)
         b.p = p;
         b.phase = rng_.range(0.f, 50.f);
-        switch (b.kind) {
-        case 0: b.len = rng_.range(9.f, 13.f); b.beam = b.len * 0.32f; b.cruise = rng_.range(3.f, 5.f); break;
-        case 1: b.len = rng_.range(11.f, 14.f); b.beam = b.len * 0.5f; b.cruise = rng_.range(3.5f, 5.5f); break;
-        case 2: b.len = rng_.range(7.f, 10.f); b.beam = b.len * 0.34f; b.cruise = rng_.range(11.f, 17.f); break;
-        default: b.len = 4.f; b.beam = 0.65f; b.cruise = 1.2f; break;
-        }
         if (b.moored) b.cruise = 0.f;
         b.speed = b.cruise;
+        b.goal = b.want = b.head;
         const isl::Style st = styleFor(variant_);
         const float c = rng_.uniform();
         if (b.kind == 3) {
@@ -849,21 +972,20 @@ void IslandsUniverse::updateBoats(float dt) {
     for (Boat& b : boats_) {
         b.phase += dt;
         b.age += dt;
-        if (b.cruise > 0.f) {
-            const vec3 d(std::cos(b.head), 0, std::sin(b.head));
-            const float look = b.len * 2.f + b.speed * 8.f;
-            const float ahead = world_->terrain(b.p.x + d.x * look, b.p.z + d.z * look);
-            float tr = 0.f;
-            if (ahead > -2.5f) {
-                // land ahead: turn toward the deeper side
-                const float l = world_->terrain(b.p.x + std::cos(b.head - 0.7f) * look, b.p.z + std::sin(b.head - 0.7f) * look);
-                const float r = world_->terrain(b.p.x + std::cos(b.head + 0.7f) * look, b.p.z + std::sin(b.head + 0.7f) * look);
-                tr = l < r ? -0.25f : 0.25f;
-            } else tr = 0.03f * std::sin(b.phase * 0.07f + b.len);
-            b.turn = approach(b.turn, tr, 1.5f, dt);
-            b.head += b.turn * dt * std::min(1.f, 4.f / std::max(1.f, b.speed * 0.3f));
-            b.speed = approach(b.speed, ahead > -2.5f ? b.cruise * 0.5f : b.cruise, 0.5f, dt);
-            b.p = b.p + vec3(std::cos(b.head), 0, std::sin(b.head)) * (b.speed * dt);
+        // found touching land (an island streamed in under it): it fades out where it is, another is born elsewhere
+        // (looked at a few times a second)
+        b.check -= dt;
+        if (b.check <= 0.f) {
+            b.check = 0.2f + 0.1f * std::fmod(b.len * 3.7f, 1.f);
+            if (b.sink <= 0.f && aground(b)) b.sink = 0.001f;
+        }
+        if (b.sink > 0.f) {
+            if (b.speed > 0.05f) steer(b, b.want, 0.f, 0.f, dt); // (fading out: it slows to a stop, still steering clear)
+        } else if (b.cruise > 0.f) {
+            // its course wanders slowly; turned away from land, it slowly takes the course it found
+            b.goal += 0.03f * std::sin(b.phase * 0.07f + b.len) * dt;
+            if (std::fabs(std::remainder(b.want - b.goal, TAU)) > 0.05f) b.goal += std::remainder(b.want - b.goal, TAU) * std::min(1.f, 0.08f * dt);
+            steer(b, b.goal, b.cruise, 0.f, dt);
         }
     }
     // they fade in when born and fade out before they go (never a pop at a distance threshold)
@@ -1075,6 +1197,7 @@ void IslandsUniverse::launchBoat(const std::vector<int>& types, bool big) {
     flockSide_ = -flockSide_;
     const float dist = std::clamp(vel_ * 2.2f + 70.f, 80.f, 320.f);
     vec3 p = seaPointInBand(side, dist);
+    const vec3 band = p;
     // from a beach near that point, out into the water
     float bd = 260.f * spread_;
     vec3 shore = p;
@@ -1084,13 +1207,34 @@ void IslandsUniverse::launchBoat(const std::vector<int>& types, bool big) {
             const float dd = length(vec3(sp.x - p.x, 0, sp.z - p.z));
             if (dd < bd) { bd = dd; shore = sp; found = true; }
         }
+    // (far enough out for its whole hull, as drawn, and a margin; it sails out bow first)
+    const float size = std::clamp(1.f + alt_ / 160.f, 1.f, 10.f) * (big ? 1.25f : 1.f);
+    const float reach = (big ? 17.f : 11.f) * size * 0.65f + 2.f;
+    vec3 out = normalize(vec3(fwd_.x, 0, fwd_.z));
     if (found) {
         std::shared_ptr<isl::Island> I = world_->nearestIsland(shore, 50.f);
-        const vec3 out = I ? normalize(vec3(shore.x - I->x, 0, shore.z - I->z)) : normalize(vec3(p.x - eye_.x, 0, p.z - eye_.z));
+        out = I ? normalize(vec3(shore.x - I->x, 0, shore.z - I->z)) : normalize(vec3(p.x - eye_.x, 0, p.z - eye_.z));
         p = vec3(shore.x, 0, shore.z);
-        for (int k = 0; k < 40 && world_->terrain(p.x, p.z) > -1.6f; k++) p = p + out * 5.f;
+        for (int k = 0; k < 60 && !seaClear(p.x, p.z, reach, 1.2f); k++) p = p + out * std::max(5.f, 0.25f * reach);
     }
-    for (int k = 0; k < 30 && world_->terrain(p.x, p.z) > -1.6f; k++) p = p + normalize(vec3(p.x - eye_.x, 0, p.z - eye_.z)) * 12.f;
+    for (int k = 0; k < 40 && !seaClear(p.x, p.z, reach, 1.2f); k++) {
+        const vec3 away = normalize(vec3(p.x - eye_.x, 0, p.z - eye_.z));
+        p = p + away * std::max(12.f, 0.4f * reach);
+        out = away;
+    }
+    {
+        // (never on the camera's track: out away from it, then open water further out; it sails out away from it)
+        vec3 c = p;
+        const float keep = 50.f * spread_ + reach;
+        const float td = trackDist(p, &c);
+        if (td < keep) {
+            vec3 away = td > 1.f ? normalize(vec3(p.x - c.x, 0.f, p.z - c.z)) : normalize(vec3(band.x - eye_.x, 0.f, band.z - eye_.z));
+            if (td <= 1.f) away = normalize(vec3(-away.z, 0.f, away.x) * (dot(band - eye_, vec3(-fwd_.z, 0.f, fwd_.x)) >= 0.f ? 1.f : -1.f));
+            p = c + away * keep;
+            out = away;
+            for (int k = 0; k < 40 && !seaClear(p.x, p.z, reach, 1.2f); k++) p = p + away * std::max(12.f, 0.4f * reach);
+        }
+    }
     // the sails: the row's piece types by how many cells each has, up to four bands (base 8 digits, type + 1)
     int count[7] = {};
     for (int t : types) count[std::clamp(t, 0, 6)]++;
@@ -1124,9 +1268,11 @@ void IslandsUniverse::launchBoat(const std::vector<int>& types, bool big) {
     b.launchT = 0.f;
     b.appear = 0.f;
     b.unfurl = 0.f;
-    b.head = std::atan2(fh.z, fh.x);
+    b.head = b.goal = b.want = std::atan2(out.z, out.x);
     b.p = p;
-    b.scale = std::clamp(1.f + alt_ / 160.f, 1.f, 10.f) * (big ? 1.25f : 1.f);
+    b.scale = b.size = size;
+    // (no open water found there, a coast all around: it joins the fleet at its place instead, fading in)
+    b.place = !seaClear(p.x, p.z, reach, 1.2f);
     // past the cap, the oldest boat sails away (sinks into the haze)
     int live = 0;
     for (const Boat& f : fleet_) live += f.sink <= 0.f;
@@ -1140,80 +1286,96 @@ void IslandsUniverse::launchBoat(const std::vector<int>& types, bool big) {
 void IslandsUniverse::updateFleet(float dt) {
     spread_ = approach(spread_, std::clamp(1.f + alt_ / 420.f, 1.f, 5.f), 0.25f, dt);
     const float scaleT = std::clamp(1.f + alt_ / 160.f, 1.f, 10.f);
-    const vec3 fh = normalize(vec3(fwd_.x, 0, fwd_.z));
+    track_.clear();
+    {
+        const float ahead = std::min(2400.f, 1600.f * spread_), step = std::max(40.f, ahead / 32.f);
+        for (float d = -60.f; d <= ahead; d += step) {
+            const isl::RoutePt r = world_->route(s_ + d);
+            track_.push_back(vec3(r.x, 0.f, r.z));
+        }
+    }
     for (Boat& b : fleet_) {
         b.phase += dt;
         b.launchT += dt;
         b.unfurl = b.launchT > 50.f ? 1.f : smoothstepf(0.3f, 2.8f, b.launchT);
+        b.size = scaleT * (b.big ? 1.25f : 1.f);
         // the regatta: faster through the drop
-        b.speed = b.cruise * (1.f + 1.2f * dropK_);
-        b.sb += (double)(b.speed * dt);
+        const float cruise = b.cruise * (1.f + 1.2f * dropK_);
+        // its place in the fleet sails along the route at its speed; the boat itself follows it (see the helm)
+        b.sb += (double)(cruise * dt);
         const double rel = b.sb - s_;
         // recycled ahead (it sails in again from the haze): behind the camera at once, ahead (in view) only once
         // it has faded out
         if (b.launchT > 10.f && rel > 1500.0 * spread_) b.moored = true; // (the field marks a boat fading out)
+        // touching land (grown with the altitude near a shore, an island streamed in) or far astray: it fades out
+        // (the water under it and its place in the fleet looked at a few times a second)
+        b.check -= dt;
+        const bool look = b.check <= 0.f || b.place;
+        if (look) b.check = 0.2f + 0.1f * std::fmod(b.len * 3.7f, 1.f);
+        if (look && !b.moored && b.sink <= 0.f && !b.place && b.appear > 0.f && aground(b)) b.moored = true;
         if (b.moored) {
+            // (fading out: it slows to a stop, still steering clear)
             b.age += dt;
-            if (b.age > 1.5f) { b.sb = s_ + rng_.range(750.f, 1150.f) * spread_; b.appear = 0.f; b.moored = false; b.age = 0.f; }
+            if (b.speed > 0.05f) steer(b, b.want, 0.f, 0.f, dt);
+            if (b.age > 1.5f) { b.sb = s_ + rng_.range(750.f, 1150.f) * spread_; b.place = true; b.moored = false; b.age = 0.f; }
         } else if (b.launchT > 10.f && rel < -150.0 * spread_) {
             b.sb = s_ + rng_.range(750.f, 1150.f) * spread_;
-            b.appear = 0.f;
+            b.place = true;
         }
-        b.appear = std::min(1.f, b.appear + dt / 1.8f);
         const isl::RoutePt rp = world_->route(b.sb);
-        const vec3 rr(-std::sin(rp.head), 0.f, std::cos(rp.head));
-        // off the land: slide aside to the nearest water (the turn field holds where it goes)
+        const vec3 rr(-std::sin(rp.head), 0.f, std::cos(rp.head)), rf(std::cos(rp.head), 0.f, std::sin(rp.head));
+        // its place beside the route; on land, the nearest open water aside (the detour, latOff, held while needed)
         float lat0 = b.latN * spread_;
         // (inside a tight turn, an orbit's loop, never across to the other side of the loop)
         if (lat0 * rp.curv > 0.f) lat0 = std::clamp(lat0, -0.45f / std::max(std::fabs(rp.curv), 1e-5f), 0.45f / std::max(std::fabs(rp.curv), 1e-5f));
-        auto wet = [&](float lat) { return world_->terrain(rp.x + rr.x * lat, rp.z + rr.z * lat) < -1.4f; };
-        if (!wet(lat0 + b.turn)) {
+        const float reach = 0.65f * b.len * b.size + 2.f;
+        auto wet = [&](float lat) { return seaClear(rp.x + rr.x * lat, rp.z + rr.z * lat, reach, 1.4f); };
+        if (!look) {
+        } else if (!wet(lat0 + b.latOff)) {
             for (int k = 1; k <= 14; k++) {
                 const float step = 22.f * k * std::sqrt(spread_);
                 const float clear = 50.f * spread_; // (never onto the route: the camera flies there)
-                if (std::fabs(lat0 + step) > clear && wet(lat0 + step)) { b.turn = step; break; }
-                if (std::fabs(lat0 - step) > clear && wet(lat0 - step)) { b.turn = -step; break; }
+                if (std::fabs(lat0 + step) > clear && wet(lat0 + step)) { b.latOff = step; break; }
+                if (std::fabs(lat0 - step) > clear && wet(lat0 - step)) { b.latOff = -step; break; }
             }
-        } else if (b.turn != 0.f && wet(lat0)) b.turn = 0.f;
-        // (sliding aside no faster than a gentle course change: a quarter of its speed, so it reads as steering)
-        {
-            const float maxStep = (0.25f * b.speed + 0.5f) * dt;
-            b.latOff += std::clamp(approach(b.latOff, b.turn, 0.6f, dt) - b.latOff, -maxStep, maxStep);
-        }
-        vec3 pos(rp.x + rr.x * (lat0 + b.latOff), 0.f, rp.z + rr.z * (lat0 + b.latOff));
-        float head = rp.head + 0.04f * std::sin(b.phase * 0.2f);
-        if (b.launchT < 7.f) {
-            // from its launch point (sailing out), it eases into its place in the fleet
-            b.launchP = b.launchP + fh * (b.speed * dt);
-            const float w = smoothstepf(1.5f, 7.f, b.launchT);
-            pos = lerp(b.launchP, pos, w);
-            head = std::atan2(fh.z, fh.x) * (1.f - w) + head * w;
-        }
-        // never too close to the camera (it would loom behind the well): eased aside
-        {
-            const vec3 dv(pos.x - eye_.x, 0.f, pos.z - eye_.z);
-            const float dd = length(dv), keep = 45.f * spread_ * (b.big ? 1.4f : 1.f);
-            if (dd < keep) pos = pos + (dd > 1e-3f ? dv / dd : rr) * (keep - dd);
-        }
-        // the bow points where it goes: the heading follows its actual motion (the route's turns, sliding aside, the
-        // camera's clearance), eased; a jump (recycled ahead, just appeared) takes the route's heading at once
-        {
-            const vec3 mv(pos.x - b.p.x, 0.f, pos.z - b.p.z);
-            const float ml = length(mv);
-            if (b.appear < 0.05f || ml > b.speed * dt * 4.f + 2.f || b.launchT < 7.f) b.head = head;
-            else if (ml > 1e-4f) {
-                const float want = std::atan2(mv.z, mv.x);
-                b.head += std::remainder(want - b.head, TAU) * std::min(1.f, 2.5f * dt);
+        } else if (b.latOff != 0.f && wet(lat0)) b.latOff = 0.f;
+        const float lat = lat0 + b.latOff;
+        const vec3 slot(rp.x + rr.x * lat, 0.f, rp.z + rr.z * lat);
+        if (b.place) {
+            // (unseen: put at its place, on its course; on land there, its place moves on until it is open water)
+            b.appear = 0.f;
+            if (!seaClear(slot.x, slot.z, reach, 1.4f)) b.sb += 30.0 * spread_;
+            else {
+                b.p = slot;
+                b.head = b.goal = b.want = rp.head;
+                b.turn = 0.f;
+                b.speed = cruise;
+                b.plan = 0.f;
+                b.ahead = 1e9f;
+                b.place = false;
             }
+        } else if (b.sink <= 0.f && !b.moored) {
+            // the helm: out from the shore it was launched from first, then toward a point a little ahead of its place
+            // (faster when behind it, slower when ahead), never closer to the camera than it should loom
+            const float lead = std::max(40.f * std::sqrt(spread_), cruise * 6.f);
+            const isl::RoutePt ra = world_->route(b.sb + lead);
+            const vec3 aim(ra.x - std::sin(ra.head) * lat, 0.f, ra.z + std::cos(ra.head) * lat);
+            float goal = std::atan2(aim.z - b.p.z, aim.x - b.p.x);
+            if (b.launchT < 2.5f) goal = b.goal;
+            const float behind = dot(slot - b.p, rf);
+            const float v = cruise * std::clamp(1.f + behind / (lead * 1.5f), 0.55f, 1.6f);
+            steer(b, goal, v, 45.f * spread_ * (b.big ? 1.4f : 1.f), dt);
+            // (far astray from its place, around an island: it fades out and comes back at its place)
+            if (b.launchT > 10.f && length(slot - b.p) > 700.f * spread_) b.moored = true;
         }
-        b.p = pos;
-        float k = scaleT * (b.big ? 1.25f : 1.f) * smoothstepf(0.f, 1.f, b.appear);
+        if (!b.place) b.appear = std::min(1.f, b.appear + dt / 1.8f);
+        float k = b.size * smoothstepf(0.f, 1.f, b.appear);
         if (b.sink > 0.f) {
             b.sink += dt;
             k *= 1.f - smoothstepf(0.f, 2.5f, b.sink);
         }
         if (b.moored) k *= 1.f - smoothstepf(0.f, 1.5f, b.age);
-        k *= 1.f - smoothstepf(6500.f, 8500.f, length(vec3(pos.x - eye_.x, 0.f, pos.z - eye_.z)));
+        k *= 1.f - smoothstepf(6500.f, 8500.f, length(vec3(b.p.x - eye_.x, 0.f, b.p.z - eye_.z)));
         b.scale = k;
     }
     fleet_.erase(std::remove_if(fleet_.begin(), fleet_.end(), [](const Boat& b) { return b.sink > 2.5f; }), fleet_.end());
@@ -2017,7 +2179,12 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         // (far from the origin: everything moves back, in whole 4096 m steps)
         const float dx = std::round(eye_.x / 4096.f) * 4096.f, dz = std::round(eye_.z / 4096.f) * 4096.f;
         world_->rebase(dx, dz);
-        for (Boat& b : boats_) { b.p.x -= dx; b.p.z -= dz; }
+        for (std::vector<Boat>* list : {&boats_, &fleet_})
+            for (Boat& b : *list) {
+                b.p.x -= dx; b.p.z -= dz;
+                b.prevP.x -= dx; b.prevP.z -= dz;
+                b.launchP.x -= dx; b.launchP.z -= dz;
+            }
         for (Flock& fl : flocks_) { fl.c.x -= dx; fl.c.z -= dz; }
         for (Lantern& l : lanterns_) { l.p.x -= dx; l.p.z -= dz; }
         plane_.p.x -= dx;
