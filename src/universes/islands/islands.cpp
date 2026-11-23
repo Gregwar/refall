@@ -280,9 +280,9 @@ float hookS() {
 }
 
 constexpr float BACK_Z = -0.3f;
-// The well's and the HUD's panes, dense (a drop's neons barely through): blended in the scene's linear light, the
-// corner lines' over the frame in display colors (the same look: about 88 % in display terms)
-constexpr float PANE_A = 0.982f, PANE_A_DISPLAY = 0.88f;
+// The well's pane, dense (a drop's neons barely through), and the HUD's, a little lighter (about 88 % and 76 % in
+// display terms): blended in the scene's linear light, the corner lines' over the frame in display colors
+constexpr float PANE_A = 0.982f, HUD_PANE_A = 0.95f, PANE_A_DISPLAY = 0.76f;
 
 } // namespace
 
@@ -1828,8 +1828,8 @@ void IslandsUniverse::buildBoard(const Game& g) {
     // a plain deep navy pane, sharp cornered, no rule, no shade, dense (the drops' neons barely show through: the
     // pieces read over them); HOLD and NEXT, the score's column and the bonus gauge in the same panes, the lettering
     // pale on them. The same in the calm and in the drops: nothing fades, no ink turns over at a drop's edges.
-    auto pane = [&](float x, float y, float hw, float hh) { quad(vec3(x, y, BACK_Z), hw, hh, back, PANE_A, 0.f, 0.f); };
-    pane(0.f, 0.f, 5.1f, 10.1f);
+    auto pane = [&](float x, float y, float hw, float hh, float a = HUD_PANE_A) { quad(vec3(x, y, BACK_Z), hw, hh, back, a, 0.f, 0.f); };
+    pane(0.f, 0.f, 5.1f, 10.1f, PANE_A);
     const float x0 = layout::HOLD_CENTER.x, x1 = layout::nextCenter(0).x;
     pane(x0, 7.9f, 1.7f, 2.1f);
     pane(x1, 4.85f, 1.7f, 5.15f);
