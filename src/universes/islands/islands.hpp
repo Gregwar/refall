@@ -214,6 +214,11 @@ private:
     float flowT_ = 0.f, pulse_ = 0.f, tripSunYaw_ = 0.f;
     bool tripSunInit_ = false;
     vec3 tripSun_{1, 0.1f, 0};
+    // ---- FLAT's drops: TRIP's neons washing over the same shapes (psy_: the front, 0 natural .. 1 all neon; its
+    // state held a while against flip flops)
+    float psyT_ = 0.f, psy_ = 0.f, psyHold_ = 100.f, psyOff_ = 0.f;
+    bool psyOn_ = false;
+    void updatePsy(bool inDrop, float dt);
 
     // ---- Staging: continuous level 0 calm .. 2 peak.
     int level_ = 1;

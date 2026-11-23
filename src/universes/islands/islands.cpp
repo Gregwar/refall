@@ -27,7 +27,11 @@
 // the scene's sun, its corners nudged by its seed, running on into the cells of the same piece (one block a piece).
 // FLAT (a variant only when asked for) draws the same world as a flat vector illustration: each surface one flat fill
 // in two tones by the sun (smooth normals, a crisp terminator), a white surf rim, slate peaks, a pale sky with flat
-// puffs, a flat haze, no shadow map; a plain translucent well, flat pastel tiles over a small offset shadow.
+// puffs, a flat haze, no shadow map; a plain translucent well, flat pastel tiles over a small offset shadow. Its sea
+// is TRIP's broad slowly flowing strokes in close tints of blue, its sky TRIP's ringed sun in pale creams; in a drop
+// the same shapes take TRIP's neons, washing in from the horizon and receding the same way (updatePsy); the well, the
+// pieces and the lettering stay FLAT's.
+// TRIP (a variant only when asked for) is that neon paint all along, through a light liquid warp, in dark panes.
 #include "universes/islands/islands.hpp"
 
 #include <algorithm>
@@ -144,7 +148,8 @@ const VariantDef VARIANTS[] = {
      0x121432, {0x67f7ff, 0xffe279, 0xd297ff, 0x7df7a9, 0xff7d94, 0x94b6ff, 0xffb46f}, 0xffae4a, false},
     // FLAT (only when asked for: --universe ISLANDS:FLAT): the Caribbean as a flat vector illustration: flat fills,
     // a white surf rim round the beaches, slate mountains, a pale sky with flat white puffs, distant islands faded to
-    // grey blue; a plain translucent blue well, flat pastel tiles with a small offset shadow; navy lettering
+    // grey blue, the sea's strokes in tints of blue; a plain translucent blue well, flat pastel tiles with a small
+    // offset shadow; navy lettering. In the drops, TRIP's neons over the same shapes.
     {"FLAT", 0xe9d49d, 0xeeede9, 0x7cc256, 0x3f8c5c, 0x4c6a72, 0x787661, 0xe6dcc0, 0xc4806c, 0x6e9048, 0xa4a052, 0.f,
      0x45cdd9, 0x3db6d1, {0.85f, 0.16f, 0.1f}, 9.f, 1.f,
      0x4f9e22, 0x7cbc30, 0x6e6a4c, 0x4f9a3c, 0x3a7e40, 0.42f, 2,
@@ -249,6 +254,11 @@ float hookTod() {
 }
 float hookAlt() {
     static const float v = std::getenv("REFALL_ISLANDS_ALT") ? (float)std::atof(std::getenv("REFALL_ISLANDS_ALT")) : -1.f;
+    return v;
+}
+// REFALL_ISLANDS_PSY=K holds FLAT's drop paint at K (0 natural .. 1 all neon, between: the front on its way in).
+float hookPsy() {
+    static const float v = std::getenv("REFALL_ISLANDS_PSY") ? (float)std::atof(std::getenv("REFALL_ISLANDS_PSY")) : -1.f;
     return v;
 }
 float hookS() {
@@ -576,6 +586,33 @@ void IslandsUniverse::drop(float strength) {
     dropMode_ = true;
     diveT_ = 0.f;
     swell_ = std::max(swell_, 0.4f + 0.4f * strength);
+}
+
+// FLAT's drops: the neons wash in from the horizon toward the eye in about 1.5 s, recede the same way (back out to
+// the horizon) at the drop's end. Held against flip flops: once in, at least 6 s; out only once the drop has been over
+// 1.5 s (a short gap between two drops stays neon); once out, at least 3 s before washing in again. The front moves
+// at a steady pace (eased at both ends), never jumps: a change of mind mid way turns it round smoothly.
+void IslandsUniverse::updatePsy(bool inDrop, float dt) {
+    if (!flat()) {
+        psyOn_ = false;
+        psyT_ = psy_ = 0.f;
+        return;
+    }
+    psyHold_ += dt;
+    psyOff_ = inDrop ? 0.f : psyOff_ + dt;
+    if (!psyOn_ && inDrop && psyHold_ >= 3.f) {
+        psyOn_ = true;
+        psyHold_ = 0.f;
+    } else if (psyOn_ && overT_ >= 0.f) {
+        psyOn_ = false; // (game over: back to the plain look at once, no hold)
+        psyHold_ = 0.f;
+    } else if (psyOn_ && psyOff_ >= 1.5f && psyHold_ >= 6.f) {
+        psyOn_ = false;
+        psyHold_ = 0.f;
+    }
+    psyT_ = saturate(psyT_ + (psyOn_ ? dt : -dt) / 1.5f);
+    psy_ = smoothstepf(0.f, 1.f, psyT_);
+    if (hookPsy() >= 0.f) psy_ = hookPsy();
 }
 
 void IslandsUniverse::refresh(float strength) { swell_ = std::max(swell_, 0.15f * strength); }
@@ -2285,6 +2322,7 @@ void IslandsUniverse::setCommon(GLuint p) {
     set3f(p, "uFlatLit", flatLit_);
     set3f(p, "uFlatShade", flatShade_);
     set1f(p, "uTrip", V.trip ? 1.f : 0.f);
+    set1f(p, "uPsy", flat() ? psy_ : 0.f);
     set1f(p, "uFlow", flowT_);
     set1f(p, "uPulse", pulse_);
     set1f(p, "uTripScale", tripScale());
@@ -2382,6 +2420,9 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         const float target = inDrop && overT_ < 0.f ? 1.f : 0.f;
         dropK_ = approach(dropK_, target, target > dropK_ ? 1.2f : 0.4f, dt);
         if (dropK_ < 0.03f) pods_.clear();
+        // (FLAT: the song plan's drop, music.inDrop, which ends a little before the section does: the neons have
+        // receded by its end)
+        updatePsy((music.hasSong ? music.inDrop : dropMode_) && overT_ < 0.f && !f.paused, f.paused ? 0.f : dt);
     }
 
     // ---- The hour: the day passes over the song.
@@ -2462,7 +2503,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     }
     curv_ = lerpf(1.f / 6.4e6f, 1.f / 1.3e5f, smoothstepf(250.f, 2600.f, alt_));
     const bool trip = V.trip != 0;
-    if (trip) {
+    if (trip || flat()) {
         // TRIP: the swirls flow on their own clock (a little faster with the energy and the level, never fast); a
         // soft swell on each beat (a smooth bump, no edge: the bands breathe, nothing flickers)
         flowT_ += wdt * (0.55f + 0.35f * energy_ + 0.15f * lv_);
@@ -2481,9 +2522,11 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         tripSunYaw_ = wrapPi(tripSunYaw_ + wrapPi(wy - tripSunYaw_) * (1.f - std::exp(-2.f * dt)));
         const float el = 0.1f + std::sqrt(2.f * alt_ * curv_);
         tripSun_ = vec3(std::cos(tripSunYaw_) * std::cos(el), std::sin(el), std::sin(tripSunYaw_) * std::cos(el));
-        // the facets' two tones: a light from the sun's side, high up
+        // the facets' two tones: a light from the sun's side, high up (TRIP; FLAT keeps the hour's sun: its tones'
+        // shapes stay the same through a drop)
         const float le = 0.85f;
-        sky_.sunDir = normalize(vec3(std::cos(tripSunYaw_ + PI) * std::cos(le), std::sin(le), std::sin(tripSunYaw_ + PI) * std::cos(le)));
+        if (trip)
+            sky_.sunDir = normalize(vec3(std::cos(tripSunYaw_ + PI) * std::cos(le), std::sin(le), std::sin(tripSunYaw_ + PI) * std::cos(le)));
     }
     world_->update(eye_, s_, std::clamp(alt_ * 6.f, 9000.f, 14000.f));
     if (std::fabs(eye_.x) > 50000.f || std::fabs(eye_.z) > 50000.f) {

@@ -38,10 +38,9 @@ float fStripe(float x, float w) {
     return clamp(0.5 - d / max(w, 1e-6), 0.0, 1.0);
 }
 // the two tones by a smooth normal: a crisp terminator (antialiased over a pixel), a little past the sun's side
-vec3 flatTone(vec3 n) {
-    float d = dot(n, uSunDir) + 0.12;
-    return mix(uFlatShade, uFlatLit, aaStep(0.0, d, 1e-4));
-}
+// (flatSide: 1 on the lit side, 0 on the other)
+float flatSide(vec3 n) { return aaStep(0.0, dot(n, uSunDir) + 0.12, 1e-4); }
+vec3 flatTone(vec3 n) { return mix(uFlatShade, uFlatLit, flatSide(n)); }
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float n2(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -114,15 +113,42 @@ vec3 tstep(vec3 a, vec3 b, float x, float e, float w) { return mix(a, b, smooths
 // back: orange never meets turquoise), crisp but antialiased edges, no lines; finer than a pixel or far away, a calm
 // tint between them
 float fbm2(vec2 p) { return (n2(p) * 0.667 + n2(p * 2.03 + vec2(11.3, 7.9)) * 0.333); }
-vec3 seaSimple(float v, float w, float far) {
+// the sea's bands in any three colors and a calm one (the shapes: TRIP's; FLAT paints them in tints of blue, its
+// drops in TRIP's neons)
+vec3 seaBands(float v, float w, float far, vec3 a, vec3 b, vec3 c3, vec3 calm) {
     float x = abs(fract(v) * 2.0 - 1.0);
     float aa = max(w * 2.0, 1e-4);
-    vec3 turq = tl(vec3(0.14, 0.8, 0.74)), green = tl(vec3(0.5, 0.88, 0.22)), orange = tl(vec3(1.0, 0.58, 0.22));
-    vec3 c = turq;
-    c = tstep(c, green, x, 0.38, aa);
-    c = tstep(c, orange, x, 0.74, aa);
-    vec3 calm = tl(vec3(0.3, 0.84, 0.5));
+    vec3 c = tstep(a, b, x, 0.38, aa);
+    c = tstep(c, c3, x, 0.74, aa);
     return mix(c, calm, max(smoothstep(0.08, 0.3, w), far));
+}
+vec3 seaSimple(float v, float w, float far) {
+    return seaBands(v, w, far, tl(vec3(0.14, 0.8, 0.74)), tl(vec3(0.5, 0.88, 0.22)), tl(vec3(1.0, 0.58, 0.22)),
+                    tl(vec3(0.3, 0.84, 0.5)));
+}
+// the sea's field: TRIP's slow liquid strokes at a point of the sea (t its distance, alt the eye's height, depth the
+// water's under it: the bands bend round the shores, within about bend meters of depth)
+float seaField(vec2 wp, float t, float alt, float depth, float bend) {
+    float tf = t / (alt * 10.0 + 250.0);
+    vec2 p = tripP(wp, 1.7 * (1.0 + t / (alt * 4.0 + 60.0) + tf * tf));
+    float ft = uFlow;
+    vec2 q = vec2(fbm2(p + vec2(0.0, 0.05 * ft)), fbm2(p + vec2(5.2, 1.3) - vec2(0.04 * ft, 0.0)));
+    return fbm2(p + 1.7 * q + vec2(0.025 * ft, -0.02 * ft)) * 5.5 + 0.45 * exp(-depth / bend) + 0.015 * ft + 0.03 * uPulse;
+}
+// FLAT's drops: how much of TRIP's neon paint a point takes (0 FLAT's natural colors .. 1 the neons). uPsy carries
+// the drop's front: it washes in from the horizon toward the eye (the sky and the far sea first) as uPsy rises, and
+// recedes the same way, back out to the horizon, as it falls; a soft, slowly wavering edge (never a flash: the
+// colors cross over a broad band of the view, each point over about a quarter of a second)
+uniform float uPsy;
+float psyK(float dist, vec3 rd) {
+    if (uPsy <= 0.0) return 0.0;
+    if (uPsy >= 1.0) return 1.0;
+    float s = clamp(log2(max(dist, 1.0) / (max(uEye.y, 1.0) + 20.0)) / 5.0, 0.0, 1.0);
+    float az = atan(rd.z, rd.x);
+    float wob = 0.05 * sin(az * 3.0 + uFlow * 0.35) + 0.03 * sin(az * 7.0 - uFlow * 0.6 + 1.3);
+    const float W = 0.15, A = 0.08;
+    float f = mix(1.0 + W + A, -W - A, uPsy);
+    return smoothstep(f - W, f + W, s + wob);
 }
 // the land far away: one violet, a flat silhouette over the sea (aerial perspective)
 vec3 tripFar(vec3 c, float dist) {
@@ -173,10 +199,9 @@ uniform mat4 uInvVP;
 uniform float uStars;
 uniform vec3 uTripSun;      // TRIP: the ringed sun's direction
 // TRIP: a deep violet sky, a huge ringed sun (yellow, orange, lime, magenta rings, wavy, flowing outward), spiral arms
-// curling out of it
-vec3 tripSky(vec3 rd) {
-    float e = rd.y + uDip;
-    vec3 c = mix(tl(vec3(0.42, 0.17, 0.80)), tl(vec3(0.20, 0.07, 0.45)), smoothstep(0.0, 0.4, e));
+// curling out of it. The shapes over any sky c: k 1 TRIP's neons, 0 FLAT's natural paint of them (a pale sun in soft
+// creams, its arms and halo faint lighter tints of the sky)
+vec3 ringedSky(vec3 rd, vec3 c, float k) {
     vec3 S = normalize(uTripSun);
     float r = acos(clamp(dot(rd, S), -1.0, 1.0));
     vec3 ax = normalize(cross(S, vec3(0.0, 1.0, 0.0))), ay = cross(ax, S);
@@ -185,32 +210,40 @@ vec3 tripSky(vec3 rd) {
     float u = r / R;
     float aa = fwidth(u) * 1.2;
     // the rings (wavy, drifting out): yellow, orange, lime, orange, magenta
-    float k = u * 2.4 - 0.05 * uFlow + 0.1 * u * sin(th * 3.0 + u * 4.0 - 0.15 * uFlow) - 0.04 * uPulse;
-    float x = fract(k), aw = max(fwidth(k), 1e-4);
-    vec3 ring = tl(vec3(1.0, 0.86, 0.2));
-    ring = tstep(ring, tl(vec3(1.0, 0.5, 0.15)), x, 0.22, aw);
-    ring = tstep(ring, tl(vec3(0.72, 0.93, 0.2)), x, 0.45, aw);
-    ring = tstep(ring, tl(vec3(1.0, 0.42, 0.2)), x, 0.62, aw);
-    ring = tstep(ring, tl(vec3(0.92, 0.25, 0.6)), x, 0.84, aw);
-    ring = tstep(ring, tl(vec3(1.0, 0.86, 0.2)), x, 0.97, aw);
-    vec3 core = tl(vec3(1.0, 0.9, 0.3));
+    float kr = u * 2.4 - 0.05 * uFlow + 0.1 * u * sin(th * 3.0 + u * 4.0 - 0.15 * uFlow) - 0.04 * uPulse;
+    float x = fract(kr), aw = max(fwidth(kr), 1e-4);
+    vec3 r0 = mix(tl(vec3(1.0, 0.95, 0.8)), tl(vec3(1.0, 0.86, 0.2)), k);
+    vec3 ring = r0;
+    ring = tstep(ring, mix(tl(vec3(1.0, 0.9, 0.7)), tl(vec3(1.0, 0.5, 0.15)), k), x, 0.22, aw);
+    ring = tstep(ring, mix(tl(vec3(1.0, 0.97, 0.86)), tl(vec3(0.72, 0.93, 0.2)), k), x, 0.45, aw);
+    ring = tstep(ring, mix(tl(vec3(1.0, 0.88, 0.68)), tl(vec3(1.0, 0.42, 0.2)), k), x, 0.62, aw);
+    ring = tstep(ring, mix(tl(vec3(0.99, 0.93, 0.82)), tl(vec3(0.92, 0.25, 0.6)), k), x, 0.84, aw);
+    ring = tstep(ring, r0, x, 0.97, aw);
+    vec3 core = mix(tl(vec3(1.0, 0.98, 0.9)), tl(vec3(1.0, 0.9, 0.3)), k);
     vec3 sun = mix(core, ring, smoothstep(0.26 - aa, 0.26 + aa, u));
-    c = mix(sun, c, smoothstep(1.0 - aa, 1.0 + aa, u));
+    vec3 sky = c;
+    // (the natural one see through: its rings a soft glow over the sky, the core more solid)
+    float op = mix(mix(0.55, 0.85, 1.0 - smoothstep(0.26 - aa, 0.26 + aa, u)), 1.0, k);
+    c = mix(mix(c, sun, op), c, smoothstep(1.0 - aa, 1.0 + aa, u));
     // the arms: three spirals curling out to about three times its radius, lime and orange, thinning out
     float sp = th / 6.2831853 * 3.0 + log(max(u, 1e-3)) * 1.1 - 0.012 * uFlow;
     float f = fract(sp), fw = max(fwidth(sp), 1e-4);
     float band = smoothstep(0.0, fw, f) * (1.0 - smoothstep(0.07 - fw, 0.07, f));
     float reach = smoothstep(0.98, 1.05, u) * (1.0 - smoothstep(1.4, 2.3, u));
     vec3 arm = mix(tl(vec3(0.62, 0.95, 0.2)), tl(vec3(1.0, 0.5, 0.18)), step(0.5, fract(floor(sp) * 0.5)));
-    c = mix(c, arm, band * reach);
+    c = mix(c, mix(mix(sky, vec3(1.0), 0.22), arm, k), band * reach);
     // a violet halo ring hugging it
-    c = mix(c, tl(vec3(0.55, 0.2, 0.9)), (smoothstep(1.0, 1.04, u) - smoothstep(1.1, 1.2, u)) * 0.8);
+    c = mix(c, mix(mix(sky, vec3(1.0), 0.3), tl(vec3(0.55, 0.2, 0.9)), k), (smoothstep(1.0, 1.04, u) - smoothstep(1.1, 1.2, u)) * 0.8);
     return c;
+}
+vec3 tripSkyBase(vec3 rd) {
+    float e = rd.y + uDip;
+    return mix(tl(vec3(0.42, 0.17, 0.80)), tl(vec3(0.20, 0.07, 0.45)), smoothstep(0.0, 0.4, e));
 }
 void main() {
     vec4 w = uInvVP * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
     vec3 rd = normalize(w.xyz / w.w);
-    if (uTrip > 0.5) { frag = vec4(tripSky(rd), 0.0); return; }
+    if (uTrip > 0.5) { frag = vec4(ringedSky(rd, tripSkyBase(rd), 1.0), 0.0); return; }
     vec3 c = skyCol(rd);
     float e = rd.y + uDip;
     // the sun's disc (soft edged), under the horizon it sinks into the haze
@@ -225,6 +258,11 @@ void main() {
         vec3 fp = fract(sp) - 0.5;
         float st = smoothstep(0.12, 0.0, length(fp)) * step(0.985, hs);
         c += vec3(0.9, 0.92, 1.0) * st * uStars * smoothstep(0.03, 0.3, e) * (0.6 + 0.4 * sin(uTime * 2.0 + hs * 40.0));
+    }
+    if (uFlat > 0.5) {
+        // FLAT: TRIP's ringed sun in pale creams over the pastel sky; in a drop, TRIP's violet sky and neon rings
+        float k = psyK(1e6, rd);
+        c = ringedSky(rd, mix(c, tripSkyBase(rd), k), k);
     }
     frag = vec4(c, 0.0);
 }
@@ -284,32 +322,56 @@ void main() {
         // FLAT: big flat shapes by the smooth surface (no facets): the white surf rim, the sand, the greens (a
         // brighter low band, the darker jungle above), the slate mountains and the cliffs, two tones by the sun
         // (every border antialiased over about a pixel: aaStep)
+        // In a drop the same shapes take TRIP's neons (psyK): the rim yellow, the sand violet, the greens lime and
+        // emerald, the slate violet, the peaks orange, the cliffs pink and dark violet; two tones 1 and 0.8 by the
+        // same terminator, far away one violet silhouette (TRIP's) instead of the haze.
         vec3 n = normalize(vNrm);
         float y = vLocal.y;
         float steep = 1.0 - n.y;
         float sandK = vAttrS.x, vegK = vAttrS.y, rockK = vAttrS.z;
-        vec3 col = mix(uSandWet, uSand, aaStep(0.7, y, 1e-3));
+        float mSand = aaStep(0.7, y, 1e-3);
         float veg = aaStep(0.5, vegK, 0.01) * (1.0 - aaStep(0.75, sandK, 0.01));
         // (the bands' lines wander a little, as drawn by hand)
         float wob = n2(vLocal.xz * 0.018 + uSeed) - 0.5;
-        vec3 green = mix(uGrass, uJungle, aaStep(9.0, y + wob * 6.0, 1e-3));
+        float mJungle = aaStep(9.0, y + wob * 6.0, 1e-3);
         // the peaks: slate on the steep faces above the forest line (the mountains' darker shapes)
         float slate = aaStep(40.0, y + wob * 20.0, 1e-3) * aaStep(0.3, steep + wob * 0.2, 1e-3);
-        green = mix(green, uRock, max(slate, aaStep(110.0, y + wob * 30.0, 1e-3)));
-        col = mix(col, green, veg);
+        float high = aaStep(110.0, y + wob * 30.0, 1e-3);
         // (the rock: the material, or any sheer face over the beach: the interpolated material dips between its
         // vertices at a cliff's foot, sand showing through there)
         float rk = max(aaStep(0.3, rockK, 0.01), aaStep(0.55, steep, 1e-3) * aaStep(1.5, y, 1e-3));
-        col = mix(col, mix(uCliff, uRock, aaStep(48.0, y + wob * 20.0, 1e-3)), rk);
+        float cliffHi = aaStep(48.0, y + wob * 20.0, 1e-3);
         // (under the water: the surf's white, no seam at the waterline)
+        float fall = 0.0;
         if (uFallW > 0.0) {
             float a = atan(vLocal.z, vLocal.x);
             float da = mod(a - uFallA + 3.14159265, 6.2831853) - 3.14159265;
-            float fall = (1.0 - aaStep(0.8, abs(da / uFallW), 1e-4)) * aaStep(0.25, rockK, 0.01);
-            col = mix(col, uFoam, fall);
+            fall = (1.0 - aaStep(0.8, abs(da / uFallW), 1e-4)) * aaStep(0.25, rockK, 0.01);
         }
+        float side = flatSide(n);
         vec3 rdf = vRel / max(dist, 1e-3);
-        frag = vec4(fogged(col * flatTone(n), dist, rdf), 0.0);
+        float k = psyK(dist, rdf);
+        vec3 colN = vec3(0.0), colP = vec3(0.0);
+        if (k < 1.0) {
+            vec3 col = mix(uSandWet, uSand, mSand);
+            vec3 green = mix(uGrass, uJungle, mJungle);
+            green = mix(green, uRock, max(slate, high));
+            col = mix(col, green, veg);
+            col = mix(col, mix(uCliff, uRock, cliffHi), rk);
+            col = mix(col, uFoam, fall);
+            colN = fogged(col * mix(uFlatShade, uFlatLit, side), dist, rdf);
+        }
+        if (k > 0.0) {
+            vec3 col = mix(tl(vec3(1.0, 0.87, 0.29)), tl(vec3(0.84, 0.42, 0.96)), mSand);
+            vec3 green = mix(tl(vec3(0.49, 0.9, 0.18)), tl(vec3(0.13, 0.66, 0.36)), mJungle);
+            green = mix(green, tl(vec3(0.6, 0.27, 0.93)), slate);
+            green = mix(green, tl(vec3(1.0, 0.47, 0.2)), high);
+            col = mix(col, green, veg);
+            col = mix(col, mix(tl(vec3(0.94, 0.38, 0.6)), tl(vec3(0.35, 0.13, 0.7)), cliffHi), rk);
+            col = mix(col, tl(vec3(1.0, 0.96, 0.62)), fall);
+            colP = tripFar(col * mix(0.8, 1.0, side), dist);
+        }
+        frag = vec4(mix(colN, colP, k), 0.0);
         return;
     }
     vec3 N = normalize(cross(dFdx(vRel), dFdy(vRel)));
@@ -459,6 +521,14 @@ void main() {
     float fwaux = fwidth(vAux.y);
     float fwang = fwidth(atan(vObj.z, vObj.x));
     fwang = fwang > 3.0 ? 0.0 : fwang;  // (not across the angle's wrap)
+    // (FLAT's drops: the palms' zebra stripes across the trunk, wavy across the fronds, antialiased)
+    float zebraT = 0.0, zebraF = 0.0;
+    if (uFlat > 0.5 && uPsy > 0.0) {
+        float zt = vObj.y / max(vSize.y, 0.01) * 0.8 + sin(vObj.x * 4.0) * 0.3;
+        float zf = vAux.y * 7.0 + sin(vObj.x * 2.3 + vObj.z * 1.7) * 0.6;
+        zebraT = fStripe(zt, fwidth(zt));
+        zebraF = fStripe(zf, fwidth(zf));
+    }
     // low poly: each triangle one flat facet (its normal from the screen derivatives, toward the eye), flat colors
     vec3 N = normalize(cross(dFdx(vRel), dFdy(vRel)));
     if (dot(N, vRel) > 0.0) N = -N;
@@ -532,15 +602,38 @@ void main() {
     if (uFlat > 0.5) {
         // FLAT: the albedo as a flat fill in two tones (by the mesh's smooth normal), the lights at dusk
         // (the trees one flat green each, no tones: a clean silhouette, no lumpy texture)
+        // (in a drop, TRIP's neons on the same shapes: the colors pushed to neon, the palms in zebra stripes, the
+        // trees emerald and lime, violet up the mountains; tones 1 and 0.8, TRIP's violet far away)
         vec3 n = normalize(vNrm);
         if (dot(n, vRel) > 0.0 && mat != 8 && mat != 9) n = -n;
-        vec3 tone = flatTone(n);
-        if (mat == 7) {
-            alb = vParam < 0.5 ? mix(uFoliage, uFoliage2, step(0.5, fract(vSeed * 3.7))) : vCol;
-            tone = mix(uFlatShade, uFlatLit, 0.6);
+        float side = flatSide(n);
+        float k = psyK(dist, -V);
+        vec3 colN = vec3(0.0), colP = vec3(0.0);
+        if (k < 1.0) {
+            vec3 tone = mix(uFlatShade, uFlatLit, side);
+            vec3 a = alb;
+            if (mat == 7) {
+                a = vParam < 0.5 ? mix(uFoliage, uFoliage2, step(0.5, fract(vSeed * 3.7))) : vCol;
+                tone = mix(uFlatShade, uFlatLit, 0.6);
+            }
+            colN = fogged(a * tone + emitCol * emit, dist, -V);
         }
-        vec3 fc = alb * tone + emitCol * emit;
-        frag = vec4(fogged(fc, dist, -V), 0.0);
+        if (k > 0.0) {
+            vec3 a = tripNeon(alb, vSeed);
+            float sd = mix(0.8, 1.0, side);
+            if (mat == 8) {
+                float h = fract(vSeed * 3.17 + (vAux.x < 0.5 ? 0.0 : 0.37));
+                vec3 c0 = h < 0.33 ? vec3(0.5, 0.18, 0.95) : h < 0.66 ? vec3(1.0, 0.85, 0.2) : vec3(0.15, 0.9, 0.95);
+                vec3 c1 = h < 0.33 ? vec3(0.95, 0.3, 0.85) : h < 0.66 ? vec3(0.55, 0.2, 0.9) : vec3(0.2, 0.45, 0.95);
+                a = tl(mix(c0, c1, vAux.x < 0.5 ? zebraT : zebraF));
+            } else if (mat == 7 && vParam < 0.5) {
+                float y = world.y - vObj.y + 0.5 * uCurv * dot(vRel.xz, vRel.xz);
+                a = tl(y > 40.0 ? vec3(0.74, 0.38, 0.97) : fract(vSeed * 5.71) < 0.75 ? vec3(0.16, 0.74, 0.4) : vec3(0.55, 0.88, 0.24));
+                sd = 0.9;
+            }
+            colP = tripFar(a * sd, dist) + emitCol * emit * 0.5;
+        }
+        frag = vec4(mix(colN, colP, k), 0.0);
         return;
     }
     if (uTrip > 0.5) {
@@ -679,6 +772,7 @@ void main() {
     // (smoothly over a little of the depth's slope): the borders antialiased like the edges of geometry, even where
     // the floor drops many meters within a pixel (a shelf's edge seen far away)
     vec3 bands = vec3(0.0);
+    float line = 0.0;
     if (uFlat > 0.5) {
         ivec2 c0 = ivec2(floor(hp + 0.5));
         float yv[9], vv[9];
@@ -688,7 +782,8 @@ void main() {
             vv[k] = s.a != 0.0 && abs(s.a) < t * 0.96 - 2.0 ? 0.0 : 1.0;
         }
         vec3 th = vec3(9.0, 3.2, foamW);
-        vec3 wd = min(vec3(fwidth(depthF) * 0.5), th * 0.3);
+        float fwd = fwidth(depthF);
+        vec3 wd = min(vec3(fwd * 0.5), th * 0.3);
         for (int q = 0; q < 4; q++) {
             vec2 p = vec2(1.0) + (hp - vec2(c0)) + vec2(q % 2 == 0 ? -0.25 : 0.25, q < 2 ? -0.25 : 0.25);
             ivec2 b = clamp(ivec2(floor(p)), ivec2(0), ivec2(1));
@@ -701,20 +796,42 @@ void main() {
             bands += 1.0 - smoothstep(th - wd, th + wd, vec3(d));
         }
         bands *= 0.25;
+        // a fine line round the lagoon band, outside it: about 1.6 m wide on the water (from the floor's slope under
+        // the pixel: d - 3.2 m of depth over the slope is the distance to the band, in pixels), at least a pixel and
+        // a half; none where the floor runs flat at that depth (it would spread into patches)
+        float px = (depthF - 3.2) / max(fwd, 1e-4);
+        float lw = max(1.6 / max(foot, 1e-4), 1.5);
+        line = (1.0 - smoothstep(lw - 0.75, lw + 0.75, px)) * (1.0 - bands.y) * smoothstep(0.02, 0.06, fwd / max(foot, 1e-4)) *
+               (1.0 - smoothstep(5.0, 7.0, depthF));  // (not across a jump of the floor out in the deep)
     }
     // the bands: the deep blue (darker near, lighter toward the horizon), a teal ledge, the turquoise shallows
     // (their depths clear of a lagoon's floor, which would break into patches)
     float far = smoothstep(alt * 1.5 + 40.0, alt * 14.0 + 2500.0, t);
-    vec3 col;
+    vec3 col, colP = vec3(0.0);
     if (uFlat > 0.5) {
-        // FLAT: one flat blue, the lighter cyan shallows round the islands (a lagoon band), lit flat
-        col = mix(uDeep, uShallow, bands.x);
+        // FLAT: TRIP's broad strokes flowing slowly, in close tints of the sea's blue (calm), the lighter cyan
+        // shallows round the islands (the strokes faint through them), a fine teal line round the pale lagoon band,
+        // lit flat. In a drop (colP), the same shapes in TRIP's neons: the strokes turquoise, acid green and orange
+        // (the shallows no different), the line dark violet, the lagoon band orange.
+        // (bending only in the shallows: further out the floor ends with the island's mesh, a seam in the strokes)
+        float v = seaField(wp, t, alt, depthF, 3.5);
+        float vw = fwidth(v);
+        float farS = smoothstep(alt * 6.0 + 300.0, alt * 30.0 + 3500.0, t);
+        vec3 mids = mix(uDeep, uShallow, 0.5);
+        col = seaBands(v, vw, farS, uDeep * 0.86, uDeep, mids * 1.05, uDeep * 0.95);
+        col = mix(col, mix(col, uShallow, 0.7), bands.x);
+        col = mix(col, mix(uShallow, uDeep, 0.75), line);
         col = mix(col, mix(uShallow, vec3(1.0), 0.12), bands.y);
         // (the warm light late in the day only dims it, the sky's color tints it a little: never a green sea; at
         // midday its colors exactly)
         float warm = clamp((uFlatLit.r - uFlatLit.b) * 2.0, 0.0, 1.0);
         float lum = mix(1.0, dot(uFlatLit, vec3(0.3, 0.5, 0.2)), 0.5);
         col = mix(col * lum, uSkyHor * lum, 0.1 * warm);
+        if (uPsy > 0.0) {
+            colP = seaSimple(v, vw, farS);
+            colP = mix(colP, tl(vec3(0.3, 0.1, 0.55)), line);
+            colP = mix(colP, tl(vec3(1.0, 0.5, 0.16)), bands.y);
+        }
     } else {
         col = mix(uDeep * 0.82, mix(uDeep, uShallow, 0.3), far);
         vec3 ledge = mix(uShallow, uDeep, 0.5);
@@ -729,11 +846,7 @@ void main() {
         // TRIP: the sea in broad neon strokes, flowing, bending round the islands near their shores
         // (simple: a few broad strokes, one gentle warp of a smooth noise, larger far away, a calm tint toward the
         // horizon; the islands and the boats are the busy things)
-        float tf = t / (alt * 10.0 + 250.0);
-        vec2 p = tripP(wp, 1.7 * (1.0 + t / (alt * 4.0 + 60.0) + tf * tf));
-        float ft = uFlow;
-        vec2 q = vec2(fbm2(p + vec2(0.0, 0.05 * ft)), fbm2(p + vec2(5.2, 1.3) - vec2(0.04 * ft, 0.0)));
-        float v = fbm2(p + 1.7 * q + vec2(0.025 * ft, -0.02 * ft)) * 5.5 + 0.45 * exp(-depthV / 9.0) + 0.015 * ft + 0.03 * uPulse;
+        float v = seaField(wp, t, alt, depthV, 9.0);
         float far = smoothstep(alt * 6.0 + 300.0, alt * 30.0 + 3500.0, t);
         col = seaSimple(v, fwidth(v), far);
         // every coast ringed: an orange band on the shallows, a dark violet line outside it
@@ -761,7 +874,8 @@ void main() {
         float sk = clamp(sp / 12.0, 0.0, 1.0);
         if (along > -L) {
             // a white wedge narrowing behind the stern, the two arms of the V (straight, tapering to a point)
-            float al = max(along, 0.0);
+)"
+R"(            float al = max(along, 0.0);
             // (each faded out once thinner than a pixel: no broken dashes far away; seen from low down, the camera
             // near the water, the wedge shorter and the arms gone: long thin shapes there crossed the whole view)
             float low = smoothstep(6.0, 45.0, alt);
@@ -790,8 +904,13 @@ void main() {
         return;
     }
     vec3 foamLit = uFlat > 0.5 ? uFoam * uFlatLit : uFoam * (uSunCol * (0.55 * max(uSunDir.y, 0.1) + 0.3) + uAmb * 0.9);
-    col = mix(col, foamLit, clamp(foam, 0.0, 1.0));
-    frag = vec4(fogged(col, t, rd), 0.0);
+    col = fogged(mix(col, foamLit, clamp(foam, 0.0, 1.0)), t, rd);
+    if (uFlat > 0.5 && uPsy > 0.0) {
+        // (FLAT's drop: the surf rim, the wakes, the falls' feet pale yellow, no haze, as TRIP's)
+        colP = mix(colP, tl(vec3(1.0, 0.96, 0.62)), clamp(foam, 0.0, 1.0));
+        col = mix(col, colP, psyK(t, rd));
+    }
+    frag = vec4(col, 0.0);
 }
 )";
 
@@ -845,9 +964,13 @@ void main() {
         // FLAT: a plain white disc, its lower part a flat pale blue grey (one crisp line), faded into the haze
         float lo = vRel.y + uEye.y - (vP.z + vR * 0.3);
         float wl = max(fwidth(lo), 1e-3);
-        vec3 fc = mix(uCloudShade, uCloudLit, smoothstep(-wl, wl, lo));
+        float top = smoothstep(-wl, wl, lo);
+        vec3 fc = mix(uCloudShade, uCloudLit, top);
         vec3 rdc = normalize(vRel);
         fc = mix(fc, hazeCol(rdc), hazeK(length(vRel), rdc) * 0.7);
+        // (in a drop, TRIP's warm puffs: yellow over an orange underside, no haze)
+        float k = psyK(length(vRel), rdc);
+        fc = mix(fc, mix(tl(vec3(1.0, 0.62, 0.2)), tl(vec3(1.0, 0.84, 0.25)), top), k);
         a *= vP.y;
         frag = vec4(fc * a, a);
         return;
