@@ -18,7 +18,7 @@ struct Cell {
 };
 
 struct GameEvent {
-    enum Type { Move, Rotate, Lock, HardDrop, Clear, Hold, Spawn, TopOut, BonusReady, BonusStart, BonusEnd } type;
+    enum Type { Move, Rotate, Lock, HardDrop, Clear, Hold, Spawn, TopOut, BonusReady, BonusStart, BonusEnd, Fill } type;
     int count = 0;                 // lines cleared / rows dropped
     int points = 0;                // Clear: points scored; for a quad, the quad bonus included
     int bonus = 0;                 // Clear: quad bonus points (doubled back-to-back)

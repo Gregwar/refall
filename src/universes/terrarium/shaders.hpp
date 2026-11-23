@@ -1,8 +1,8 @@
 #pragma once
-// TERRARIUM's shaders: the world as meshes at the full resolution (the room: the window wall, the sky and the garden
-// through it, the sill, the shelves; each jar's contents: soil, moss, ferns, mushrooms, a pond, a sapling, flowers,
-// succulents, sprouts, the beetle, the snail, the cork; the jars' glass, back and front, the front refracting the
-// world behind it; the glass tubes; the lights in the air), the veil behind the well, the pebble pieces, lettering.
+// TERRARIUM's shaders: the world as meshes at the full resolution (the sky; the lab and the city around it, and what
+// grows over them; the jar's contents: soil, moss, ferns, mushrooms, a pond, a sapling, flowers, succulents, sprouts,
+// the beetle, the cork; the jar's glass, back and front, the front refracting the world behind it and cracking; the
+// glassware and the shards; the lights in the air), the veil behind the well, the glass shard pieces, lettering.
 
 namespace terrarium_shaders {
 
@@ -35,20 +35,19 @@ float sdBox2(vec2 p, vec2 b) { vec2 q = abs(p) - b; return length(max(q, 0.0)) +
 )";
 
 // ------------------------------------------------------------------------------------------------ the world
-// The scene's uniforms and functions, shared by the room, the jars' contents, their glass and the tubes: the light
-// outside, the sky through the window, the room's reflection, the fireflies' light, the soil, the condensation, the
-// painted vines, the sun's shadow map.
+// The scene's uniforms and functions, shared by the lab and the city, the jar's contents, its glass and the glassware:
+// the light (the lab's cold key and tubes, the day outside), the sky, the room's reflection, the fireflies' light, the
+// soil, the condensation, the painted vines, the sun's shadow map.
 inline const char* SCENE_GLSL = R"(
 uniform vec3 uEye;
 uniform float uTime, uPx, uSway, uSpots;
-uniform vec3 uSunDir, uSunCol, uSkyZ, uSkyH, uAmbS, uAmbG, uFill, uGlowSun;
+uniform vec3 uSunDir, uSunCol, uSkyZ, uSkyH, uAmbS, uAmbG, uFill, uGlowSun;   // (the lab's key light: uSunDir, uSunCol)
+uniform vec3 uOutDir, uOutCol, uOutAmbS, uOutAmbG, uHaze;                       // the day outside
 uniform vec2 uSunSky;
 uniform float uSunDisc, uMoon, uStars, uRain, uFog, uCond, uNight, uFlyAmt;
 uniform vec3 uBugC, uBugSpot, uFlyC, uSill, uFrame, uWall, uHill, uHill2;
 uniform int uFlies;
-uniform vec4 uFly[32];                   // the jars' fireflies: x, y, z, glow (world)
-uniform int uJarN;
-uniform sampler2D uJarTex;               // the jars' rows (19: foot and size; see terrarium.cpp)
+uniform vec4 uFly[32];                   // the jar's fireflies: x, y, z, glow (world)
 uniform mat4 uLightVP;
 uniform sampler2DShadow uShadow;
 uniform float uSoft;
@@ -61,11 +60,11 @@ uniform float uPondY, uPond, uMossCover, uInVine;
 uniform vec3 uSoil, uSoil2, uGravel, uStr1, uStr2, uMoss, uMoss2, uLeaf, uLeaf2, uStem, uCap, uCap2, uFlower, uFlower2, uBark, uWater, uStone;
 
 const float JR = 1.0, JHB = 0.8, JRN = 0.62, JHN = 0.93, JT = 0.022;
-const float ZW = -2.3;                   // the window wall
-const float SF = 1.3;                    // the sill's front edge
-const float WX = 2.4, WY = 2.7;          // the window opening (half width, height above the sill)
-const float WCX = 0.0;                   // its center
 const float PI = 3.14159265, TAU = 6.2831853;
+// the lab (world units, as lab.cpp's)
+const vec3 LAB_LO = vec3(-30.3, -6.3, -20.3), LAB_HI = vec3(30.3, 14.3, 33.3);
+const float GROUND = -53.0;
+bool inLab(vec3 p) { return all(greaterThan(p, LAB_LO)) && all(lessThan(p, LAB_HI)); }
 
 // the soil (the same function as the CPU's)
 float soilH(vec2 q) {
@@ -78,7 +77,6 @@ float soilH(vec2 q) {
     h -= uPondP.w * (1.0 - smoothstep(0.5, 1.15, dp));
     return h;
 }
-vec4 jarTexel(int j, int i) { return texelFetch(uJarTex, ivec2(i, j), 0); }
 
 // the jar's outer surface (a revolved profile: a wide body with round shoulders, a neck, a lip)
 float sdRoundBox2(vec2 p, vec2 b, vec4 r) {
@@ -97,7 +95,7 @@ float jarOuter(vec3 p) {
     return d;
 }
 
-// the sun's shadow (soft: a dozen taps; offset toward the sun, thin leaves lit from either side)
+// the key light's shadow (soft: a dozen taps; offset toward the light, thin leaves lit from either side)
 float shadowAt(vec3 wp, vec3 n) {
     vec3 no = dot(n, uSunDir) >= 0.0 ? n : -n;
     vec4 l = uLightVP * vec4(wp + no * 0.006 * uScale, 1.0);
@@ -111,84 +109,61 @@ float shadowAt(vec3 wp, vec3 n) {
     return smoothstep(0.05, 0.95, r / 12.0);
 }
 
-// ---------------------------------------------------------------- the outside: sky, hills, the garden
+// ---------------------------------------------------------------- the sky (over the city)
 vec3 sky(vec3 rd) {
-    // the window shows only a few degrees above the horizon: its elevations are stretched (E = 8 x the angle)
+    // elevations a little stretched (E = 2.5 x the slope)
     float az = atan(rd.x, -rd.z);
-    float E = rd.y / max(length(rd.xz), 1e-3) * 8.0;
-    vec3 c = mix(uSkyH, uSkyZ, smoothstep(0.05, 0.75, E));
-    c = mix(c, uSkyZ * 0.9, smoothstep(0.6, 1.2, E) * 0.5);
-    // the sun's glow and disc (soft: out of focus through the window)
-    vec2 sd = vec2(az - uSunSky.x, (E - uSunSky.y) * 0.125);
+    float E = rd.y / max(length(rd.xz), 1e-3) * 2.5;
+    vec3 c = mix(uSkyH, uSkyZ, smoothstep(0.0, 1.4, E));
+    c = mix(c, uSkyZ * 0.85, smoothstep(1.2, 2.5, E) * 0.5);
+    // the sun's glow and disc
+    vec2 sd = vec2(az - uSunSky.x, (E - uSunSky.y) * 0.4);
     float sr = length(sd);
-    c += uGlowSun * (exp(-sr * 9.0) * 0.6 + exp(-sr * 40.0) * 0.6);
-    c += uSunCol * uSunDisc * smoothstep(0.024, 0.019, sr) * 0.9;
+    c += uGlowSun * (exp(-sr * 6.0) * 0.6 + exp(-sr * 30.0) * 0.6);
+    c += uSunCol * 0.0 + uGlowSun * uSunDisc * smoothstep(0.03, 0.024, sr) * 1.4;
     // the moon
-    vec2 md = vec2(az - 0.2, (E - 0.36) * 0.125);
+    vec2 md = vec2(az - 0.35, (E - 0.9) * 0.4);
     float mr = length(md);
-    float moon = smoothstep(0.022, 0.018, mr) * (1.0 - 0.6 * smoothstep(0.018, 0.0, length(md - vec2(0.008, 0.002))));
-    c += vec3(0.9, 0.93, 1.0) * uMoon * (moon * 1.4 + exp(-mr * 30.0) * 0.18);
+    float moon = smoothstep(0.03, 0.025, mr) * (1.0 - 0.6 * smoothstep(0.025, 0.0, length(md - vec2(0.011, 0.003))));
+    c += vec3(0.9, 0.93, 1.0) * uMoon * (moon * 1.4 + exp(-mr * 22.0) * 0.18);
     // stars
     if (uStars > 0.01) {
-        vec2 sc = vec2(az * 110.0, E * 14.0);
+        vec2 sc = vec2(az * 90.0, E * 40.0);
         vec2 ci = floor(sc);
         vec2 h = hash2(ci);
-        float star = smoothstep(0.2, 0.0, length(fract(sc) - h)) * step(0.82, hash(ci + 3.1));
+        float star = smoothstep(0.2, 0.0, length(fract(sc) - h)) * step(0.84, hash(ci + 3.1));
         star *= 0.6 + 0.4 * sin(uTime * (0.8 + 2.0 * h.x) + h.y * 30.0);
-        c += vec3(0.8, 0.85, 1.0) * star * uStars * smoothstep(0.25, 0.5, E) * 1.4;
+        c += vec3(0.8, 0.85, 1.0) * star * uStars * smoothstep(0.3, 0.9, E) * 1.2;
     }
     // toon clouds drifting slowly: a lit top, a shaded belly
     {
-        vec2 cp = vec2(az * 3.0 + uTime * 0.004, E * 1.6);
-        float band = smoothstep(0.3, 0.5, E);
+        vec2 cp = vec2(az * 3.0 + uTime * 0.004, E * 0.9);
+        float band = smoothstep(0.15, 0.5, E);
         float n = fbm(cp * vec2(1.4, 2.4) + vec2(0.0, 3.0)) + 0.08 * band - 0.04;
         float aa = max(fwidth(n), 0.004);
-        float cl = smoothstep(0.59 - aa, 0.59 + aa, n) * band;
-        float lit = smoothstep(0.58, 0.62, fbm(cp * vec2(1.4, 2.4) + vec2(0.0, 3.0) + vec2(0.0, -0.1)) + 0.08 * band - 0.04);
+        float cl = smoothstep(0.6 - aa, 0.6 + aa, n) * band;
+        float lit = smoothstep(0.59, 0.63, fbm(cp * vec2(1.4, 2.4) + vec2(0.0, 3.0) + vec2(0.0, -0.1)) + 0.08 * band - 0.04);
         vec3 lightC = mix(uGlowSun, vec3(1.0), 0.55) * (1.0 - 0.7 * uNight);
         vec3 cc = mix(mix(uSkyH, uSkyZ, 0.35) * 1.05, lightC * 1.2, 0.35 + 0.65 * lit);
         cc = mix(cc, uSkyZ * 1.4, uNight * 0.6);
-        c = mix(c, cc, cl * (1.0 - 0.5 * uRain));
+        c = mix(c, cc, cl);
     }
-    // a summer shower: a slate sky
-    c = mix(c, mix(vec3(0.2, 0.27, 0.36), uSkyZ, 0.25) * (1.0 - 0.5 * uNight), uRain * 0.85);
-    // the hills, two layers, a line of round trees on the near one
-    float h1 = 0.24 + 0.08 * sin(az * 3.0 + 1.3) + 0.05 * sin(az * 7.0 + 0.4);
-    float h2 = 0.1 + 0.07 * sin(az * 2.2 - 0.7) + 0.035 * sin(az * 5.3 + 2.0);
-    float cx = az * 60.0;
-    float cell = floor(cx);
-    float rr = 0.5 + 0.4 * hash1(cell);
-    float tree = sqrt(max(0.0, sq(rr * 0.5) - sq(fract(cx) - 0.5))) * 0.16 * (0.6 + 0.8 * hash1(cell + 3.0)) * step(0.35, hash1(cell + 9.0));
-    vec3 hl = clamp((uSunCol * 0.35 + uAmbS * 1.1 + uFill * 0.3) / 1.55, 0.0, 1.3);
-    vec3 far = mix(uHill2 * hl, uSkyH, 0.4);
-    far = mix(far, uSkyH * 0.45 + uSkyZ * 0.35, uNight * 0.7);
-    float ea = max(fwidth(E), 0.002);
-    c = mix(c, far, smoothstep(ea, -ea, E - h1));
-    vec3 near = mix(uHill, uHill * 0.6 + uSkyZ * 0.12, smoothstep(0.0, -0.3, E - h2));
-    near *= hl * (1.0 - 0.35 * uRain);
-    near = mix(near, uSkyZ * 0.5 + uSkyH * 0.1, uNight * 0.75);
-    float nm = smoothstep(ea, -ea, E - h2 - tree);
-    c = mix(c, near, nm);
-    // the garden's fireflies, far away at night
-    if (uNight > 0.05 && nm > 0.5) {
-        vec2 gp = vec2(az * 140.0, E * 140.0 / 8.0 + uTime * 0.03);
-        vec2 gi = floor(gp);
-        vec2 gh = hash2(gi + 7.0);
-        float f = smoothstep(0.2, 0.0, length(fract(gp) - 0.2 - gh * 0.6)) * step(0.965, hash(gi + 1.7));
-        f *= smoothstep(-0.2, 0.8, sin(uTime * (0.5 + gh.x) + gh.y * 20.0));
-        c += uFlyC * f * uNight * 1.1 * smoothstep(-0.02, -0.12, E - h2);
-    }
+    // the haze over the city, low
+    c = mix(c, uHaze, smoothstep(0.35, -0.05, E));
     return c;
 }
 
-// the room's reflection in the glass: a dim room, the window behind us a soft bright strip
+// the lab's reflection in the glass: the tubes overhead, the bright street window behind us, the walls, the bench
 vec3 env(vec3 r) {
-    vec3 c = mix(uWall * (uFill + uAmbS * 0.4) * 0.8, (uSkyH * 0.6 + uSkyZ * 0.4) * 0.9, sat(r.y * 0.8 + 0.4));
+    vec3 wall = uWall * (uAmbS * 0.9 + uFill * 0.6) * 0.8;
+    vec3 c = mix(vec3(0.03, 0.033, 0.036) * (uAmbS + uFill), wall, smoothstep(-0.25, 0.05, r.y));
     float az = atan(r.x, r.z);
-    float strip = smoothstep(0.5, 0.42, abs(az - 0.55)) * smoothstep(-0.25, 0.1, r.y) * smoothstep(0.95, 0.6, r.y);
-    float strip2 = smoothstep(0.09, 0.05, abs(az + 0.85)) * smoothstep(-0.1, 0.2, r.y) * smoothstep(0.9, 0.5, r.y);
-    vec3 light = mix(uSkyH, vec3(1.0), 0.5) * (1.0 - 0.75 * uNight) + uFlyC * 0.1 * uNight;
-    c += light * (strip * 1.3 + strip2 * 0.8);
+    // the street window behind us: the day
+    float win = smoothstep(0.62, 0.5, abs(az)) * smoothstep(-0.1, 0.05, r.y) * smoothstep(0.55, 0.4, r.y);
+    c = mix(c, (uSkyH * 0.7 + uSkyZ * 0.3) * (1.0 - 0.6 * uNight), win * 0.8);
+    // the tubes: bright bars overhead
+    float tube = smoothstep(0.55, 0.75, r.y) * step(0.55, fract(r.x / max(r.y, 0.1) * 0.9 + 0.2));
+    c += uFill * 1.2 * tube;
     return c;
 }
 
@@ -269,8 +244,7 @@ vec4 drops(vec2 uv, float cov) {
     float trail = 0.0;
     for (int k = 0; k < 5; k++) {
         float fk = float(k);
-)"
-R"(        float lane = -2.6 + fk * 1.25 + 0.3 * hash1(fk * 3.0);
+        float lane = -2.6 + fk * 1.25 + 0.3 * hash1(fk * 3.0);
         float speed = 0.012 + 0.008 * hash1(fk + 5.0);
         float yh = 1.0 - mod(uTime * speed + hash1(fk) * 2.0, 1.3);
         float du = uv.x - lane - 0.004 * sin(uv.y * 40.0 + fk);
@@ -297,114 +271,12 @@ R"(        float lane = -2.6 + fk * 1.25 + 0.3 * hash1(fk * 3.0);
     return res;
 }
 
-// the sill: painted wood, the first jar's shadow and caustic, the others' shadows and glow
-vec3 sillColor(vec3 p) {
-    float grain = fbm(vec2(p.x * 2.5, p.z * 28.0)) * 0.6 + vnoise(vec2(p.x * 40.0, p.z * 3.0)) * 0.4;
-    vec3 alb = uSill * (0.88 + 0.2 * grain);
-    vec3 L = uSunDir;
-    float tmax = 1.0 / max(L.y, 0.05);
-    vec2 a = p.xz, b = p.xz + L.xz * tmax;
-    vec2 ba = b - a;
-    float hseg = sat(dot(-a, ba) / max(dot(ba, ba), 1e-6));
-    float dmin = length(a + ba * hseg);
-    float ylev = L.y * tmax * hseg;
-    float jarSh = smoothstep(1.02, 0.96, dmin);
-    float soilSh = jarSh * smoothstep(0.45, 0.25, ylev);
-    float caus = exp(-sq((dmin - 0.86) / 0.08)) * smoothstep(0.25, 0.6, ylev) * jarSh;
-    float sh = 1.0 - 0.75 * soilSh - 0.25 * jarSh * (1.0 - soilSh);
-    vec3 lightC = uSunCol * sat(L.y) * sh * 0.55 + uAmbS * 0.65 + uFill * 0.6;
-    vec3 col = alb * lightC + uSunCol * alb * caus * 0.35 * (1.0 - soilSh);
-    col += uFlyC * alb * uFlyAmt * 0.12 * exp(-sq(max(length(p.xz) - 0.9, 0.0) / 0.5));
-    for (int j = 1; j < uJarN; j++) {
-        vec4 f = jarTexel(j, 19);
-        if (f.w <= 0.0 || abs(f.y) > 0.05) continue;
-        vec2 dq = p.xz - f.xz - uSunDir.xz / max(uSunDir.y, 0.2) * 0.25 * f.w;
-        col *= 1.0 - 0.3 * smoothstep(1.05 * f.w, 0.8 * f.w, length(dq));
-        col += uFlyC * alb * uFlyAmt * 0.1 * exp(-sq(max(length(p.xz - f.xz) - 0.9 * f.w, 0.0) / (0.5 * f.w)));
-    }
-    return col;
-}
-vec3 shelfColor(vec3 p, vec3 n) {
-    float grain = vnoise(vec2(p.x * 2.0, p.z * 30.0 + p.y * 30.0)) * 0.5 + vnoise(vec2(p.x * 30.0, p.y * 4.0)) * 0.5;
-    vec3 alb = uSill * (0.85 + 0.25 * grain) * (n.y > 0.5 ? 1.0 : 0.72);
-    return alb * (uAmbS * 0.7 + uFill * 0.8 + uSunCol * 0.18 * max(n.y, 0.0)) + alb * uFlyC * uFlyAmt * 0.15;
-}
-// the room: the sill (m 1), its front (2), the window wall with the panes, the sky through them and the frame (3),
-// the shelves (4); aaW: the antialiasing width on the wall
-vec3 roomColor(vec3 p, vec3 rd, float m, vec3 n, float aaW) {
-    vec3 col;
-    if (m < 1.5) col = sillColor(p);
-    else if (m < 2.5) {
-        vec3 alb = uSill * mix(0.62, 0.95, smoothstep(-0.1, -0.02, p.y));
-        col = alb * (uAmbS * 0.7 + uFill * 0.75) + alb * uFlyC * uFlyAmt * 0.08;
-    } else if (m > 3.5) col = shelfColor(p, n);
-    else {
-        vec3 W = p;
-        vec2 Wq = vec2(W.x - WCX, W.y);
-        float dOpen = sdBox2(Wq - vec2(0.0, WY * 0.5), vec2(WX, WY * 0.5));
-        if (dOpen < 0.0) {
-            col = sky(rd);
-            if (uRain > 0.01) {
-                float u = (W.x + W.y * 0.12) * 60.0;
-                float ci = floor(u);
-                float fx = fract(u) - 0.5;
-                float v = W.y * 2.2 + uTime * (5.0 + 2.0 * hash1(ci)) + hash1(ci + 7.0) * 20.0;
-                float fv = fract(v);
-                float streak = smoothstep(0.12, 0.0, abs(fx)) * smoothstep(0.0, 0.08, fv) * smoothstep(0.5, 0.1, fv) * step(0.45, hash1(ci + 3.0));
-                col = mix(col, vec3(0.75, 0.82, 0.9) * (1.0 - 0.6 * uNight), streak * uRain * 0.22);
-                vec2 dp = W.xy * vec2(9.0, 6.0);
-                vec2 di = floor(dp);
-                vec2 dh = hash2(di);
-                vec2 off = vec2(0.25 + 0.5 * dh.x, fract(dh.y - uTime * (0.03 + 0.06 * dh.x)));
-                vec2 dq = (fract(dp) - off) / (vec2(0.08, 0.11) * (0.7 + 0.6 * dh.y));
-                float r = length(dq);
-                float has = step(0.62, hash(di + 4.0));
-                float drop = smoothstep(1.0, 0.85, r) * has;
-                col = mix(col, mix(uSkyZ, uSkyH, 0.5) * 0.85, drop * uRain * 0.4);
-                col *= 1.0 - smoothstep(0.7, 1.0, r) * smoothstep(1.05, 0.95, r) * has * uRain * 0.35;
-            }
-        } else {
-            col = uWall * (0.92 + 0.1 * vnoise(W.xy * 3.0)) * (uAmbS * 0.75 + uFill * 0.8 + uSunCol * 0.04);
-        }
-        float blur = max(0.012, aaW);
-        float fx = abs(abs(Wq.x) - 1.62) - 0.05;
-        float fr = min(min(fx, W.y - 0.09), abs(W.y - 1.5) - 0.045);
-        fr = dOpen < 0.0 ? fr : abs(dOpen - 0.07) - 0.08;
-        float fm = smoothstep(blur, -blur, fr);
-        vec3 frameC = uFrame * (uFill * 0.9 + uAmbS * 0.8 + uSunCol * 0.08);
-        frameC *= 1.0 - smoothstep(-0.05, 0.0, fr) * 0.2;
-        col = mix(col, frameC, fm);
-    }
-    return col;
-}
-// the room along a ray, analytically (what the old ray saw past a jar's thick glass edge): the sill, its front, the
-// window wall, the shelves
+// the lab along a ray, roughly (what a ray sees past a jar's thick glass edge): the bench below, the wall
 vec3 background(vec3 ro, vec3 rd) {
-    float tbest = 1e4, m = 3.0;
-    vec3 n = vec3(0.0, 1.0, 0.0);
-    if (rd.y < 0.0) {
-        float ts = -ro.y / rd.y;
-        vec3 p = ro + rd * ts;
-        if (p.z <= SF && p.z >= ZW) { tbest = ts; m = 1.0; }
-        else if (p.z > SF && rd.z < 0.0) {
-            float tf = (SF - ro.z) / rd.z;
-            if ((ro + rd * tf).y < 0.0) { tbest = tf; m = 2.0; }
-        }
-    }
-    if (m > 2.5) tbest = (ZW - ro.z) / rd.z;
-    vec3 inv = 1.0 / rd;
-    for (int i = 0; i < 3; i++) {
-        vec3 sa = i == 0 ? vec3(2.95, -6.6, 6.6) : (i == 1 ? vec3(1.35, -7.0, -2.75) : vec3(1.35, 2.75, 7.0));
-        vec3 bmin = vec3(sa.y, sa.x - 0.09, ZW), bmax = vec3(sa.z, sa.x, ZW + 0.72);
-        vec3 t0 = (bmin - ro) * inv, t1 = (bmax - ro) * inv;
-        vec3 tn = min(t0, t1), tf = max(t0, t1);
-        float tin = max(max(tn.x, tn.y), tn.z), tout = min(min(tf.x, tf.y), tf.z);
-        if (tout > max(tin, 0.0) && tin > 0.001 && tin < tbest) {
-            tbest = tin; m = 4.0;
-            n = tin == tn.y ? vec3(0.0, -sign(rd.y), 0.0) : (tin == tn.z ? vec3(0.0, 0.0, -sign(rd.z)) : vec3(-sign(rd.x), 0.0, 0.0));
-        }
-    }
-    return roomColor(ro + rd * tbest, rd, m, n, 0.012);
+    vec3 lab = uAmbS * 0.9 + uFill * 0.9 + uSunCol * 0.25;
+    vec3 wall = uWall * lab * 0.85;
+    if (rd.y < -0.02) return mix(wall, vec3(0.05, 0.052, 0.056) * lab, 0.35);
+    return mix(wall, (uSkyH * 0.6 + uSkyZ * 0.4) * 0.6, smoothstep(0.0, 0.3, rd.y) * 0.3);
 }
 
 // the fireflies' light on a point of the jar being drawn (jar units)
@@ -422,16 +294,19 @@ vec3 flies(vec3 p, vec3 n) {
 }
 )";
 
-// ---- the meshes: jar units, placed by the jar's foot and size; ferns and broad leaves sway about their slot
+// ---- the meshes: jar units, placed by the jar's foot and size; ferns and broad leaves sway about their slot; what
+// creeps over the lab and the city grows out of its pivot from its line (two clocks: the bench's, the rest's)
 inline const char* MESH_VS = R"(#version 330 core
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNrm;
 layout(location = 2) in vec4 aM;     // material, ao, seed, two-sided
 layout(location = 3) in vec4 aF;     // the material's parameters
 layout(location = 4) in vec4 aS;     // sway: pivot x, z, phase, amplitude
+layout(location = 5) in vec4 aG;     // growth: pivot, the line it appears at (<= -999: always there)
 uniform mat4 uVP;
 uniform vec3 uFoot;
 uniform float uScale, uTime, uSway;
+uniform vec3 uLines;                 // the bench's clock, the room's and the city's, the surge (the drop)
 out vec3 vL;
 out vec3 vW;
 out vec3 vN;
@@ -440,10 +315,15 @@ out vec4 vF;
 void main() {
     vec3 p = aPos, n = aNrm;
     if (aS.w > 0.0) {
-        float a = aS.w * uSway * sin(uTime * 0.7 + aS.z);
+        float a = aS.w * (uSway + uLines.z * 2.5) * sin(uTime * (0.7 + uLines.z * 1.5) + aS.z);
         vec2 c = aS.xy;
         p.xz = c + rot(a) * (p.xz - c);
         n.xz = rot(a) * n.xz;
+    }
+    if (aG.w > -999.0) {
+        float L = aG.w < 26.5 ? uLines.x : uLines.y;
+        float k = smoothstep(aG.w, aG.w + 0.6, L);
+        p = aG.xyz + (p - aG.xyz) * k;
     }
     vL = p;
     vN = n;
@@ -759,25 +639,447 @@ R"(        vec3 hq = inf.xyz;
 }
 )";
 
-// ---- the room: the window wall (the panes, the sky and the garden through them, the frame), the sill, the shelves
-inline const char* ROOM_FS = R"(#version 330 core
+// ---- the lab and the city (materials 50 and up; see lab.cpp): the room, its furniture and equipment, the tag, the
+// buildings, the street, the neon; what grows over all of it (vines, roots, leaves, flowers, bark, crowns, moss)
+inline const char* LAB_FS = R"(#version 330 core
 in vec3 vL;
 in vec3 vW;
 in vec3 vN;
 in vec4 vM;
 in vec4 vF;
 out vec4 frag;
+uniform vec3 uLabC;                      // the ceiling tubes' cold light
+uniform float uLabOn, uFlicker;          // how many tubes still work; the drop's flicker
+uniform float uMossR, uCityGreen, uLitWin, uNeonOn;
+uniform vec3 uCrackW;                    // where the moss spreads from (the crack)
+uniform int uLightN;
+uniform vec4 uLightP[16];                // the city's lights: where, reach
+uniform vec4 uLightC[16];                // their color (0..2 neon, 3 a street lamp), sign
+uniform vec3 uNeon0, uNeon1, uNeon2, uLampC;
+uniform float uTagNo;                    // the specimen's number
+uniform vec3 uLeafA, uLeafB;             // the growth's leaves (the variant's)
+
+vec3 neonCol(float i) { return i < 0.5 ? uNeon0 : (i < 1.5 ? uNeon1 : uNeon2); }
+// a sign's flicker: most burn steady, a few buzz, one is half dead; the drop makes them all stutter
+float neonFlick(float s) {
+    float h = hash1(s * 7.31 + 0.4);
+    float t = uTime;
+    float buzz = step(0.72, h) * step(0.8, hash1(floor(t * 14.0) + s * 3.7));
+    float dead = step(0.9, h) * step(0.45, fract(t * 0.11 + h * 5.0)) * step(0.3, hash1(floor(t * 9.0) + s));
+    float f = 1.0 - 0.75 * buzz - 0.85 * dead;
+    f *= 1.0 - uFlicker * 0.8 * step(0.45, hash1(floor(t * 22.0) + s * 1.3));
+    return f;
+}
+float band(float ndl) { return smoothstep(-0.05, 0.12, ndl) * 0.78 + smoothstep(0.5, 0.62, ndl) * 0.22; }
+
+// the light at p (normal n, toward the eye -rd) on an albedo: in the lab its cold tubes and key, the windows' day;
+// outside the sun (or the moon) and the sky; everywhere the city's lights and the fireflies
+vec3 light(vec3 p, vec3 n, vec3 rd, vec3 alb, float trans, float spec, float ao) {
+    vec3 col;
+    vec3 keyD, keyC;
+    if (inLab(p)) {
+        keyD = uSunDir; keyC = uSunCol * uLabOn;
+        float sh = shadowAt(p, n);
+        col = alb * keyC * band(dot(n, keyD)) * sh;
+        col += alb * uLabC * uLabOn * (0.45 + 0.55 * sat(n.y * 0.6 + 0.4)) * ao;
+        col += alb * mix(uAmbG, uAmbS, n.y * 0.5 + 0.5) * ao;
+        // the day through the windows behind (warm at the golden hour), stronger near them
+        float wz = smoothstep(16.0, -19.0, p.z);
+        col += alb * uGlowSun * 0.5 * sat(dot(n, normalize(vec3(0.0, 0.3, 1.0))) * 0.7 + 0.3) * (0.25 + 0.75 * wz) * ao;
+        col += alb * keyC * trans * sat(-dot(n, keyD) * 0.8 + 0.25) * 0.4;
+    } else {
+        keyD = uOutDir; keyC = uOutCol;
+        col = alb * keyC * band(dot(n, keyD));
+        col += alb * mix(uOutAmbG, uOutAmbS, n.y * 0.5 + 0.5) * ao;
+        col += alb * keyC * trans * sat(-dot(n, keyD) * 0.8 + 0.25) * 0.45;
+    }
+    // the city's lights
+    for (int i = 0; i < uLightN; i++) {
+        vec3 L = uLightP[i].xyz - p;
+        float R = uLightP[i].w;
+        float d2 = dot(L, L);
+        if (d2 > R * R * 6.0) continue;
+        float d = sqrt(d2);
+        vec4 lc = uLightC[i];
+        vec3 c = lc.x > 2.5 ? uLampC : neonCol(lc.x) * neonFlick(lc.y) * 1.6;
+        float w = sat(dot(n, L / max(d, 1e-3)) * 0.75 + 0.25) * exp(-d2 / (R * R));
+        col += alb * c * w * uNeonOn;
+    }
+    if (spec > 0.0) {
+        vec3 hv = normalize(keyD - rd);
+        col += keyC * spec * 0.5 * smoothstep(0.8, 0.86, pow(sat(dot(n, hv)), 60.0));
+        float fr = pow(1.0 - sat(dot(n, -rd)), 4.0);
+        col += env(reflect(rd, n)) * fr * spec * 0.5;
+    }
+    // a rim of light
+    col += mix(keyC, uGlowSun, 0.5) * pow(1.0 - sat(dot(n, -rd)), 3.0) * 0.12 * ao;
+    col += alb * flies(p, n);
+    return col;
+}
+
+// the moss spreading: in the lab from the crack (its reach uMossR), in the city over everything facing up
+float mossAt(vec3 p, vec3 n) {
+    if (inLab(p) && (uMossR < 0.01 || length(p - uCrackW) * 0.7 > uMossR)) return 0.0;
+    float nz = fbm(p.xz * 0.9 + p.y * 0.3) * 0.7 + vnoise(p.xz * 4.0 + p.y) * 0.3;
+    if (inLab(p)) {
+        if (uMossR < 0.01) return 0.0;
+        float d = length(p - uCrackW) * (0.7 + 0.6 * nz);
+        float up = n.y > 0.5 ? 1.0 : 0.55;
+        float patches = smoothstep(0.42, 0.62, fbm(p.xz * 1.7 + p.y * 0.5) + 0.25 * smoothstep(uMossR * 0.6, 0.0, d));
+        return smoothstep(uMossR, uMossR * 0.45, d) * up * patches;
+    }
+    if (uCityGreen < 0.001) return 0.0;
+    float up = n.y > 0.5 ? 1.0 : 0.45;
+    float low = smoothstep(60.0, 0.0, p.y - GROUND) * 0.4;
+    float nzc = fbm(vec2(p.x + p.z, p.y) * 0.05) * 0.7 + vnoise(vec2(p.x + p.z, p.y) * 0.4) * 0.3;
+    return smoothstep(0.62, 0.4, nzc - uCityGreen * 0.45 - low * uCityGreen) * up * smoothstep(0.0, 0.2, uCityGreen);
+}
+// moss: deep and fuzzy, its tips catching the light (sc: its scale, 1 in the lab, smaller in the city)
+vec3 mossCol(vec3 p, float sc) {
+    vec2 q = (p.xz + p.y * vec2(0.7, -0.4)) * sc;
+    float a = vnoise(q * 9.0), b = vnoise(q * 37.0), c = hash(floor(q * 140.0));
+    vec3 m = mix(uMoss2 * 0.42, uMoss * 0.58, sat(a * 0.75 + b * 0.35 - 0.1));
+    m = mix(m, vec3(dot(m, vec3(0.3, 0.5, 0.2))), 0.22);
+    m *= 0.78 + 0.3 * step(0.55, c) + 0.12 * step(0.9, c);
+    return m;
+}
+
+// the windows of a facade (u along it, v up from the street; its storey and style): x the glass (0..1), y lit, z its
+// shade at the head (the inset's shadow), w a frame
+vec4 windows(float u, float v, float storey, float style, float seed, bool street, float aa) {
+    float fl = floor(v / storey), fv = v - fl * storey;
+    vec4 r = vec4(0.0);
+    float gx, gy0, gy1, cw;
+    if (style < 0.5) { cw = 8.6; gx = 0.45; gy0 = 4.0; gy1 = 18.0; }            // ribbon windows
+    else if (style < 1.5) { cw = 9.0; gx = 2.3; gy0 = 5.0; gy1 = 17.0; }        // punched
+    else { cw = 6.0; gx = 0.3; gy0 = 1.4; gy1 = storey - 0.3; }                 // curtain glass
+    if (street && fl < 0.5) { cw = 14.0; gx = 0.6; gy0 = 1.5; gy1 = 13.5; }    // the shop fronts
+    float cu = u / cw, ci = floor(cu), cf = (cu - ci) * cw;
+    float inX = smoothstep(gx - aa, gx + aa, cf) * smoothstep(cw - gx + aa, cw - gx - aa, cf);
+    float inY = smoothstep(gy0 - aa, gy0 + aa, fv) * smoothstep(gy1 + aa, gy1 - aa, fv);
+    r.x = inX * inY;
+    float h = hash(vec2(ci, fl) + seed * 37.0);
+    r.y = step(1.0 - uLitWin * (street && fl < 0.5 ? 0.8 : 0.2), h) * (0.3 + 0.7 * hash(vec2(fl, ci) + seed * 11.0));
+    r.z = smoothstep(gy1 - 2.5, gy1, fv) * r.x;
+    r.w = (1.0 - inX) * inY;
+    // a transom and a mullion in each (the shop fronts and the curtain glass without)
+    if (!(street && fl < 0.5) && style < 1.5) {
+        float mul = smoothstep(0.25 + aa, 0.25, abs(cf - cw * 0.5)) + smoothstep(0.2 + aa, 0.2, abs(fv - gy1 + 3.5));
+        r.w = max(r.w, sat(mul) * r.x);
+        r.x *= 1.0 - sat(mul);
+    }
+    r.y *= 0.6 + 0.4 * smoothstep(gy1, gy0, fv);
+    return r;
+}
+
+// the specimen tag's print: a manila card, a red band, SPECIMEN as blocks, the number in seven segments, a
+// barcode, ruled lines and a handwritten note, a stamp
+float seg7(vec2 q, int d) {
+    // q in the digit's box (0..1 x 0..1.6)
+    const int M[10] = int[10](0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F);
+    int m = M[d];
+    float r = 0.0;
+    float w = 0.13;
+    vec2 a[7] = vec2[7](vec2(0.5, 1.6), vec2(1.0, 1.2), vec2(1.0, 0.4), vec2(0.5, 0.0), vec2(0.0, 0.4), vec2(0.0, 1.2), vec2(0.5, 0.8));
+    for (int i = 0; i < 7; i++) {
+        if (((m >> i) & 1) == 0) continue;
+        vec2 c = a[i];
+        bool hz = (i == 0 || i == 3 || i == 6);
+        vec2 d2 = abs(q - c) - (hz ? vec2(0.38, w * 0.5) : vec2(w * 0.5, 0.34));
+        r = max(r, step(max(d2.x, d2.y), 0.0));
+    }
+    return r;
+}
+vec3 tagPrint(vec2 uv) {
+    vec2 q = uv * vec2(1.65, 1.0);
+    vec3 card = vec3(0.62, 0.45, 0.22);
+    card *= 0.92 + 0.12 * vnoise(uv * 60.0);
+    vec3 ink = vec3(0.04, 0.035, 0.05), red = vec3(0.55, 0.05, 0.04);
+    vec3 c = card;
+    // the red band at the top, SPECIMEN as letter blocks on it
+    if (uv.y > 0.8) {
+        c = red;
+        float lx = (q.x - 0.25) / 0.09;
+        float li = floor(lx);
+        if (li >= 0.0 && li < 8.0 && uv.y > 0.85 && uv.y < 0.95) {
+            float f = fract(lx);
+            vec2 g = vec2(f, (uv.y - 0.85) / 0.1);
+            float hh = hash(vec2(li, 3.0));
+            float letter = step(0.15, f) * step(f, 0.8) * (step(g.y, 0.18) + step(0.82, g.y) + step(g.x, 0.32) * step(0.2, hh) + step(0.66, g.x) * step(0.5, hh)
+                           + step(abs(g.y - 0.5), 0.1) * step(0.35, hh));
+            c = mix(c, card * 1.3, sat(letter));
+        }
+    }
+    // the eyelet (its ring) at the top left
+    float er = length((q - vec2(0.12, 0.85)) * vec2(1.0, 1.0));
+    c = mix(c, vec3(0.75, 0.7, 0.6), smoothstep(0.065, 0.055, er));
+    c = mix(c, vec3(0.06), smoothstep(0.03, 0.025, er));
+    // the number: No. and two digits
+    int n = int(uTagNo);
+    vec2 dq = (q - vec2(0.2, 0.32)) / vec2(0.16, 0.16);
+    if (dq.x > 0.0 && dq.x < 1.0 && dq.y > 0.0 && dq.y < 1.6) c = mix(c, ink, seg7(dq, (n / 10) % 10));
+    dq.x -= 1.35;
+    if (dq.x > 0.0 && dq.x < 1.0 && dq.y > 0.0 && dq.y < 1.6) c = mix(c, ink, seg7(dq, n % 10));
+    // a barcode on the right
+    if (q.x > 1.0 && q.x < 1.52 && uv.y > 0.3 && uv.y < 0.7) {
+        float b = hash(vec2(floor(q.x * 140.0), 1.0));
+        c = mix(c, ink, step(0.45, b));
+    }
+    // ruled lines and a scribbled note
+    for (int k = 0; k < 2; k++) {
+        float y = 0.18 - float(k) * 0.08;
+        float line = smoothstep(0.006, 0.0, abs(uv.y - y)) * step(0.08, q.x) * step(q.x, 1.55);
+        c = mix(c, ink * 2.0 + card * 0.5, line * 0.6);
+        float sx = q.x;
+        float scrib = smoothstep(0.012, 0.0, abs(uv.y - y - 0.03 - 0.018 * sin(sx * 90.0 + float(k) * 3.0) * sin(sx * 23.0)))
+                      * step(0.12, sx) * step(sx, 0.9 - float(k) * 0.3);
+        c = mix(c, vec3(0.05, 0.08, 0.3), scrib);
+    }
+    // a stamp, askew: a red ring
+    vec2 sq = rot(0.3) * (q - vec2(1.2, 0.4));
+    float st = abs(length(sq * vec2(1.0, 1.4)) - 0.2);
+    c = mix(c, red * 1.2, smoothstep(0.03, 0.015, st) * 0.55 * step(0.3, vnoise(q * 40.0)));
+    return c;
+}
+// a notebook's page: ruled lines, a margin, notes
+vec3 pagePrint(vec2 p) {
+    vec3 c = vec3(0.78, 0.77, 0.72);
+    float ly = fract(p.y * 12.0);
+    c = mix(c, vec3(0.35, 0.5, 0.75), smoothstep(0.06, 0.0, abs(ly - 0.5)) * 0.5);
+    c = mix(c, vec3(0.8, 0.2, 0.2), smoothstep(0.012, 0.0, abs(p.x - 0.18)) * 0.6);
+    float row = floor(p.y * 12.0);
+    float wrote = step(hash(vec2(row, 7.0)), 0.75) * step(0.2, p.x) * step(p.x, 0.3 + 0.6 * hash(vec2(row, 2.0)));
+    float sc = smoothstep(0.1, 0.0, abs(ly - 0.62 - 0.1 * sin(p.x * 140.0 + row) * sin(p.x * 37.0 + row * 2.0)));
+    c = mix(c, vec3(0.08, 0.1, 0.25), sc * wrote);
+    return c;
+}
+
 void main() {
-    vec3 rd = normalize(vW - uEye);
-    frag = vec4(roomColor(vW, rd, vM.x, normalize(vN), length(fwidth(vW.xy)) * 0.7), 1.0);
+    vec3 p = vW;
+    vec3 rd = normalize(p - uEye);
+    vec3 n = normalize(vN);
+    if (vM.w > 0.5 && dot(n, rd) > 0.0) n = -n;
+    float m = vM.x;
+    vec4 f = vF;
+    vec3 alb = vec3(0.5);
+    vec3 emit = vec3(0.0);
+    float trans = 0.0, spec = 0.0, ao = 1.0, moss = 0.0;
+    bool lab = inLab(p);
+    float aa = max(length(fwidth(p)), 1e-4);
+    if (m < 50.5) {
+        // the bench's top: dark resin, a fine speckle, satin
+        alb = vec3(0.03, 0.033, 0.036) * (0.85 + 0.3 * vnoise(p.xz * 30.0)) + vec3(0.02) * step(0.97, hash(floor(p.xz * 90.0)));
+        spec = 0.6;
+        moss = mossAt(p, n);
+    } else if (m < 51.5) {
+        // the cabinets: pale laminate, doors and drawers (their seams)
+        alb = vec3(0.5, 0.53, 0.52);
+        float u = abs(n.z) > 0.5 ? p.x : p.z;
+        float seamX = smoothstep(0.035 + aa, 0.035, abs(fract((u + 0.2) / 3.9 + 0.5) - 0.5) * 3.9);
+        float seamY = smoothstep(0.035 + aa, 0.035, abs(p.y + 1.6));
+        alb *= 1.0 - 0.6 * max(seamX, seamY);
+        moss = mossAt(p, n) * 0.6;
+    } else if (m < 52.5) {
+        alb = vec3(0.4, 0.42, 0.44) * (0.9 + 0.15 * vnoise(vec2(p.x * 40.0, p.z * 2.0)));
+        spec = 0.7;
+    } else if (m < 53.5) {
+        // the lab's walls: white tiles to the waist, pale paint above
+        float u = abs(n.z) > 0.5 ? p.x : p.z;
+)"
+R"(        if (p.y < 1.8) {
+            vec2 t = vec2(u, p.y) / 1.0;
+            vec2 g = abs(fract(t) - 0.5);
+            float grout = smoothstep(0.47, 0.49, max(g.x, g.y));
+            alb = mix(vec3(0.7, 0.73, 0.72), vec3(0.3, 0.32, 0.32), grout);
+            spec = 0.3;
+        } else alb = uWall * (0.9 + 0.08 * vnoise(vec2(u, p.y) * 0.8));
+        moss = mossAt(p, n) * 0.7;
+    } else if (m < 54.5) {
+        // the floor: vinyl tiles
+        vec2 t = p.xz / 2.0;
+        vec2 ti = floor(t);
+        vec2 g = abs(fract(t) - 0.5);
+        alb = vec3(0.22, 0.24, 0.24) * (0.9 + 0.15 * hash(ti)) * (1.0 - 0.3 * smoothstep(0.47, 0.5, max(g.x, g.y)));
+        spec = 0.3;
+        moss = mossAt(p, n);
+    } else if (m < 55.5) {
+        vec2 g = abs(fract(p.xz / 4.0) - 0.5);
+        alb = vec3(0.6, 0.61, 0.6) * (1.0 - 0.25 * smoothstep(0.48, 0.5, max(g.x, g.y)));
+    } else if (m < 56.5) {
+        // a ceiling tube's diffuser: lit while it still works (they fail one by one)
+        float on = step(hash1(f.x * 3.7 + 1.0) * 0.9, uLabOn - 0.1) * (1.0 - uFlicker * step(0.5, hash1(floor(uTime * 18.0) + f.x)));
+        emit = uLabC * (0.4 + 2.6 * on);
+        alb = vec3(0.0);
+    } else if (m < 57.5) {
+        alb = f.z > 0.5 ? pagePrint(vec2(f.x, f.y)) : tagPrint(vec2(f.x, f.y));
+        if (f.z > 0.5) alb = pagePrint(vec2((p.x + 2.95) / 1.35, (p.z - 0.4) / 0.95));
+        trans = 0.15;
+    } else if (m < 58.5) {
+        alb = f.rgb;
+        spec = f.w;
+        moss = mossAt(p, n) * 0.5;
+    } else if (m < 59.5) {
+        // the monitor: a cold screen, lines of text, a graph
+        vec2 s = vec2(p.x + 21.2, p.y - 1.5) / vec2(4.4, 2.6);
+        vec3 bg = vec3(0.02, 0.06, 0.08);
+        float rowi = floor(s.y * 14.0);
+        float txt = step(0.08, s.x) * step(s.x, 0.15 + 0.5 * hash(vec2(rowi, 1.0))) * step(0.3, fract(s.y * 14.0)) * step(0.5, hash(vec2(floor(s.x * 40.0), rowi)));
+        float graph = smoothstep(0.02, 0.0, abs(s.y - 0.35 - 0.15 * sin(s.x * 20.0 + uTime) * s.x)) * step(0.6, s.x);
+        emit = bg + vec3(0.2, 0.8, 0.7) * (txt * 0.6 + graph) * uLabOn * 0.8;
+        alb = vec3(0.0);
+    } else if (m < 60.5 || (m > 60.5 && m < 62.5)) {
+        if (m < 60.5) {
+            // concrete: panels, rain streaks, the windows; the roofs gravel
+            float seed = f.x, storey = f.y, style = f.z;
+            alb = mix(vec3(0.34, 0.33, 0.31), vec3(0.46, 0.44, 0.41), seed) * (0.88 + 0.16 * vnoise(p.xz * 0.3 + p.y * 0.2));
+            if (abs(n.y) > 0.5) {
+                alb = vec3(0.26, 0.26, 0.25) * (0.8 + 0.3 * vnoise(p.xz * 2.0));
+                moss = mossAt(p, n) * 1.2;
+            } else {
+                float u = abs(n.z) > 0.5 ? p.x : p.z;
+                float v = p.y - GROUND;
+                float streak = smoothstep(0.55, 0.85, vnoise(vec2(u * 0.4, v * 0.012))) * smoothstep(0.3, 0.7, vnoise(vec2(u * 0.1, v * 0.05)));
+                alb *= 1.0 - 0.3 * streak;
+                if (style < 8.5) {
+                    float waa = max(aa * 1.2, 0.05);
+                    vec4 w = windows(u, v, storey, style, seed, f.w > 0.5 && n.z > 0.5, waa);
+                    // far away, the pattern melts into its average
+                    float far = smoothstep(0.6, 2.0, waa);
+                    vec3 glass = mix(uHaze * 0.4, uSkyZ * 0.35, 0.5 + 0.5 * reflect(rd, n).y) * 0.55 + vec3(0.012);
+                    vec3 litC = mix(vec3(1.0, 0.58, 0.24), vec3(0.55, 0.78, 1.0), step(0.7, hash(vec2(floor(u / 9.0), floor(v / storey)) + 1.3))) * 1.1;
+                    float wx = mix(w.x, 0.45, far);
+                    alb = mix(alb, glass, wx);
+                    alb *= 1.0 - 0.45 * w.z * (1.0 - far);
+                    emit += litC * w.y * mix(w.x, 0.45, far) * uLitWin;
+                    alb = mix(alb, vec3(0.12, 0.13, 0.13), w.w * 0.4 * (1.0 - far));
+                    spec = 0.6 * wx;
+                    moss = mossAt(p, n) * (1.0 - 0.7 * wx);
+                } else moss = mossAt(p, n);
+            }
+        } else if (m < 61.5) {
+            // asphalt: its lane lines, its cracks with grass
+            alb = vec3(0.07, 0.072, 0.075) * (0.8 + 0.35 * vnoise(p.xz * 0.5));
+            float lane = smoothstep(0.5, 0.3, abs(p.z - 88.0)) * step(0.5, fract(p.x / 12.0));
+            alb = mix(alb, vec3(0.6, 0.55, 0.35), lane * 0.6);
+            float crack = smoothstep(0.03, 0.0, abs(fbm(p.xz * 0.05) - 0.5));
+            moss = max(mossAt(p, n) * 0.6, crack * smoothstep(0.1, 0.5, uCityGreen));
+        } else {
+            alb = vec3(0.3, 0.29, 0.27);
+            vec2 g = abs(fract(p.xz / 6.0) - 0.5);
+            alb *= 1.0 - 0.3 * smoothstep(0.46, 0.5, max(g.x, g.y));
+            moss = mossAt(p, n) * 1.2;
+        }
+    } else if (m < 63.5) {
+        // a neon tube: its color, burning (at night), flickering
+        vec3 c = neonCol(f.x);
+        float on = neonFlick(f.y) * uNeonOn;
+        emit = c * (0.25 + 3.0 * on) + vec3(1.0) * 0.6 * on * pow(sat(dot(n, -rd)), 3.0);
+        alb = c * 0.2;
+    } else if (m < 64.5) {
+        emit = uLampC * (0.2 + 3.0 * uNeonOn);
+        alb = vec3(0.0);
+    } else if (m < 65.5) {
+        alb = mix(uSoil2, uSoil, vnoise(p.xz * 40.0));
+        moss = smoothstep(0.55, 0.7, vnoise(p.xz * 18.0)) * 0.7;
+    } else if (m < 66.5) {
+        // agar in a petri dish: colonies
+        vec2 q = p.xz * 9.0 + f.x * 7.0;
+        vec2 qi = floor(q);
+        float col = smoothstep(0.32, 0.22, length(fract(q) - 0.5 - (hash2(qi) - 0.5) * 0.3)) * step(0.7, hash(qi));
+        alb = mix(vec3(0.62, 0.5, 0.22), mix(vec3(0.85, 0.8, 0.7), uCap, step(0.5, hash(qi + 3.0))), col);
+        spec = 0.8;
+    } else if (m < 70.5) {
+        alb = mix(uStem, uLeafB, 0.4) * (0.85 + 0.2 * vnoise(vec2(f.y * 30.0, 0.0)));
+        trans = 0.3;
+    } else if (m < 71.5) {
+        // a leaf: deep at its base, bright at its tip, a pale midrib, veins
+        float u = f.x, v = f.y;
+        float hue = f.z;
+        alb = mix(uLeafB, uLeafA, smoothstep(0.0, 1.0, u) * 0.6 + 0.4 * (1.0 - abs(v)));
+        alb *= 0.85 + 0.3 * hue;
+        alb = mix(alb, uLeafA * 1.25, smoothstep(0.08, 0.0, abs(v)) * 0.5);
+        float vein = smoothstep(0.06, 0.0, abs(fract(u * 5.0 - abs(v) * 1.5) - 0.5) - 0.42) * (1.0 - abs(v));
+        alb = mix(alb, uLeafA * 1.15, vein * 0.25);
+        trans = 0.7;
+        spec = 0.25;
+    } else if (m < 72.5) {
+        alb = mix(uFlower2, uFlower, smoothstep(0.15, 0.8, f.x));
+        alb = mix(alb, vec3(1.0, 0.82, 0.25), smoothstep(0.2, 0.0, f.x));
+        trans = 0.7;
+    } else if (m < 73.5) {
+        // a root: pale at its young tip, dark and corky toward the crack
+        alb = mix(vec3(0.16, 0.1, 0.06), vec3(0.42, 0.33, 0.22), smoothstep(0.3, 1.0, f.x)) * (0.8 + 0.3 * vnoise(vec2(f.y * 60.0, 1.0)));
+        trans = 0.1;
+    } else if (m < 74.5) {
+        // bark
+        float st = vnoise(vec2(atan(n.x, n.z) * 3.0, f.y * 0.8));
+        alb = mix(vec3(0.16, 0.12, 0.09), vec3(0.32, 0.27, 0.22), st);
+        moss = smoothstep(0.55, 0.7, vnoise(p.xz * 0.3 + p.y * 0.2)) * 0.7;
+    } else if (m < 75.5) {
+        // a crown of leaves: lumpy clusters, lit at their tops, leaf flecks
+        vec3 q = f.xyz;
+        float fl = vnoise3(p * 0.9 + f.w);
+        alb = mix(uLeafB, uLeafA, smoothstep(0.2, 0.8, fl) * 0.6 + 0.4 * sat(q.y * 0.7 + 0.4));
+        vec3 pn = p * 1.6;
+        n = normalize(n + (vec3(vnoise3(pn), vnoise3(pn + 5.2), vnoise3(pn + 9.7)) - 0.5) * 0.9);
+        ao = 0.6 + 0.4 * sat(q.y * 0.6 + 0.6);
+        trans = 0.5;
+    } else {
+        // a moss cushion
+        vec3 q = f.xyz;
+        alb = mix(uMoss2, uMoss, smoothstep(0.25, 0.8, vnoise3(q * 6.0 + f.w)) * 0.7 + 0.3 * sat(q.y * 2.0 + 0.3));
+        vec3 pn = p * 120.0;
+        n = normalize(n + (vec3(vnoise3(pn), vnoise3(pn + 5.2), vnoise3(pn + 9.7)) - 0.5) * 1.0);
+        trans = 0.35;
+    }
+    if (moss > 0.01) {
+        // (its edge fuzzy, broken into tufts)
+        float sc = lab ? 1.0 : 0.06;
+        float tuft = vnoise((p.xz + p.y) * 45.0 * sc);
+        float mk = smoothstep(0.3, 0.6, moss + (tuft - 0.5) * 0.35);
+        alb = mix(alb, mossCol(p, sc), mk);
+        n = normalize(n + (vec3(vnoise(p.xz * 80.0 * sc), 0.0, vnoise(p.zx * 80.0 * sc + 3.0)) - 0.5) * 0.8 * mk);
+        spec *= 1.0 - mk;
+        ao *= 1.0 - 0.25 * mk * (1.0 - tuft);
+        trans = max(trans, 0.2 * mk);
+    }
+    vec3 col = light(p, n, rd, alb, trans, spec, ao) + emit;
+    if (!lab) {
+        // the city's air: a haze with the distance
+        float d = length(p - uEye);
+        col = mix(col, uHaze, (1.0 - exp(-max(d - 120.0, 0.0) / 1400.0)) * 0.9);
+    }
+    frag = vec4(col, 1.0);
 }
 )";
 
-// ---- the jars' glass. The back (uFront 0: the cavity's far side, seen through the jar): the room's faint
+// ---- the sky behind everything (a full-screen pass after the world, at the far plane: only where nothing is)
+inline const char* SKY_VS = R"(#version 330 core
+out vec2 vUv;
+void main() {
+    vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+    vUv = p;
+    gl_Position = vec4(p * 2.0 - 1.0, 1.0, 1.0);
+}
+)";
+inline const char* SKY_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform vec3 uCamF, uCamR, uCamU;
+uniform float uTanH, uAspect;
+void main() {
+    vec2 q = vUv * 2.0 - 1.0;
+    vec3 rd = normalize(uCamF + uCamR * (q.x * uTanH * uAspect) + uCamU * (q.y * uTanH));
+    frag = vec4(sky(rd), 1.0);
+}
+)";
+
+// ---- the jar's glass. The back (uFront 0: the cavity's far side, seen through the jar): the room's faint
 // reflection, mist and drops, the vines painted up its inside, laid over what is behind. The front (uFront 1): the
 // outer surface, refracting what is behind it (the world drawn so far, read back with its depth), the drops acting
 // as lenses, the low mist inside the jar integrated over the ray's way through it, the vines, the tint thicker toward
-// the edges, the condensation, the fresnel reflection of the room, a rim.
+// the edges, the condensation, the fresnel reflection of the room, a rim; and the crack: an impact's star of
+// fractures spreading from a point low on the left, then a hole where pieces fell out (nothing drawn there).
 inline const char* GLASS_FS = R"(#version 330 core
 in vec3 vL;
 in vec3 vW;
@@ -791,7 +1093,56 @@ uniform sampler2D uBackDepth;
 uniform mat4 uVP;
 uniform vec3 uFwd;
 uniform vec2 uNF;                        // near, far
+uniform vec2 uCrackUV;                   // the crack's center on the glass (u: angle, v: height)
+uniform float uCrack, uHole;             // how far the fractures reach (0..1), how much fell out (0..1)
 float viewZ(float d) { float z = d * 2.0 - 1.0; return 2.0 * uNF.x * uNF.y / (uNF.y + uNF.x - z * (uNF.y - uNF.x)); }
+
+// the fractures at uv: x the distance to the nearest (uv units), y 1 where the glass is gone, z 1 on the hole's rim
+vec3 cracks(vec2 uv, float aaUv) {
+    vec2 d = uv - uCrackUV;
+    float r = length(d) + 1e-4;
+    float reach = uCrack * 0.62, holeR = uHole * 0.16;
+    if (r > reach * 1.7 + 0.05) return vec3(1.0, 0.0, 0.0);
+    float a = atan(d.y, d.x);
+    // cells in (angle, log radius): wedges, longer outward, like an impact's star
+    const float NA = 11.0;
+    vec2 q = vec2(a / TAU * NA, log(r / 0.012) * 2.0);
+    vec2 qi = floor(q), qf = q - qi;
+    float F1 = 9.0, F2 = 9.0;
+    vec2 id1 = vec2(0.0), id2 = vec2(0.0);
+    for (int j = -1; j <= 1; j++)
+        for (int i = -1; i <= 1; i++) {
+            vec2 g = vec2(float(i), float(j));
+            vec2 id = qi + g;
+            id.x = mod(id.x, NA);
+            vec2 o = 0.15 + 0.7 * hash2(id + 4.0);
+            float dd = length(g + o - qf);
+            if (dd < F1) { F2 = F1; id2 = id1; F1 = dd; id1 = id; }
+            else if (dd < F2) { F2 = dd; id2 = id; }
+        }
+    float rc1 = 0.012 * exp((id1.y + 0.5) / 2.0), rc2 = 0.012 * exp((id2.y + 0.5) / 2.0);
+    float scale = r * 0.42;
+    float edge = (F2 - F1) * scale;
+    // a fracture shows where both cells are within the reach
+    float show = smoothstep(reach, reach * 0.7, max(rc1, rc2));
+    float dist = mix(1.0, edge, show);
+    // gone: cells near the center (most of them), the hole's rim where a gone cell meets a kept one
+    float gone1 = step(rc1, holeR) * step(0.22, hash(id1 + 9.0));
+    float gone2 = step(rc2, holeR) * step(0.22, hash(id2 + 9.0));
+    float rim = gone2 * (1.0 - gone1) * smoothstep(0.012 + aaUv, 0.0, edge);
+    // long fractures running on past the star
+    for (int k = 0; k < 5; k++) {
+        float ak = hash1(float(k) * 3.7 + 1.0) * TAU;
+        vec2 dir = vec2(cos(ak), sin(ak));
+        float along = dot(d, dir);
+        float len = reach * (1.2 + 0.6 * hash1(float(k) + 9.0));
+        if (along < 0.0 || along > len) continue;
+        float perp = dot(d, vec2(-dir.y, dir.x)) + 0.012 * sin(along * 55.0 + float(k)) + 0.006 * sin(along * 140.0);
+        dist = min(dist, abs(perp) + 0.004 * along / len);
+    }
+    return vec3(dist, gone1, rim);
+}
+
 void main() {
     vec3 rd = normalize(vW - uEye);
     vec3 N = normalize(vN);
@@ -806,7 +1157,7 @@ void main() {
         float a = fb;
         float covb = uCond * (0.15 + 0.85 * smoothstep(0.45, 0.8, p0.y)) * smoothstep(0.36, 0.5, p0.y) * 0.6;
         vec4 db = drops(uv, covb);
-        vec3 mist = mix(uSkyH, vec3(1.0), 0.4) * (0.75 - 0.5 * uNight) + uAmbS * 0.3;
+        vec3 mist = mix(uSkyH, vec3(1.0), 0.4) * (0.75 - 0.5 * uNight) * 0.6 + uAmbS * 0.5 + uFill * 0.3;
         float mk = db.w * 0.3 + db.z * 0.15;
         c = c * (1.0 - mk) + mist * mk;
         a = 1.0 - (1.0 - a) * (1.0 - mk);
@@ -819,15 +1170,19 @@ void main() {
         return;
     }
     if (dot(N, rd) > 0.0) discard;
+    vec3 ck = uCrack > 0.001 ? cracks(uv, aaUv) : vec3(1.0, 0.0, 0.0);
+    if (ck.y > 0.5) discard;
+    float crackL = smoothstep(0.0025 + aaUv * 0.8, 0.0008, ck.x);
+    float nearHole = smoothstep(0.32, 0.1, length(uv - uCrackUV)) * smoothstep(0.0, 0.3, uHole);
     float cosv = sat(dot(N, -rd));
-    float cov = uCond * (0.15 + 0.85 * smoothstep(0.45, 0.8, p0.y)) * smoothstep(0.36, 0.5, p0.y);
+    float cov = uCond * (0.15 + 0.85 * smoothstep(0.45, 0.8, p0.y)) * smoothstep(0.36, 0.5, p0.y) * (1.0 - nearHole);
     vec4 dr = drops(uv, cov);
     vec3 tng = normalize(cross(vec3(0.0, 1.0, 0.0), N));
-    vec3 rdIn = normalize(refract(rd, N, 0.94) + (tng * dr.x + vec3(0.0, 1.0, 0.0) * dr.y) * 0.06 * dr.z);
+    vec3 rdIn = normalize(refract(rd, N, 0.94) + (tng * dr.x + vec3(0.0, 1.0, 0.0) * dr.y) * 0.06 * dr.z + tng * crackL * 0.05);
     vec3 pIn = p0 + rdIn * (JT * 1.6);
     // the bent ray through the jar, marched against the world's depth: where it meets something, or where it leaves
     // the jar's body (then the world behind, as it shows there); a ray still in the glass's thickness (its edges) sees
-    // the room past it, as the old ray did
+    // the room past it
     float a2 = dot(rdIn.xz, rdIn.xz), b2 = dot(pIn.xz, rdIn.xz), c2 = dot(pIn.xz, pIn.xz) - 0.978 * 0.978;
     float h2 = b2 * b2 - a2 * c2;
     float tExit = h2 > 0.0 ? (-b2 + sqrt(h2)) / max(a2, 1e-5) : 0.0;
@@ -853,8 +1208,6 @@ void main() {
             vec4 c = uVP * vec4(uFoot + (pIn + rdIn * t) * uScale, 1.0);
             float zs = viewZ(texture(uBackDepth, c.xy / c.w * 0.5 + 0.5).r);
             if (c.w <= zs + 0.002 * uScale) { tPrev = t; continue; }
-            // it went behind what the world shows: find where, and keep it if the surface is really there (a ray
-            // passing behind a cap or a leaf goes on)
             float t0 = tPrev, t1 = t, diff = 0.0;
             for (int k = 0; k < 6; k++) {
                 float tm = (t0 + t1) * 0.5;
@@ -870,23 +1223,22 @@ void main() {
         vec4 c = uVP * vec4(uFoot + (pIn + rdIn * ti) * uScale, 1.0);
         suv = clamp(c.xy / c.w * 0.5 + 0.5, vec2(0.0), vec2(1.0));
         if (!found && tBehind >= 0.0) {
-            // (what it would meet is hidden behind something in the world as drawn: the straight view there, and
-            // the mist to it)
             suv = gl_FragCoord.xy / vec2(textureSize(uBack, 0));
             ti = tBehind;
         }
         inner = texture(uBack, suv).rgb;
     }
     {
-        // the low mist over the soil (exponential in height), over the way through the jar
+        // the low mist over the soil (exponential in height), over the way through the jar (it leaks out once
+        // the glass is broken)
         float y0 = pIn.y, dy = rdIn.y;
         float H = 0.16;
         float a = exp(-(y0 - 0.22) / H);
         float integ = abs(dy) > 1e-4 ? a * H * (1.0 - exp(-dy * ti / H)) / dy : a * ti;
         float wisp = 0.6 + 0.8 * vnoise(vec2(pIn.x * 3.0 + uTime * 0.03, pIn.y * 2.0 + uTime * 0.01));
         float fogA = 1.0 - exp(-max(integ, 0.0) * uFog * 1.2 * wisp);
-        vec3 fogC = mix(uSkyH, vec3(1.0), 0.45) * (0.85 - 0.65 * uNight) + uAmbS * 0.3 + uFlyC * uFlyAmt * 0.025;
-        inner = mix(inner, fogC, fogA * 0.6);
+        vec3 fogC = mix(uSkyH, vec3(1.0), 0.45) * (0.85 - 0.65 * uNight) * 0.5 + uAmbS * 0.5 + uFill * 0.3 + uFlyC * uFlyAmt * 0.025;
+        inner = mix(inner, fogC, fogA * 0.6 * (1.0 - 0.6 * uHole));
     }
     {
         vec4 vi = vines(uv, 0.24, 0.19, 1.0, uInVine * 0.62, 0.04, 1.0, 0.15 * uFlyAmt, aaUv);
@@ -894,11 +1246,11 @@ void main() {
     }
     vec3 tint = vec3(0.9, 0.97, 0.95);
     inner *= mix(vec3(1.0), tint * tint * 0.85, pow(1.0 - cosv, 2.5));
-    vec3 mist = mix(uSkyH, vec3(1.0), 0.5) * (0.85 - 0.6 * uNight) + uAmbS * 0.35 + uFlyC * uFlyAmt * 0.05;
+    vec3 mist = mix(uSkyH, vec3(1.0), 0.5) * (0.85 - 0.6 * uNight) * 0.5 + uAmbS * 0.55 + uFill * 0.35 + uFlyC * uFlyAmt * 0.05;
     inner = mix(inner, mist, dr.w * 0.3);
     if (dr.z > 0.5) {
         float r2 = dot(dr.xy, dr.xy);
-        vec3 lightC = mix(uSkyH, vec3(1.0), 0.6) * (1.0 - 0.6 * uNight) + uFlyC * uFlyAmt * 0.35;
+        vec3 lightC = mix(uSkyH, vec3(1.0), 0.6) * (1.0 - 0.6 * uNight) * 0.5 + uFill * 0.5 + uFlyC * uFlyAmt * 0.35;
         inner = mix(inner, mist, 0.25 * cov);
         inner *= 1.0 - 0.22 * smoothstep(0.7, 1.0, r2);
         float hi = smoothstep(0.16, 0.04, length(dr.xy - vec2(-0.3, 0.38)));
@@ -907,14 +1259,22 @@ void main() {
     }
     float F = 0.035 + 0.965 * pow(1.0 - cosv, 5.0);
     vec3 col = mix(inner, env(reflect(rd, N)), F);
-    col += mix(uSkyH, vec3(1.0), 0.4) * (1.0 - 0.6 * uNight) * smoothstep(0.16, 0.0, cosv) * 0.35;
+    col += mix(uSkyH, vec3(1.0), 0.4) * (1.0 - 0.6 * uNight) * smoothstep(0.16, 0.0, cosv) * 0.25 + uFill * smoothstep(0.16, 0.0, cosv) * 0.15;
+    // the fractures: bright where their faces catch the light, a dark line in them; the hole's rim a thick edge
+    {
+        vec3 catchC = uFill * 1.3 + uSunCol * 0.5 + uAmbS * 0.6;
+        float halo = smoothstep(0.012 + aaUv, 0.0, ck.x) * 0.25;
+        col = mix(col, catchC, crackL * 0.75 + halo * 0.4);
+        col *= 1.0 - 0.5 * smoothstep(0.0009 + aaUv * 0.4, 0.0, ck.x) * crackL;
+        col = mix(col, catchC * 1.3 + vec3(0.1, 0.14, 0.13), ck.z * 0.85);
+    }
     col += uGlowSun * 0.25 * smoothstep(0.995, 1.0, sat(1.0 - abs(p0.y - JHN + 0.01) * 18.0)) * step(length(p0.xz), JRN + 0.03);
     frag = vec4(col, 1.0);
 }
 )";
 
-// ---- the glass tubes: their near side laid over the world (dual-source: a rim and the room's reflection added,
-// the rest tinted), water trickling along some
+// ---- glass laid over the world (the lab's glassware, the windows' panes, the jar's shards): its near side
+// (dual-source: a rim and the room's reflection added, the rest tinted)
 inline const char* TUBE_FS = R"(#version 330 core
 in vec3 vL;
 in vec3 vW;
@@ -923,61 +1283,62 @@ in vec4 vM;
 in vec4 vF;
 layout(location = 0, index = 0) out vec4 fragAdd;
 layout(location = 0, index = 1) out vec4 fragMul;
-uniform float uGrow, uTubeWater, uTubeR;
+uniform int uTwoSided;                   // (flat shards: either face; closed vessels: their near side)
 void main() {
-    if (vF.x > uGrow) discard;
     vec3 rd = normalize(vW - uEye);
     vec3 n = normalize(vN);
-    if (dot(n, rd) > 0.0) discard;
+    if (dot(n, rd) > 0.0) {
+        if (uTwoSided == 0) discard;
+        n = -n;
+    }
     float cosv = abs(dot(n, rd));
     float F = 0.05 + 0.95 * pow(1.0 - cosv, 4.0);
-    vec3 rim = (mix(uSkyH, vec3(1.0), 0.5) * (1.0 - 0.6 * uNight) + uFlyC * uFlyAmt * 0.25) * smoothstep(0.4, 0.0, cosv) * 0.6;
+    vec3 lightC = inLab(vW) ? uFill * 1.1 + uAmbS * 0.6 + uSunCol * 0.2 : mix(uSkyH, vec3(1.0), 0.5) * (1.0 - 0.6 * uNight);
+    vec3 rim = (lightC + uFlyC * uFlyAmt * 0.25) * smoothstep(0.4, 0.0, cosv) * 0.6;
     vec3 acc = env(reflect(rd, n)) * F * 1.4 + rim;
+    // a glint of the key light
+    acc += uSunCol * 0.8 * smoothstep(0.96, 0.99, dot(reflect(rd, n), uSunDir));
     vec3 thru = vec3(0.9, 0.97, 0.96) * (1.0 - F);
-    if (uTubeWater > 0.5) {
-        // water trickling along the tube's floor
-        vec3 T = normalize(vF.yzw);
-        vec3 v = rd - T * dot(rd, T);
-        float st = 0.6 + 0.4 * smoothstep(0.3, 0.8, vnoise(vec2(dot(vW, T) * 30.0 - uTime * 2.0, 0.0)));
-        float low = smoothstep(0.0, -0.5, n.y) + 0.4 * smoothstep(0.2, -0.2, v.y);
-        acc += thru * uWater * st * (uAmbS + uFill * 0.6 + uSunCol * 0.2) * 0.45 * sat(low);
-        thru *= 1.0 - 0.45 * sat(low);
-    }
     fragAdd = vec4(acc, 1.0);
     fragMul = vec4(thru, 1.0);
 }
 )";
 
-// ---- the lights in the air (the fireflies, those along the tubes, the seeds): screen-facing glows at their depth
+// ---- the lights in the air (the fireflies, the seeds, the spores and pollen, the neon's halo, the street lamps):
+// screen-facing glows at their depth, each its size and color
 inline const char* GLOW_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aI;     // x, y, z, glow (world)
+layout(location = 2) in vec4 aJ;     // size, color
 uniform mat4 uVP;
 uniform float uTanH, uAspect, uR;
 out vec2 vOff;
 flat out vec4 vI;
+flat out vec4 vJ;
 void main() {
     vec4 c = uVP * vec4(aI.xyz, 1.0);
     vOff = aPos * uR;
     vI = aI;
+    vJ = aJ;
     vec2 k = vec2(1.0 / (uTanH * uAspect), 1.0 / uTanH);
-    gl_Position = c + vec4(aPos * uR * k, 0.0, 0.0);
+    gl_Position = c + vec4(aPos * uR * aJ.x * k, 0.0, 0.0);
 }
 )";
 inline const char* GLOW_FS = R"(#version 330 core
 in vec2 vOff;
 flat in vec4 vI;
+flat in vec4 vJ;
 out vec4 frag;
-uniform vec3 uEye, uCol;
+uniform vec3 uEye;
 uniform vec3 uGA, uGB;               // the falloff: three terms, their numerators and their widths
 uniform float uPx, uR, uPxK;
 void main() {
     float d2 = dot(vOff, vOff);
     float tc = length(vI.xyz - uEye);
-    float px2 = sq(uPx * tc * uPxK);
+    float px2 = sq(uPx * tc * uPxK / vJ.x);
     float g = uGA.x / (d2 + uGB.x + px2) + uGA.y / (d2 + uGB.y) + uGA.z / (d2 + uGB.z);
     g *= smoothstep(uR * uR, uR * uR * 0.3, d2);
-    frag = vec4(uCol * vI.w * g, 0.0);
+    frag = vec4(vJ.yzw * vI.w * g, 0.0);
 }
 )";
 
@@ -1054,26 +1415,35 @@ void main() {
 }
 )";
 
-// ------------------------------------------------------------------------------------------------ pieces: stones
-// Each cell one polished stone from the jar's gravel: a clean rounded square of its piece's color, a natural stone
-// surface in restrained relief (soft mottling, a few fine pale veins, speckles), a satin dome lit from the window
-// (top left), a crisp darker rim of its own color with a thin light bevel, and a soft contact shadow under it.
+// ------------------------------------------------------------------------------------------------ pieces: glass
+// The cells of a piece are one shard of the jar's fogged glass: a clean shape of its piece's tint (a side shared with
+// a cell of the same piece runs on into it, an inner corner fills only where the diagonal cell is in the piece too,
+// only the shape's outer corners rounded), frosted (a fine grain, soft clouds), deeper in tint at its thick outer
+// edges, a cool sheen, a bright bevel on its top left, a crisp darker rim; a crack running across the whole shard
+// (through the middles of the sides its cells share, branching, never closing on itself), moss growing in tufts along it (more of it as the song goes
+// on), now and then a cushion of moss in an outer corner; a soft contact shadow under it. Each pixel is drawn once:
+// a cell's quad stops at a side it shares, so no seam shows, even translucent.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, seed
 layout(location = 2) in vec4 aB; // tint rgb, alpha
-layout(location = 3) in vec4 aC; // mode (0 block, 1 ghost), erase 0..1, dull, -
+layout(location = 3) in vec4 aC; // mode (0 block, 1 ghost), erase 0..1, dull, the same-piece neighbours' mask
+layout(location = 4) in vec4 aD; // the cell's place in its piece (x, y down), -, -
 uniform mat4 uVP;
 out vec2 vLocal;
 flat out vec4 vA;
 flat out vec4 vB;
 flat out vec4 vC;
-const float EXT = 1.2; // (room for the contact shadow)
+flat out vec4 vD;
 void main() {
-    vec2 wp = aA.xy + aPos * aA.z * EXT;
-    vLocal = aPos * 0.5 * EXT;
-    vA = aA; vB = aB; vC = aC;
-    gl_Position = uVP * vec4(wp, 0.0, 1.0);
+    // the cell spans -0.5..0.5, the quad 0.1 past it (the contact shadow, the antialiased edge), but only to a side
+    // without a neighbour of the same piece
+    int m = int(aC.w + 0.5);
+    vec2 l = aPos * vec2(aPos.x < 0.0 ? ((m & 1) != 0 ? 0.5 : 0.6) : ((m & 2) != 0 ? 0.5 : 0.6),
+                         aPos.y > 0.0 ? ((m & 4) != 0 ? 0.5 : 0.6) : ((m & 8) != 0 ? 0.5 : 0.6));
+    vLocal = l;
+    vA = aA; vB = aB; vC = aC; vD = aD;
+    gl_Position = uVP * vec4(aA.xy + l * 2.0 * aA.z, 0.0, 1.0);
 }
 )";
 inline const char* CELL_FS = R"(#version 330 core
@@ -1081,62 +1451,125 @@ in vec2 vLocal;
 flat in vec4 vA;
 flat in vec4 vB;
 flat in vec4 vC;
+flat in vec4 vD;
 out vec4 frag;
-uniform float uBridge;
-uniform vec3 uBridgeInk, uLightC;
+uniform float uBridge, uMossAmt;
+uniform vec3 uBridgeInk, uLightC, uMossA, uMossB;
 float sdBoxR(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
-// the stone's own pattern, fixed to the stone (its seed from its place)
-float stoneH(vec2 q, vec2 sd) { return fbm(q * 3.2 + sd * 17.0); }
+float segD(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
+// the piece's shape around this cell (its mask m), shifted by o: a row and a column running on into the neighbours,
+// the corners filled where both sides and the diagonal are in the piece
+float shapeD(vec2 q, int m) {
+    const float h = 0.45, E = 0.75, R = 0.1;
+    vec2 lo = vec2((m & 1) != 0 ? -E : -h, (m & 8) != 0 ? -E : -h);
+    vec2 hi = vec2((m & 2) != 0 ? E : h, (m & 4) != 0 ? E : h);
+    float d = min(sdBoxR(q - vec2(lo.x + hi.x, 0.0) * 0.5, vec2(hi.x - lo.x, 2.0 * h) * 0.5, R),
+                  sdBoxR(q - vec2(0.0, lo.y + hi.y) * 0.5, vec2(2.0 * h, hi.y - lo.y) * 0.5, R));
+    if ((m & 21) == 21) d = min(d, sdBoxR(q - vec2(-0.5, 0.5), vec2(0.5), 0.0));
+    if ((m & 38) == 38) d = min(d, sdBoxR(q - vec2(0.5, 0.5), vec2(0.5), 0.0));
+    if ((m & 73) == 73) d = min(d, sdBoxR(q - vec2(-0.5, -0.5), vec2(0.5), 0.0));
+    if ((m & 138) == 138) d = min(d, sdBoxR(q - vec2(0.5, -0.5), vec2(0.5), 0.0));
+    return d;
+}
+// a point on an outer side (s: 0 bottom, 1 right, 2 top, 3 left; f along it)
+vec2 onSide(int s, float f) {
+    f = f * 0.6 - 0.3;
+    if (s == 0) return vec2(f, -0.46);
+    if (s == 1) return vec2(0.46, f);
+    if (s == 2) return vec2(-f, 0.46);
+    return vec2(-0.46, -f);
+}
 void main() {
     int mode = int(vC.x + 0.5);
+    int m = int(vC.w + 0.5);
     float erase = vC.y;
     float aa = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
-    float shrink = 1.0 - 0.7 * smoothstep(0.0, 1.0, erase);
-    vec2 q = vLocal / shrink;
-    float d = sdBoxR(q, vec2(0.45), 0.17);
-    float inside = 1.0 - smoothstep(-aa, aa, d * shrink);
+    vec2 q = vLocal;
+    float d = shapeD(q, m);
+    float inside = 1.0 - smoothstep(-aa, aa, d);
     vec3 t = vB.rgb;
     if (mode == 1) {
         float ring = 1.0 - smoothstep(0.022, 0.022 + aa * 1.5, abs(d + 0.035));
-        float a = (ring * 0.85 + inside * 0.1) * vB.a;
-        vec3 c = mix(mix(t, vec3(1.0), 0.3), uBridgeInk, uBridge);
+        float a = (ring * 0.85 + inside * 0.12) * vB.a;
+        vec3 c = mix(mix(t, vec3(1.0), 0.35), uBridgeInk, uBridge);
         frag = vec4(c * a, a);
         return;
     }
-    // the contact shadow, down and right, outside the stone only
-    float ds = sdBoxR(q - vec2(0.045, -0.06), vec2(0.45), 0.17);
+    // the contact shadow, down and right, outside the shard only
+    float ds = shapeD(q - vec2(0.045, -0.06), m);
     float shadow = (1.0 - smoothstep(-0.02, 0.08, ds)) * (1.0 - inside) * 0.55 * (1.0 - smoothstep(0.0, 0.5, erase));
-    vec2 sd = vA.xy * vec2(0.173, 0.291) + vA.w;
-    // relief: the stone's mottling as a gentle height, lit like the dome
-    float h = stoneH(q, sd);
-    float hx = stoneH(q + vec2(0.02, 0.0), sd) - h, hy = stoneH(q + vec2(0.0, 0.02), sd) - h;
-    float e = sat(-d / 0.22);
-    vec2 dome = normalize(q + 1e-5) * (1.0 - e) * 0.9;
-    vec3 n = normalize(vec3(dome - vec2(hx, hy) * 1.4, 1.0));
-    vec3 L = normalize(vec3(-0.55, 0.65, 0.75));
-    float lit = dot(n, L);
-    // the stone's colors: its tint in soft cloudy patches, faint strata at its own angle, now and then one fine pale
-    // vein, a few speckles
-    vec3 c = t * mix(0.84, 1.08, smoothstep(0.32, 0.72, h));
-    float ang = fract(sd.x * 3.7) * 3.1416;
-    float band = sin(dot(q, vec2(cos(ang), sin(ang))) * 9.0 + h * 4.0 + sd.y * 6.0);
-    c *= 1.0 + 0.05 * band;
-    float vn = fbm(q * 1.6 + sd * 9.0 + 4.0);
-    float vein = (1.0 - smoothstep(0.0, 0.012 + aa, abs(vn - 0.5))) * step(0.55, fract(sd.x * 7.3 + sd.y * 3.1));
-    c = mix(c, mix(t, vec3(1.0), 0.5), vein * 0.3);
-    vec2 sp = (q + sd) * 26.0;
-    float sk = step(0.88, hash(floor(sp))) * smoothstep(0.38, 0.18, length(fract(sp) - 0.5));
-    c = mix(c, t * 0.62, sk * 0.35);
-    // satin light: a rounder dome (lit top left, its foot darker bottom right), a broad sheen, no glint
-    c *= 0.72 + 0.42 * sat(lit * 0.5 + 0.5);
-    c *= 1.0 - 0.14 * smoothstep(0.1, 0.5, dot(q, vec2(0.7, -0.7)));
-    float sheen = smoothstep(0.82, 0.98, dot(reflect(-L, n), vec3(0.0, 0.0, 1.0)));
-    c += mix(t, uLightC, 0.6) * sheen * 0.12;
-    // the bevel: a thin light edge top left, a crisp darker rim all round
-    float edgeIn = 1.0 - smoothstep(0.0, 0.06, -d);
-    c = mix(c, mix(t, vec3(1.0), 0.45), edgeIn * sat(dot(normalize(q + 1e-5), vec2(-0.6, 0.8))) * 0.35);
-    c = mix(c, t * 0.42, 1.0 - smoothstep(0.0, 0.03 + aa, -d));
-    c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.4);
+    // the pattern is the piece's own (its seed, the cell's place in it): the same as it falls, lands and sits in the
+    // stack, running on across its cells
+    vec2 cellP = vec2(vD.x, -vD.y);
+    float h0 = hash(cellP + vA.w * 61.3 + 0.5), h1 = hash(cellP + vA.w * 37.1 + 3.1), h2 = hash(cellP + vA.w * 17.9 + 7.7);
+    vec2 P = cellP + q + vec2(fract(vA.w * 13.7), fract(vA.w * 7.3)) * 40.0;
+    const float S = 1.0;
+    // frosted glass: milky in its middle (its tint softened), clear and deep in tint at its thick edges, lighter where
+    // the light comes through (top left), soft clouds, a fine grain
+    float e = sat(-d / 0.16);
+    float lum = dot(t, vec3(0.3, 0.5, 0.2));
+    vec3 milk = mix(t, vec3(lum) * 1.15 + 0.08, 0.32);
+    float cloud = fbm(P * S * 2.4 + 3.7);
+    vec3 c = milk * (0.88 + 0.22 * smoothstep(0.25, 0.8, cloud));
+    c *= 0.95 + 0.07 * hash(floor(P * S * 80.0));
+    // the thick edge: clear, its tint deep, a bright line inside it where its facet catches the light
+    vec3 deep = t * t * 0.95 + t * 0.06;
+    c = mix(deep, c, smoothstep(0.0, 0.75, e));
+    vec2 gn = normalize(vec2(shapeD(q + vec2(0.01, 0.0), m) - d, shapeD(q + vec2(0.0, 0.01), m) - d) + 1e-6);
+    float facet = smoothstep(0.09, 0.0, abs(-d - 0.075)) * sat(dot(gn, vec2(-0.6, 0.8)) + 0.2);
+    c += mix(uLightC, t, 0.25) * facet * 0.35;
+    // a soft sheen across it
+    float sheen = smoothstep(0.1, 0.0, abs(fract(dot(cellP + q, vec2(0.7071, 0.7071)) * 0.33 + 0.3) - 0.5)) * 0.1;
+    c += mix(uLightC, t, 0.4) * sheen * e;
+    // the crack: through the middles of the sides shared with the piece's other cells (the neighbours do the same:
+    // it runs on across the shard), to an outer side where the cell has a single neighbour or none
+    vec2 sh[4];
+    int ns = 0;
+    // (a tree over the piece's cells, never a loop: a cell joins its left neighbour, or else the one below it)
+    if ((m & 1) != 0) sh[ns++] = vec2(-0.5, 0.0);
+    if ((m & 2) != 0) sh[ns++] = vec2(0.5, 0.0);
+    if ((m & 4) != 0 && (m & 16) == 0) sh[ns++] = vec2(0.0, 0.5);
+    if ((m & 8) != 0 && (m & 1) == 0) sh[ns++] = vec2(0.0, -0.5);
+    vec2 a0, b0;
+    if (ns == 0) { a0 = onSide(int(h0 * 4.0), h1); b0 = onSide((int(h0 * 4.0) + 2) % 4, h2); }
+    else if (ns == 1) {
+        a0 = sh[0];
+        // the opposite side (or a neighbouring one)
+        int s = abs(a0.x) > 0.1 ? (a0.x < 0.0 ? 1 : 3) : (a0.y < 0.0 ? 2 : 0);
+        if (h1 > 0.6) s = (s + 1) % 4;
+        b0 = onSide(s, h2);
+    } else { a0 = sh[0]; b0 = sh[1]; }
+    vec2 k0 = (a0 + b0) * 0.5 + vec2(h1 - 0.5, h2 - 0.5) * 0.18;
+    float dc = min(segD(q, a0, k0), segD(q, k0, b0));
+    if (ns >= 3) dc = min(dc, segD(q, k0, sh[2]));
+    if (ns >= 4) dc = min(dc, segD(q, k0, sh[3]));
+    float along = length(P * S - floor(P * S));
+    float crackW = 0.007 + aa * 0.6;
+    float crk = smoothstep(crackW, crackW * 0.3, dc) * inside;
+    // moss along the crack, in tufts (wider as the song goes on); a cushion in an outer corner on some
+    float fuzz = vnoise(P * S * 30.0);
+    float tufts = smoothstep(0.35, 0.65, vnoise(P * S * 3.5 + h0 * 9.0));
+    float wM = (0.01 + 0.055 * uMossAmt * tufts) * (0.65 + 0.7 * fuzz);
+    float mossC = smoothstep(wM, wM * 0.45, dc) * smoothstep(0.02, 0.18, uMossAmt) * (0.35 + 0.65 * tufts);
+    bool right = h2 > 0.5;
+    bool outer = (m & 8) == 0 && (m & (right ? 2 : 1)) == 0;
+    vec2 corner = vec2(right ? 0.45 : -0.45, -0.45);
+    float cr = length(q - corner) - (0.05 + 0.2 * uMossAmt * step(0.55, h1)) * (0.7 + 0.6 * fuzz);
+    float mossK = smoothstep(0.012, -0.012, cr) * step(0.55, h1) * smoothstep(0.1, 0.35, uMossAmt) * (outer ? 1.0 : 0.0);
+    float mossM = max(mossC, mossK) * inside;
+    // the crack itself: a bright line where its faces catch the light, a dark hairline beside it
+    c = mix(c, mix(t, vec3(1.0), 0.8), crk * 0.8);
+    vec2 qs = q - vec2(0.012, -0.012);
+    float side = min(segD(qs, a0, k0), segD(qs, k0, b0));
+    c *= 1.0 - 0.35 * smoothstep(crackW, 0.0, side) * inside * (1.0 - crk);
+    vec3 mc = mix(uMossB * 0.7, uMossA * 0.85, smoothstep(0.3, 0.8, vnoise(P * S * 55.0)) * 0.7 + 0.3 * fuzz);
+    mc *= 0.8 + 0.35 * step(0.72, hash(floor(P * S * 95.0)));
+    c = mix(c, mc, mossM);
+    // the rim: a thin bright bevel on its top left, a crisp darker line all round
+    float edgeIn = 1.0 - smoothstep(0.0, 0.04, -d);
+    c = mix(c, mix(t, vec3(1.0), 0.75), edgeIn * sat(dot(gn, vec2(-0.6, 0.8))) * 0.65);
+    c = mix(c, t * 0.32, 1.0 - smoothstep(0.0, 0.026 + aa, -d));
+    c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.5);
     float dull = vC.z;
     c = mix(c, vec3(dot(c, vec3(0.3, 0.5, 0.2))) * 0.55, dull);
     c = mix(c, uBridgeInk, uBridge);

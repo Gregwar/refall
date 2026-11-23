@@ -1076,9 +1076,10 @@ void DioramaUniverse::levelUp() {
 
 void DioramaUniverse::onEvent(const GameEvent& ev, const Game& game) {
     switch (ev.type) {
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         // Each cell keeps its piece and its place in the piece's clay (the cells of a bigger lock, a filled board,
-        // each alone).
+        // each alone; a filled board's pieces told by Fill events, which land no dust).
         lockCount_++;
         {
             int minx = Game::W, miny = Game::H;
@@ -1090,6 +1091,7 @@ void DioramaUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 clay_[c.y][c.x] = clayAt(lockCount_, c.x, c.y, minx, miny);
             }
         }
+        if (ev.type == GameEvent::Fill) break;
         auto inPiece = [&](int x, int y) {
             for (auto& o : ev.cells)
                 if (o.x == x && o.y == y) return true;
@@ -1144,9 +1146,10 @@ void DioramaUniverse::onEvent(const GameEvent& ev, const Game& game) {
             float mx = 0.f, my = 0.f;
             for (int i = 0; i < n; i++) { mx += q[i][0]; my += q[i][1]; }
             mx /= n; my /= n;
+            // (hard enough to clear the plinth: even the middle cells leave to a side, none lands against the tower)
             const float side = (mx - 4.5f) / 4.5f;
-            vec3 vel(side * rng_.range(2.4f, 4.2f) + rng_.range(-0.5f, 0.5f), rng_.range(4.5f, 7.5f) + (quadClear ? 1.5f : 0.f),
-                     rng_.range(2.f, 3.5f));
+            const float away = (mx < 4.5f ? -1.f : 1.f) * rng_.range(1.f, 1.8f);
+            vec3 vel(side * rng_.range(3.2f, 5.2f) + away, rng_.range(5.5f, 8.5f) + (quadClear ? 1.5f : 0.f), rng_.range(7.5f, 10.f));
             // (a bigger body turns slower)
             const size_t had = bodies_.size();
             spawnBody(cellPos(mx, my), c.type, vel, std::fabs(mx - 4.5f) * 0.012f + rng_.range(0.f, 0.03f),
@@ -1347,7 +1350,8 @@ void DioramaUniverse::simulate(const Game& game, const MusicState& music, float 
             float ground = -1e9f;
             const float qx = (b.pos.x - ISLAND_X) / ISLAND_RX, qz = (b.pos.z - ISLAND_Z) / ISLAND_RZ;
             if (std::sqrt(qx * qx + qz * qz) < 0.82f) ground = GROUND_Y;
-            if (std::fabs(b.pos.x) < 6.9f && b.pos.z > -1.9f && b.pos.z < 1.4f) ground = -10.5f;
+            const bool plinth = std::fabs(b.pos.x) < 6.9f && b.pos.z > -1.9f && b.pos.z < 1.4f;
+            if (plinth) ground = -10.5f;
             // (a body of several cells rests on its lowest one)
             float low = 0.45f;
             if (b.n > 1) {
@@ -1359,11 +1363,12 @@ void DioramaUniverse::simulate(const Game& game, const MusicState& music, float 
                 b.vel.y = -b.vel.y * 0.32f;
                 b.vel.x *= 0.75f;
                 b.vel.z *= 0.75f;
+                if (plinth) b.vel.z = std::max(b.vel.z, 3.5f); // (a block landing on the plinth slides on off it)
                 b.spin *= 0.6f;
                 if (b.vel.y < 1.2f) b.vel.y = 0.f;
                 if (rng_.chance(0.4f)) spawnDust(b.pos + vec3(0, -0.4f, 0), vec3(0, 0.3f, 0), 1, 0.6f);
             }
-            if (b.vel.y == 0.f && b.pos.y - low <= ground + 0.01f) {
+            if (b.vel.y == 0.f && b.pos.y - low <= ground + 0.01f && !plinth) {
                 b.vel.x *= std::exp(-1.5f * dt);
                 b.vel.z *= std::exp(-1.5f * dt);
                 b.spin *= std::exp(-3.f * dt);

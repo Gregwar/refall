@@ -453,7 +453,8 @@ TransitionHints FractalUniverse::hints() const {
 void FractalUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         // each cell keeps its piece (the cells of a bigger lock, a filled board, each alone)
         lockCount_++;
         for (auto& c : ev.cells) {

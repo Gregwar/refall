@@ -351,19 +351,79 @@ void Game::debugFillBoard(uint64_t seed) {
     const int well = (int)(r.next() % W);
     int h = 5 + (int)(r.next() % 4);
     // Test hook: REFALL_FILL_HEIGHT=N fills the columns about N rows high instead (1..18: a universe's look as its
-    // stack grows; the same draws, so the same colors and well).
+    // stack grows; the same draws, so the same well).
     static const int fillH = std::getenv("REFALL_FILL_HEIGHT") ? std::clamp(std::atoi(std::getenv("REFALL_FILL_HEIGHT")), 1, 18) : 0;
     const int lo = fillH ? std::max(1, fillH - 2) : 3, hi = fillH ? fillH + 1 : 10;
     if (fillH) h = fillH;
+    int target[W];
     for (int x = 0; x < W; x++) {
         h = std::clamp(h + (int)(r.next() % 5) - 2, lo, hi);
-        if (x == well) continue;
-        for (int k = 0; k < h; k++) {
-            // 2x2-ish blobs of one color, offset per column pair, like locked pieces.
-            const int y = H - 1 - k;
-            const uint64_t blob = splitmix64(seed + (uint64_t)(x / 2) * 977 + (uint64_t)((k + (x / 2) % 2) / 2) * 131);
-            board_[y][x].type = (int8_t)(blob % 7);
+        target[x] = x == well ? 0 : h;
+    }
+    // Real pieces (in bags of seven) dropped into place up to about those heights, each where it leaves the flattest
+    // surface, never over a hole, the well kept open; each told as a Fill event: the universes that join a piece's
+    // cells join them, and nothing lands.
+    Rng pr(seed ^ 0x5EEDF111ull);
+    int bag[7], bagN = 0, misses = 0;
+    for (int n = 0; n < 80 && misses < 14; n++) {
+        if (bagN == 0) {
+            for (int i = 0; i < 7; i++) bag[i] = i;
+            for (int i = 6; i > 0; i--) std::swap(bag[i], bag[(int)(pr.next() % (uint64_t)(i + 1))]);
+            bagN = 7;
         }
+        const int type = bag[--bagN];
+        int colH[W];
+        for (int x = 0; x < W; x++) {
+            colH[x] = 0;
+            for (int y = 0; y < H; y++)
+                if (board_[y][x].type >= 0) { colH[x] = H - y; break; }
+        }
+        Piece best{type, 0, 0, 0};
+        float bestScore = 1e9f;
+        for (int rot = 0; rot < 4; rot++)
+            for (int px = -2; px < W; px++) {
+                Piece p{type, rot, px, 0};
+                if (collides(p)) continue;
+                while (true) {
+                    Piece d = p;
+                    d.y++;
+                    if (collides(d)) break;
+                    p = d;
+                }
+                int cs[4][2];
+                pieceCells(p, cs);
+                auto inP = [&](int x, int y) {
+                    for (auto& c : cs)
+                        if (c[0] == x && c[1] == y) return true;
+                    return false;
+                };
+                bool ok = true;
+                int nh[W];
+                std::copy(colH, colH + W, nh);
+                for (auto& c : cs) {
+                    const int x = c[0], y = c[1];
+                    if (x == well || H - y > target[x] || y < HIDDEN) { ok = false; break; }
+                    if (y + 1 < H && board_[y + 1][x].type < 0 && !inP(x, y + 1)) { ok = false; break; } // (a hole)
+                    nh[x] = std::max(nh[x], H - y);
+                }
+                if (!ok) continue;
+                float score = 0.f;
+                for (int x = 0; x + 1 < W; x++)
+                    if (x != well && x + 1 != well) score += (float)std::abs(nh[x] - nh[x + 1]);
+                for (auto& c : cs) score += 0.3f * (float)(H - c[1]); // (low first)
+                score += (float)(pr.next() % 100) * 0.01f;             // (ties broken at random)
+                if (score < bestScore) { bestScore = score; best = p; }
+            }
+        if (bestScore >= 1e9f) { misses++; continue; }
+        misses = 0;
+        int cs[4][2];
+        pieceCells(best, cs);
+        GameEvent ev{GameEvent::Fill};
+        for (auto& c : cs) {
+            board_[c[1]][c[0]].type = (int8_t)type;
+            ev.cells.push_back({c[0], c[1], type});
+        }
+        events_.push_back(ev);
     }
     holdType_ = (int)(r.next() % 7);
     holdUsed_ = false;

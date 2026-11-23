@@ -1,5 +1,6 @@
 #pragma once
-// TERRARIUM: a sealed glass jar on a windowsill, a tiny ecosystem growing in it over the song (see terrarium.cpp).
+// TERRARIUM: a sealed specimen jar on a lab bench; over the song its life cracks the glass, escapes, swallows the lab
+// and then the city around it (see terrarium.cpp).
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -33,7 +34,7 @@ public:
     // A variant's colors (linear RGB): floats only, palettes are blended float by float.
     struct Palette {
         vec3 soil, soil2, gravel, strata1, strata2, moss, moss2, leaf, leaf2, stem, cap, cap2, flower, flower2, bark,
-            water, stone, bug, bugSpot, fly, sill, frame, wall, hill, hill2;
+            water, stone, bug, bugSpot, fly, sill, frame, wall, neonA, neonB;
         vec3 ink, accent, veil;
         vec3 piece[7];
     };
@@ -50,41 +51,41 @@ private:
     float lines_ = 0.f, linesShown_ = -1.f, linesEased_ = 0.f;
     std::vector<float> growth_;          // per slot, 0..1 (eased)
     float pond_ = 0.f, tod_ = 0.f, moss_ = 0.f;
+    // ---- The story: the crack, the hole, the escape (the bench's clock, ahead of the lines after a burst), the
+    // room's and the city's clock, the drop's surge
+    float shiftA_ = 0.f, shiftTarget_ = 0.f, surgeAcc_ = 0.f, surge_ = 0.f;
+    float linesA_ = 0.f, linesB_ = 0.f, crack_ = 0.f, hole_ = 0.f, burstT_ = -1.f;
+    float labOn_ = 1.f;
+    int stage_ = 0;
 
     // ---- The camera (world: the jar's radius is 1, its foot at the origin, y up).
     vec3 eye_{0, 1, 4}, fwd_{0, 0, -1}, right_{1, 0, 0}, up_{0, 1, 0};
-    float tanH_ = 0.25f, aspect_ = 1.78f;
+    float tanH_ = 0.25f, aspect_ = 1.78f, near_ = 0.05f, far_ = 80.f;
     void updateCamera(float lines = 0.f);
     bool toScreen(const vec3& w, vec2& board) const; // a world point -> board units (false: behind the eye)
     vec3 boardRay(vec2 b) const;                     // the view ray through a board point
 
-    // ---- Life: fireflies, the beetle, seeds drifting down and the sprouts they leave.
+    // ---- Life: fireflies, the beetle, seeds drifting down and the sprouts they leave, spores and pollen.
     struct Fly { vec3 home, p; float phase, freq, seed, glow, on; };
     std::vector<Fly> flies_;
-    struct Seed { vec3 p, v, to; float age, life, seed; bool landed; int target; }; // target 0: the jar's soil, 1: a bloom outside
+    struct Seed { vec3 p, v, to; float age, life, seed; bool landed; int target; }; // target 0: the jar's soil, 1: the bench
     std::vector<Seed> seeds_;
-    struct Sprout { float x, z, age, seed; };
+    struct Sprout { float x, z, age, seed; bool bench; };
     std::vector<Sprout> sprouts_;
     void addSeed(const vec3& from);
-    float inVine_ = 0.f;                  // vines up the inside of the first jar's glass
-    // ---- The cluster: more jars, one at a time, each the first one's twin with its own biome (see terrarium.cpp)
-    struct NetTube { vec3 a, b, c; float r, birth; bool water; int from, to; };
-    std::vector<NetTube> tubes_;
-    int tubesFor_ = -1;                   // the variant they were built for
-    void buildNetwork();
-    vec3 jarFoot(int k) const;            // where jar k (0 the first) stands now (it is set down gently when it appears)
-    float jarScale(int k) const;
-    vec3 neckOf(int k) const;             // the top of its cork
-    float jarAppear(int k) const;
-    float jarLines(int k) const;          // its own growth, on the first jar's 0..20 scale
-    int jarBiome(int k) const;
-    bool pickNetSpot(vec3& at);           // a seed's landing: the soil of the newest jar beside the well
-    GLuint jarTex_ = 0;                   // the jars' data (row 19 read by the sill: the jars' shadows)
-    // ---- each jar as it is drawn this frame (see computeJars), its meshes (rebuilt only when they changed)
+    float inVine_ = 0.f;                  // vines up the inside of the glass
+    struct Spore { vec3 p, v; float age, life, size, seed; };
+    std::vector<Spore> spores_;
+    void sporeBurst(int n, float speed);
+    bool pickBenchSpot(vec3& at);
+    // ---- the glass's shards: falling out of the hole, flying at a burst, lying on the bench
+    struct Shard { vec3 p, v, ax; float ang, spin, size, seed; bool rest; };
+    std::vector<Shard> shards_;
+    int shardsOut_ = 0;
+    void spawnShards(int n, float speed, bool landed);
+    // ---- the jar as it is drawn this frame (see computeJar), its meshes (rebuilt only when they changed)
     struct JarState {
-        bool on = false;
-        vec3 foot{0, 0, 0};
-        float scale = 1.f, level = 0.f, fill = 0.f, moss = 0.f, vine = 0.f;
+        float level = 0.f, fill = 0.f, moss = 0.f, vine = 0.f;
         int kind = 0;
         float pal[17 * 3] = {};
         terra::Pond pd;
@@ -100,18 +101,19 @@ private:
         int soilKind = -1;
         bool hasPond = false, dirty = true;
     };
-    JarState jarState_[12];
-    JarMesh jarMesh_[12];
-    void computeJars(const std::vector<Slot>& firstSlots, float after);
-    void updateJarMesh(int k);
+    JarState jar_;
+    JarMesh jarMesh_;
+    void computeJar(const std::vector<Slot>& slots, float after);
+    void updateJarMesh();
     void upload(Mesh& m, const std::vector<terra::Vtx>& v, bool dynamic);
-    // the beetle's trips through the tube to the next jar: 0 at home, 1 in the tube, 2 in the other jar
-    int bugMode_ = 0, bugPhase_ = 0;
-    float bugU_ = 0.f, bugT_ = 0.f, bugCool_ = 20.f;
-    bool bugGoing_ = false, bugBack_ = false;
-    vec3 bugP_{0, 0, 0};
-    float bugHead_ = 0.f, bugSpeed_ = 0.f;
-    void updateTrip(float dt);
+    // the beetle's excursion out through the hole: at home it sometimes walks to the crack, out over its lip, hops
+    // down onto the bench, explores, looks at us and comes back
+    int bugMode_ = 0, exPhase_ = 0;
+    float exT_ = 0.f, bugCool_ = 12.f;
+    bool bugGoing_ = false;
+    vec3 bugP_{0, 0, 0}, exFrom_{0, 0, 0};
+    float bugHead_ = 0.f, bugSpeed_ = 0.f, bugLook_ = 0.f;
+    void updateExcursion(float dt);
     bool pickSpot(float& x, float& z, float clearance);
     float soilHeight(float x, float z) const; // the same function as the shader's
     bool blocked(float x, float z, float r) const;
@@ -131,33 +133,45 @@ private:
     std::vector<Mote> motes_;
 
     // ---- Pieces.
-    struct CellInst { float a[4], b[4], c[4]; };
+    struct CellInst { float a[4], b[4], c[4], d[4]; };
     std::vector<CellInst> cells_;
-    void cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float seed);
+    // (mask: its neighbours of the same piece, 1 left, 2 right, 4 up, 8 down, 16 up left, 32 up right, 64 down
+    // left, 128 down right; the cells of a piece one shard)
+    // (seed: its piece's; lx, ly: the cell's place in its piece: its look the piece's own, the same falling and locked)
+    void cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float seed, int mask, float lx, float ly);
     void buildBoard(const Game& g);
-    struct Fading { float x, y; int type; float t; };
+    struct Fading { float x, y; int type; float t; int mask; float cx, cy, seed, lx, ly; }; // (cx, cy: its shape's center)
     std::vector<Fading> fading_, overCells_;
+    // each locked cell's piece (its lock's number * 8 + its type + 1; 0 empty, < 0 alone): the cells of a piece one
+    // shard, their ids following their rows down on a clear
+    int ids_[Game::H][Game::W] = {};
+    signed char lx_[Game::H][Game::W] = {}, ly_[Game::H][Game::W] = {};   // each cell's place in its piece
+    int lockCount_ = 0;
+    void syncCells(const Game& g);
+    int gridMask(const Game& g, int x, int y) const;
     struct SpriteInst { float a[4], b[4], c[4]; };
     std::vector<SpriteInst> sprites_;
     void sprite(vec2 p, float size, const vec3& col, float alpha, int mode, float param = 0.f, float param2 = 0.f);
 
     // ---- The HUD (its lettering: hudLine, the host letters it).
-    std::string todName_;
+    std::string stageName_;
     float fade_ = 1.f; // the frame's fade in, the HUD's own (it was lettered under the post's fade and dim)
     void drawHud(const std::vector<HudRect>& panels);
 
     // ---- GL.
-    GLuint progRoom_ = 0, progContent_ = 0, progShadow_ = 0, progGlass_ = 0, progTube_ = 0, progGlow_ = 0, progComp_ = 0;
+    GLuint progLab_ = 0, progSky_ = 0, progContent_ = 0, progShadow_ = 0, progGlass_ = 0, progTube_ = 0, progGlow_ = 0, progComp_ = 0;
     GLuint progSprite_ = 0, progVeil_ = 0, progCell_ = 0, progShape_ = 0, progPost_ = 0;
     GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint glowVao_ = 0, glowVbo_ = 0;
-    Mesh room_, glassOut_, glassIn_, cork_, sproutMesh_, beetle_, snail_;
-    std::vector<Mesh> tubeMesh_;
-    int beetleJar_ = 0, tubesBuilt_ = -1;
+    size_t worldLab_ = 0, worldGrowth_ = 0, worldBench_ = 0; // (the world mesh's parts: the lab, the bench's growth)
+    Mesh world_, labGlass_, glassOut_, glassIn_, cork_, sproutMesh_, beetle_, shardMesh_;
+    std::vector<terra::NeonPt> neon_;
+    std::vector<terra::CityLight> lights_;
+    std::vector<terra::Bloom> blooms_;
     float shadowSoft_ = 0.001f;
     std::vector<float> sproutKey_;
     // the world: multisampled at the full resolution (up to 1440 lines), resolved twice (the glass reads the world
-    // behind it), with its depth; the sun's shadow map
+    // behind it), with its depth; the key light's shadow map
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0, worldDepth_ = 0, backDepth_ = 0, shadowTex_ = 0, shadowFbo_ = 0;
     int msW_ = 0, msH_ = 0, samples_ = 4;
     ugl::Target worldT_, backT_, sceneT_;
@@ -170,6 +184,7 @@ private:
     bool palSet_ = false;
     Palette pal_{}, basePal_{};
     uint64_t seed_ = 1;
+    int tagNo_ = 7;
     const std::vector<Slot>& slots() const;
 
     // ---- Staging: continuous level 0 calm .. 2 peak.
@@ -178,7 +193,7 @@ private:
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     float energy_ = 0.5f;
     bool dropMode_ = false, wasDrop_ = false;
-    float dropAmt_ = 0.f, swell_ = 0.f, rain_ = 0.f, allLit_ = 0.f;
+    float dropAmt_ = 0.f, swell_ = 0.f, flicker_ = 0.f, allLit_ = 0.f;
     float fog_ = 0.5f, cond_ = 0.5f;
     float kickIn_ = 0.f, kickS_ = 0.f;
     double ownBeat_ = 0.0;
