@@ -280,9 +280,9 @@ float hookS() {
 }
 
 constexpr float BACK_Z = -0.3f;
-// The well's pane, dense (a drop's neons barely through), and the HUD's, a little lighter (about 88 % and 76 % in
+// The well's pane, dense (a drop's neons barely through), and the HUD's, lighter (about 88 % and 62 % in
 // display terms): blended in the scene's linear light, the corner lines' over the frame in display colors
-constexpr float PANE_A = 0.982f, HUD_PANE_A = 0.95f, PANE_A_DISPLAY = 0.76f;
+constexpr float PANE_A = 0.982f, HUD_PANE_A = 0.88f, PANE_A_DISPLAY = 0.62f;
 
 } // namespace
 
