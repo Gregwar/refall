@@ -434,6 +434,23 @@ bool IslandsUniverse::init(int width, int height) {
     return glGetError() == GL_NO_ERROR;
 }
 
+// The seabed's target: half resolution, or full for FLAT (its depth bands' borders are crisp, antialiased curves: at
+// half resolution a steep shelf, many meters of depth across a texel, came out stair stepped).
+void IslandsUniverse::makeSeabed(bool full) {
+    seabedFull_ = full;
+    halfW_ = std::max(1, full ? width_ : width_ / 2);
+    halfH_ = std::max(1, full ? height_ : height_ / 2);
+    seabedT_.create(halfW_, halfH_, GL_RGBA32F, GL_RGBA, GL_FLOAT, false);
+    // its depth buffer
+    if (halfDepth_) glDeleteRenderbuffers(1, &halfDepth_);
+    glGenRenderbuffers(1, &halfDepth_);
+    glBindRenderbuffer(GL_RENDERBUFFER, halfDepth_);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, halfW_, halfH_);
+    glBindFramebuffer(GL_FRAMEBUFFER, seabedT_.fbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, halfDepth_);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 void IslandsUniverse::resize(int width, int height) {
     width_ = std::max(1, width);
     height_ = std::max(1, height);
@@ -441,16 +458,7 @@ void IslandsUniverse::resize(int width, int height) {
     bvp_ = ref.vp;
     beye_ = ref.eye;
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false);
-    halfW_ = std::max(1, width_ / 2);
-    halfH_ = std::max(1, height_ / 2);
-    seabedT_.create(halfW_, halfH_, GL_RGBA32F, GL_RGBA, GL_FLOAT, false);
-    // the half-resolution pass's depth buffer
-    if (halfDepth_) glDeleteRenderbuffers(1, &halfDepth_);
-    glGenRenderbuffers(1, &halfDepth_);
-    glBindRenderbuffer(GL_RENDERBUFFER, halfDepth_);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, halfW_, halfH_);
-    glBindFramebuffer(GL_FRAMEBUFFER, seabedT_.fbo);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, halfDepth_);
+    makeSeabed(flat());
     if (msFbo_) {
         glDeleteFramebuffers(1, &msFbo_);
         glDeleteRenderbuffers(1, &msColor_);
@@ -2627,7 +2635,8 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         bindShadow(p);
     };
 
-    // ---- The seabed (half resolution): the terrain under the water, its distance (the sea's bands by depth).
+    // ---- The seabed (half resolution, full for FLAT): the terrain under the water, its distance (the sea's bands by depth).
+    if (seabedFull_ != flat()) makeSeabed(flat());
     seabedT_.bind();
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -2668,6 +2677,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, seabedT_.tex);
     set1i(progWater_, "uSeabed", 0);
     ugl::set2f(progWater_, "uInvRes", 1.f / width_, 1.f / height_);
+    set1f(progWater_, "uSeabedScale", seabedFull_ ? 1.f : 0.5f);
     set3f(progWater_, "uShallow", lin(V.shallow));
     set3f(progWater_, "uDeep", lin(V.deep));
     set3f(progWater_, "uFoam", flat() ? lin(V.sandWet) : vec3(0.96f, 0.98f, 1.f));

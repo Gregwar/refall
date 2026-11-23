@@ -187,6 +187,8 @@ private:
     ugl::Target sceneT_, seabedT_;
     GLuint halfDepth_ = 0;
     int samples_ = 4, halfW_ = 1, halfH_ = 1;
+    bool seabedFull_ = false;              // the seabed at full resolution (FLAT)
+    void makeSeabed(bool full);
     static constexpr int SHADOW_SIZE = 4096;
     void drawTerrain(GLuint prog, int mode, bool shadowPass);
     void drawObjects(GLuint prog);
