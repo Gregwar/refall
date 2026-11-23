@@ -1092,7 +1092,8 @@ void TerrariumUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         break;
     }
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         // each cell keeps its piece (the cells of a bigger lock, a filled board, each alone)
         lockCount_++;
         int mx = 99, my = 99;

@@ -1714,6 +1714,11 @@ void IslandsUniverse::syncCells(const Game& g) {
 void IslandsUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
+    case GameEvent::Fill: // (a filled board: each blob one piece)
+        lockCount_++;
+        for (auto& c : ev.cells)
+            if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) ids_[c.y][c.x] = lockCount_ * 8 + std::clamp(c.type, 0, 6) + 1;
+        break;
     case GameEvent::Lock: {
         int maxY = -1;
         for (auto& c : ev.cells) maxY = std::max(maxY, c.y);
