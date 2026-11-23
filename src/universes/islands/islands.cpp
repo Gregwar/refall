@@ -141,7 +141,7 @@ const VariantDef VARIANTS[] = {
     // TRIP: the same flight rendered flat and through a psychedelic filter: the sea and the greens marbled neon
     // bands flowing slowly, violet sand ringed in orange, a deep violet sky under a huge ringed sun, zebra palms;
     // the pieces soft pastels in a dark slate well
-    {"TRIP", 0xd66cf4, 0xff8a30, 0x7ce62e, 0x2ecf8a, 0xff7a24, 0x8a34e8, 0x30d0b0, 0xff8a30, 0x7ce62e, 0xffd040, 0.f,
+    {"TRIP", 0xd66cf4, 0xffde4a, 0x7ce62e, 0x2ecf8a, 0xff7a24, 0x5a22b4, 0x30d0b0, 0xff8a30, 0x7ce62e, 0xffd040, 0.f,
      0x2ad4b0, 0x86e22e, {0.85f, 0.16f, 0.1f}, 9.f, 1.f,
      0x8a3af0, 0xffd040, 0xffd040, 0x7ce62e, 0x2ecf8a, 0.42f, 0,
      0x1c2038, {0x8fd2f0, 0xf8d070, 0xc993f5, 0x93e0a0, 0xf57ee8, 0x9aa8f8, 0xf5a080}, 0x8a5af0, 1},
@@ -2783,7 +2783,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
         set1i(progTrip_, "uScene", 0);
         set1f(progTrip_, "uFlow", flowT_);
-        set1f(progTrip_, "uWarp", 0.006f);
+        set1f(progTrip_, "uWarp", 0.0022f);
         set1f(progTrip_, "uHue", 0.22f * std::sin(flowT_ * TAU / 45.f));
         ugl::set2f(progTrip_, "uAspect", (float)width_ / height_, 1.f);
         ugl::drawFullscreen();

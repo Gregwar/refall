@@ -95,35 +95,25 @@ float marble(vec2 p, float t, out vec2 r) {
 }
 // a step from a to b at x = e, antialiased over w
 vec3 tstep(vec3 a, vec3 b, float x, float e, float w) { return mix(a, b, smoothstep(e - w, e + w, x)); }
-// the sea's bands along v (period 1): acid green, a lime line, turquoise, a violet line, orange, a magenta line, back
-// to green; w the band coordinate's footprint over a pixel
-vec3 seaBands(float v, float w) {
-    float x = fract(v);
-    float aa = max(w, 1e-4);
-    vec3 green = tl(vec3(0.53, 0.89, 0.18)), lime = tl(vec3(0.85, 0.95, 0.25)), turq = tl(vec3(0.13, 0.83, 0.70));
-    vec3 violet = tl(vec3(0.45, 0.25, 0.85)), orange = tl(vec3(1.0, 0.53, 0.18)), magenta = tl(vec3(0.93, 0.32, 0.80));
-    vec3 c = green;
-    c = tstep(c, lime, x, 0.24, aa);
-    c = tstep(c, turq, x, 0.275, aa);
-    c = tstep(c, violet, x, 0.52, aa);
-    c = tstep(c, orange, x, 0.55, aa);
-    c = tstep(c, magenta, x, 0.84, aa);
-    c = tstep(c, green, x, 0.865, aa);
-    // finer than a pixel: the palette's mean
-    vec3 mean = green * 0.35 + turq * 0.27 + orange * 0.29 + (lime + violet + magenta) * 0.03;
+// the sea's bands, calmer: a hue path there and back (turquoise, green, yellow green, a peach orange, back), so
+// neighbouring bands are close in hue; soft edges, one thin deep teal line in the troughs (the marbling's grain)
+vec3 seaCalm(float v, float w) {
+    float x = abs(fract(v) * 2.0 - 1.0);
+    float aa = max(w * 1.2, 1e-4);
+    vec3 teal = tl(vec3(0.08, 0.6, 0.66)), turq = tl(vec3(0.13, 0.82, 0.72)), green = tl(vec3(0.45, 0.88, 0.22));
+    vec3 yg = tl(vec3(0.74, 0.93, 0.28)), peach = tl(vec3(1.0, 0.66, 0.3));
+    vec3 c = teal;
+    c = tstep(c, turq, x, 0.05, aa);
+    c = tstep(c, green, x, 0.36, aa);
+    c = tstep(c, yg, x, 0.62, aa);
+    c = tstep(c, peach, x, 0.84, aa);
+    vec3 mean = turq * 0.33 + green * 0.27 + yg * 0.22 + peach * 0.14 + teal * 0.04;
     return mix(c, mean, smoothstep(0.06, 0.3, w));
 }
-// the greens' bands: acid green, teal, a yellow line
-vec3 landBands(float v, float w) {
-    float x = fract(v);
-    float aa = max(w, 1e-4);
-    vec3 green = tl(vec3(0.49, 0.90, 0.18)), teal = tl(vec3(0.15, 0.78, 0.55)), yellow = tl(vec3(0.98, 0.86, 0.22));
-    vec3 c = green;
-    c = tstep(c, teal, x, 0.45, aa);
-    c = tstep(c, yellow, x, 0.86, aa);
-    c = tstep(c, green, x, 0.92, aa);
-    vec3 mean = green * 0.5 + teal * 0.42 + yellow * 0.08;
-    return mix(c, mean, smoothstep(0.06, 0.3, w));
+// the land far away: one violet, a flat silhouette over the sea (aerial perspective)
+vec3 tripFar(vec3 c, float dist) {
+    float k = smoothstep(uEye.y * 5.0 + 300.0, uEye.y * 16.0 + 2000.0, dist);
+    return mix(c, tl(vec3(0.5, 0.26, 0.85)), 0.85 * k);
 }
 // an object's color pushed to neon: saturated, the whites to pale pastels (by its seed)
 vec3 tripNeon(vec3 a, float seed) {
@@ -296,21 +286,16 @@ void main() {
         if (abs(da / uFallW) < 0.8) col = mix(uFoam, uFoam * vec3(0.72, 0.86, 0.95), step(0.6, fract(vLocal.y * 0.08 + uTime * 0.9)));
     }
     if (uTrip > 0.5) {
-        // TRIP: flat, two tones by the facet's side; the greens marbled, flowing
-        // (the field and its footprint out of the material's branch: derivatives need every pixel of the quad)
-        vec2 r;
-        vec2 wp = vRel.xz + uEye.xz;
-        float m = marble(tripP(wp, 1.0) / 1.4 + 31.0, uFlow * 0.8, r);
-        float v = m * 2.6 + r.y * 0.6 + 0.03 * uFlow;
-        float vw = fwidth(v);
-        if (h >= 0.0 && rockK <= 0.45 && vegK > 0.5 && sandK < 0.75) col = landBands(v, vw);
-        // the peaks above the forest flat, one color an island (orange, violet or a lime green), like painted hills
-        if (h > 24.0 + 10.0 * tone && rockK <= 0.45 && vegK > 0.5) {
-            float k = fract(uSeed * 0.618);
-            col = tl(k < 0.4 ? vec3(1.0, 0.45, 0.2) : k < 0.75 ? vec3(0.6, 0.25, 0.92) : vec3(0.55, 0.9, 0.25));
-        }
+        // TRIP: bold flat fills, two tones by the facet's side (no swirl on the land: it reads against the sea): the
+        // sand violet, a bright yellow rim at the waterline, the forest a deep emerald, the peaks above it flat
+        // orange, violet or lime (one color an island), the cliffs a dark violet; far away one violet silhouette
+        bool veg = h >= 0.0 && rockK <= 0.45 && vegK > 0.5 && sandK < 0.75;
+        if (veg) col = tl(tone > 0.5 ? vec3(0.13, 0.66, 0.36) : vec3(0.1, 0.56, 0.32));
+        // (the hills in flat bands by their height, like contours: violet above the forest, orange the peaks)
+        if (rockK <= 0.45 && vegK > 0.5 && h > 26.0 + 6.0 * tone) col = tl(vec3(0.6, 0.27, 0.93));
+        if (rockK <= 0.45 && vegK > 0.5 && h > 60.0 + 8.0 * tone) col = tl(vec3(1.0, 0.47, 0.2));
         float side = dot(N, uSunDir) > 0.25 ? 1.0 : 0.8;
-        frag = vec4(col * side, 0.0);
+        frag = vec4(tripFar(col * side, dist), 0.0);
         return;
     }
     // the light: per facet, the sun (crisp shadows), the sky ambient, the sea's bounce
@@ -490,15 +475,6 @@ void main() {
     } else if (mat == 17) {     // roof tiles: flat rows
         alb *= 0.88 + 0.12 * step(0.5, fract(vObj.y * 4.0 / max(vSize.y, 0.1)));
     }
-    // TRIP: the trees take the greens' marbled bands where they stand (they melt into the swirl, their shapes kept by
-    // the two tones), the field out of the material's branch (its derivatives)
-    vec3 treeCol = vec3(0.0);
-    if (uTrip > 0.5) {
-        vec2 r;
-        float m = marble(tripP(world.xz, 1.0) / 1.4 + 31.0, uFlow * 0.8, r);
-        float v = m * 2.6 + r.y * 0.6 + 0.03 * uFlow;
-        treeCol = landBands(v + 0.18, fwidth(v));
-    }
     if (uTrip > 0.5) {
         // TRIP: flat neon, two tones by the facet's side; the palms in zebra stripes of mixed neons (trunk and fronds
         // each a pair, by the palm's seed), the foliage in neon greens
@@ -511,9 +487,16 @@ void main() {
             float s = vAux.x < 0.5 ? vObj.y / max(vSize.y, 0.01) * 0.8 + sin(vObj.x * 4.0) * 0.3
                                    : vAux.y * 7.0 + sin(vObj.x * 2.3 + vObj.z * 1.7) * 0.6;
             a = tl(mix(c0, c1, step(0.5, fract(s))));
-        } else if (mat == 7) a = treeCol;
+        } else if (mat == 7) {
+            // the trees: the hill's band a shade lighter where they stand (emerald, violet, orange), a few lime ones
+            // low down
+            float y = world.y + 0.5 * uCurv * dot(vRel.xz, vRel.xz);
+            a = y > 64.0 ? vec3(1.0, 0.6, 0.25) : y > 29.0 ? vec3(0.74, 0.38, 0.97)
+                : fract(vSeed * 5.71) < 0.8 ? vec3(0.16, 0.74, 0.4) : vec3(0.55, 0.88, 0.24);
+            a = tl(a);
+        }
         float side = dot(N, uSunDir) > 0.2 ? 1.0 : 0.8;
-        frag = vec4(a * side + emitCol * emit * 0.5, 0.0);
+        frag = vec4(tripFar(a * side, dist) + emitCol * emit * 0.5, 0.0);
         return;
     }
     float ndl = dot(N, uSunDir);
@@ -620,11 +603,13 @@ void main() {
         // (marbling: parallel bands, combed by the warps; so there are bands everywhere, none of the noise's flat
         // patches)
         float tf = t / (alt * 10.0 + 250.0);
-        vec2 p = tripP(wp, 1.0 + t / (alt * 4.0 + 60.0) + tf * tf);
+        vec2 p = tripP(wp, 1.6 * (1.0 + t / (alt * 4.0 + 60.0) + tf * tf));
         float m = marble(p, uFlow, r);
-        float v = dot(p, vec2(0.6, 0.8)) * 1.7 + m * 4.0 + r.x * 1.2 + 1.1 * exp(-depthV / 7.0) + 0.035 * uFlow + 0.05 * uPulse;
-        col = seaBands(v, fwidth(v));
-        col = mix(col, tl(vec3(1.0, 0.53, 0.18)), 1.0 - edge(depthV, 1.6));
+        float v = dot(p, vec2(0.6, 0.8)) * 1.1 + m * 2.8 + r.x * 0.9 + 0.6 * exp(-depthV / 9.0) + 0.03 * uFlow + 0.04 * uPulse;
+        col = seaCalm(v * 0.75, fwidth(v * 0.75));
+        // every coast ringed: an orange band on the shallows, a dark violet line outside it
+        col = mix(col, tl(vec3(0.3, 0.1, 0.55)), 1.0 - edge(depthV, 3.4));
+        col = mix(col, tl(vec3(1.0, 0.5, 0.16)), 1.0 - edge(depthV, 2.5));
     }
     // white: the foam line at the shore (its width breathing slowly), the boats' wakes, the falls' feet
     // (TRIP: none; the orange ring is its shore)
