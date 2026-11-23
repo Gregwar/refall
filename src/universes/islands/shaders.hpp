@@ -186,12 +186,17 @@ void main() {
         float sandK = vAttr.x, vegK = vAttr.y, rockK = vAttr.z;
         vec3 col = mix(uSandWet, uSand, smoothstep(0.7 - wy, 0.7 + wy, y));
         float veg = smoothstep(0.45, 0.55, vegK) * (1.0 - smoothstep(0.7, 0.8, sandK));
-        vec3 green = mix(uGrass, uJungle, smoothstep(9.0 - wy, 9.0 + wy, y));
+        // (the bands' lines wander a little, as drawn by hand)
+        float wob = n2(vLocal.xz * 0.018 + uSeed) - 0.5;
+        vec3 green = mix(uGrass, uJungle, smoothstep(9.0 - wy, 9.0 + wy, y + wob * 6.0));
+        // the peaks: slate on the steep faces above the forest line (the mountains' darker shapes)
+        float ws = max(fwidth(steep), 1e-3);
+        float slate = smoothstep(40.0 - wy, 40.0 + wy, y + wob * 20.0) * smoothstep(0.3 - ws, 0.3 + ws, steep + wob * 0.2);
+        green = mix(green, uRock, max(slate, smoothstep(110.0 - wy, 110.0 + wy, y + wob * 30.0)));
         col = mix(col, green, veg);
         float rk = smoothstep(0.4, 0.5, rockK);
-        vec3 stone = mix(uCliff, uRock, smoothstep(26.0 - wy * 2.0, 26.0 + wy * 2.0, y));
-        col = mix(col, stone, rk);
-        if (y < -0.05) col = uSeabed;
+        col = mix(col, mix(uCliff, uRock, smoothstep(48.0 - wy, 48.0 + wy, y + wob * 20.0)), rk);
+        // (under the water: the surf's white, no seam at the waterline)
         if (uFallW > 0.0 && rockK > 0.25) {
             float a = atan(vLocal.z, vLocal.x);
             float da = mod(a - uFallA + 3.14159265, 6.2831853) - 3.14159265;
@@ -498,7 +503,9 @@ void main() {
         d4[i] = a == 0.0 ? t + 60.0 / max(-dy, 0.02) : abs(a);  // (no terrain: as deep as the deepest band)
     }
     float sbd = mix(mix(d4.x, d4.y, hf.x), mix(d4.z, d4.w, hf.x), hf.y);
-    float thick = sbd > t ? sbd - t : 1e4;
+    // (FLAT: the ground just in front of the water at the waterline, through the half resolution's filtering, is the
+    // shore, not the deep: no blue seam in the surf)
+    float thick = sbd > t ? sbd - t : uFlat > 0.5 && t - sbd < t * 0.04 + 2.0 ? 0.0 : 1e4;
     float depthV = min(thick * (-dy), 60.0);
     // the bands: the deep blue (darker near, lighter toward the horizon), a teal ledge, the turquoise shallows
     // (their depths clear of a lagoon's floor, which would break into patches)
@@ -565,7 +572,7 @@ void main() {
     float gl = max(glints(wp, 7.0, foot, uTime), glints(wp, 26.0, foot, uTime * 0.8) * step(15.0, alt)) * edge(depthV, 1.5) * (1.0 - uCalm);
     gl *= step(alt * 4.0 + 6.0, t);  // (none right under a low camera, where they would fill the view)
     foam = max(foam, gl * (1.0 - uFlat));
-    vec3 foamLit = uFlat > 0.5 ? vec3(0.86, 0.85, 0.82) * uFlatLit : uFoam * (uSunCol * (0.55 * max(uSunDir.y, 0.1) + 0.3) + uAmb * 0.9);
+    vec3 foamLit = uFlat > 0.5 ? uFoam * uFlatLit : uFoam * (uSunCol * (0.55 * max(uSunDir.y, 0.1) + 0.3) + uAmb * 0.9);
     col = mix(col, foamLit, clamp(foam, 0.0, 1.0));
     frag = vec4(fogged(col, t, rd), 0.0);
 }

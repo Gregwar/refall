@@ -144,7 +144,7 @@ const VariantDef VARIANTS[] = {
     {"FLAT", 0xe9d49d, 0xeeede9, 0x7cc256, 0x3f8c5c, 0x4c6a72, 0x787661, 0xe6dcc0, 0xc4806c, 0x6e9048, 0xa4a052, 0.f,
      0x45cdd9, 0x3db6d1, {0.85f, 0.16f, 0.1f}, 9.f, 1.f,
      0x4f9e22, 0x7cbc30, 0x6e6a4c, 0x4f9a3c, 0x3a7e40, 0.42f, 2,
-     0x1a4a70, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0x2a7090, true},
+     0x1a4a70, {0xa2e4f4, 0xffe39a, 0xd9b0fe, 0x94e9ca, 0xffa0a6, 0xaac0ff, 0xffc198}, 0x1e4e6c, true},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 constexpr int AUTO_VARIANTS = 4; // the ones a song picks on its own (FLAT only when asked for)
@@ -2150,7 +2150,7 @@ void IslandsUniverse::hudLine(const HudText& h, text::Line& out) {
     default: put(light, h.text, base * 0.82f, base * 0.03f, h.accent ? accent : ink, alpha); break;
     }
     out.look.halo = halo;
-    out.look.haloA = flat() ? 0.f : 0.7f; // (FLAT: plain navy letters, no halo)
+    out.look.haloA = flat() ? 0.22f : 0.7f; // (FLAT: plain navy letters, a faint halo only over the darker greens)
     out.look.haloW = 0.095f;
     out.look.haloSmooth = true;
     out.alpha = 1.f - smoothstepf(0.4f, 0.9f, bridge_.amount);
@@ -2666,7 +2666,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     ugl::set2f(progWater_, "uInvRes", 1.f / width_, 1.f / height_);
     set3f(progWater_, "uShallow", lin(V.shallow));
     set3f(progWater_, "uDeep", lin(V.deep));
-    set3f(progWater_, "uFoam", vec3(0.96f, 0.98f, 1.f));
+    set3f(progWater_, "uFoam", flat() ? lin(V.sandWet) : vec3(0.96f, 0.98f, 1.f));
     set1f(progWater_, "uWave", V.wave * (0.75f + 0.25f * lv_ + 0.2f * energy_));
     set1f(progWater_, "uSparkle", sparkle_);
     set1f(progWater_, "uCalm", slow_);
