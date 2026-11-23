@@ -30,8 +30,9 @@ public:
 private:
     // ---- GPU resources.
     struct Mesh { GLuint vao = 0, vbo = 0; int count = 0; };
-    // Instances of the block program: position + kind, scale + contact mask, rotation, color + glow.
-    struct Inst { vec4 a, b, q, c; };
+    // Instances of the block program: position + kind, scale + masks (crevices, joined sides), rotation, color +
+    // glow, half the cell's pitch + the cell's place in its piece.
+    struct Inst { vec4 a, b, q, c, j; };
     struct Sprite { vec4 a, b, c; }; // pos + size, color + alpha, kind / rotation / glow / aspect
     // A rounded card under HUD text (pixels, top-left origin).
     GLuint compile(const char* vs, const char* fs, const char* name);
@@ -112,7 +113,11 @@ private:
     float focus_ = 1.f;
 
     // Effects.
-    struct Body { vec3 pos, vel, axis; float angle, spin, delay, life, shrink, scale; int type; bool wet; vec3 color; };
+    // A tumbling body: one piece's cells cleared together, one joined shape (a crumbling stack's: one cell each).
+    struct Body {
+        vec3 pos, vel, axis; float angle, spin, delay, life, shrink, scale; int type; bool wet; vec3 color;
+        int n = 1; vec2 off[4]; int mask[4] = {}; vec2 clay[4]; // its cells: place (cells, up +y), joins, clay
+    };
     std::vector<Body> bodies_;
     struct Particle { vec3 pos, vel, color; float life, maxLife, size, rot, rotV; int kind; float grav, drag, alpha; };
     std::vector<Particle> parts_;
@@ -123,6 +128,13 @@ private:
     struct Bird { vec3 pos, vel; float phase; };
     std::vector<Bird> birds_;
     float squashT_[Game::H][Game::W] = {};
+    // Each locked cell's piece (its lock's number * 8 + its type + 1; 0 empty, < 0 alone), and its place in the
+    // piece's clay: the cells of a piece are one shape.
+    int ids_[Game::H][Game::W] = {};
+    vec2 clay_[Game::H][Game::W] = {};
+    int lockCount_ = 0;
+    void syncCells(const Game& g);
+    int gridMask(const Game& g, int x, int y) const;
 
     // Per frame.
     std::vector<Inst> solid_, ghost_; // (the ghost drawn translucent, after the scene)

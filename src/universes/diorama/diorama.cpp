@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include "layout.hpp"
 #include "ugl.hpp"
@@ -444,6 +445,37 @@ float noise1(float x, uint64_t seed) {
     return lerpf(h(i), h(i + 1), u);
 }
 
+vec3 qrot(vec4 q, vec3 v) {
+    const vec3 u(q.x, q.y, q.z);
+    return v + cross(u, cross(u, v) + v * q.w) * 2.f;
+}
+
+// The neighbours of a cell of the same piece (1 left, 2 right, 4 up, 8 down, 16 up left, 32 up right, 64 down left,
+// 128 down right; up: the row above).
+template <class F> int neighbourMask(int x, int y, F same) {
+    const int d[8][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}};
+    int m = 0;
+    for (int k = 0; k < 8; k++)
+        if (same(x + d[k][0], y + d[k][1])) m |= 1 << k;
+    return m;
+}
+// A piece's cell's neighbours, from the piece's four cells.
+int pieceMask(const int (*k)[2], int x, int y) {
+    return neighbourMask(x, y, [&](int a, int b) {
+        for (int i = 0; i < 4; i++)
+            if (k[i][0] == a && k[i][1] == b) return true;
+        return false;
+    });
+}
+// A cell's place in its piece's clay (in cells, up +y), from the piece's top left; each piece its own patch.
+vec2 clayAt(int piece, int x, int y, int minx, int miny) {
+    return {std::fmod(piece * 5.37f, 40.f) + (x - minx), std::fmod(piece * 2.91f, 40.f) - (y - miny)};
+}
+void cellsMin(const int (*k)[2], int& minx, int& miny) {
+    minx = std::min(std::min(k[0][0], k[1][0]), std::min(k[2][0], k[3][0]));
+    miny = std::min(std::min(k[0][1], k[1][1]), std::min(k[2][1], k[3][1]));
+}
+
 } // namespace
 
 // =========================================================================================================
@@ -583,9 +615,9 @@ void DioramaUniverse::uploadInstMesh(Mesh& m, const std::vector<float>& v) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glBindBuffer(GL_ARRAY_BUFFER, instVbo_);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         glEnableVertexAttribArray(2 + i);
-        glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, 16 * sizeof(float), (void*)(i * 4 * sizeof(float)));
+        glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, sizeof(Inst), (void*)(i * 4 * sizeof(float)));
         glVertexAttribDivisor(2 + i, 1);
     }
     glBindVertexArray(0);
@@ -848,8 +880,9 @@ void DioramaUniverse::createTargets() {
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, msColor_);
     glGenRenderbuffers(1, &msDepth_);
     glBindRenderbuffer(GL_RENDERBUFFER, msDepth_);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_DEPTH_COMPONENT24, width_, height_);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, msDepth_);
+    // (a stencil too: the ghost's surface blended once per pixel)
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_DEPTH24_STENCIL8, width_, height_);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, msDepth_);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) std::fprintf(stderr, "[gl] MSAA FBO incomplete\n");
 
     auto makeTex = [](GLuint& tex, int w, int h) {
@@ -1043,7 +1076,22 @@ void DioramaUniverse::levelUp() {
 
 void DioramaUniverse::onEvent(const GameEvent& ev, const Game& game) {
     switch (ev.type) {
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
+        // Each cell keeps its piece and its place in the piece's clay (the cells of a bigger lock, a filled board,
+        // each alone; a filled board's pieces told by Fill events, which land no dust).
+        lockCount_++;
+        {
+            int minx = Game::W, miny = Game::H;
+            for (auto& c : ev.cells) { minx = std::min(minx, c.x); miny = std::min(miny, c.y); }
+            for (auto& c : ev.cells) {
+                if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+                const bool joined = ev.cells.size() <= 4;
+                ids_[c.y][c.x] = joined ? lockCount_ * 8 + std::clamp(c.type, 0, 6) + 1 : -1 - (c.y * Game::W + c.x);
+                clay_[c.y][c.x] = clayAt(lockCount_, c.x, c.y, minx, miny);
+            }
+        }
+        if (ev.type == GameEvent::Fill) break;
         auto inPiece = [&](int x, int y) {
             for (auto& o : ev.cells)
                 if (o.x == x && o.y == y) return true;
@@ -1073,15 +1121,65 @@ void DioramaUniverse::onEvent(const GameEvent& ev, const Game& game) {
     case GameEvent::Clear: {
         // Cleared blocks pop off the tower toward the viewer and tumble down: they bounce on the plinth or the island
         // and splash into the sea, shrinking away only at the end of their fall (~2 s).
+        // The cells of a piece cleared together leave as one body, still one shape.
         const bool quadClear = ev.count >= 4;
+        bool rows[Game::H] = {}, gone[Game::H][Game::W] = {};
+        for (auto& c : ev.cells)
+            if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) rows[c.y] = true;
         for (auto& c : ev.cells) {
-            vec3 p = cellPos((float)c.x, (float)c.y);
+            if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W || gone[c.y][c.x]) continue;
+            const int id = ids_[c.y][c.x];
+            auto with = [&](int a, int b) {
+                return id > 0 && a >= 0 && a < Game::W && b >= 0 && b < Game::H && rows[b] && ids_[b][a] == id;
+            };
+            // its piece's cells in the cleared rows, step by step
+            int q[4][2], n = 0;
+            q[n][0] = c.x; q[n][1] = c.y; n++;
+            gone[c.y][c.x] = true;
+            for (int i = 0; i < n; i++) {
+                const int d[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+                for (auto& k : d) {
+                    const int a = q[i][0] + k[0], b = q[i][1] + k[1];
+                    if (n < 4 && with(a, b) && !gone[b][a]) { gone[b][a] = true; q[n][0] = a; q[n][1] = b; n++; }
+                }
+            }
+            float mx = 0.f, my = 0.f;
+            for (int i = 0; i < n; i++) { mx += q[i][0]; my += q[i][1]; }
+            mx /= n; my /= n;
             // (hard enough to clear the plinth: even the middle cells leave to a side, none lands against the tower)
-            float side = (c.x - 4.5f) / 4.5f;
-            const float away = (c.x < 5 ? -1.f : 1.f) * rng_.range(1.f, 1.8f);
+            const float side = (mx - 4.5f) / 4.5f;
+            const float away = (mx < 4.5f ? -1.f : 1.f) * rng_.range(1.f, 1.8f);
             vec3 vel(side * rng_.range(3.2f, 5.2f) + away, rng_.range(5.5f, 8.5f) + (quadClear ? 1.5f : 0.f), rng_.range(7.5f, 10.f));
-            spawnBody(p, c.type, vel, std::fabs(c.x - 4.5f) * 0.012f + rng_.range(0.f, 0.03f), rng_.range(4.f, 10.f),
-                      rng_.range(1.9f, 2.5f));
+            // (a bigger body turns slower)
+            const size_t had = bodies_.size();
+            spawnBody(cellPos(mx, my), c.type, vel, std::fabs(mx - 4.5f) * 0.012f + rng_.range(0.f, 0.03f),
+                      rng_.range(4.f, 10.f) / std::sqrt((float)n), rng_.range(1.9f, 2.5f));
+            if (bodies_.size() == had) break;
+            Body& b = bodies_.back();
+            b.n = n;
+            for (int i = 0; i < n; i++) {
+                b.off[i] = {q[i][0] - mx, my - q[i][1]};
+                b.mask[i] = n > 1 ? neighbourMask(q[i][0], q[i][1], [&](int a, int bb) {
+                    for (int k = 0; k < n; k++)
+                        if (q[k][0] == a && q[k][1] == bb) return true;
+                    return false;
+                }) : 0;
+                b.clay[i] = clay_[q[i][1]][q[i][0]];
+            }
+        }
+        // The pieces follow their rows down.
+        {
+            int ni[Game::H][Game::W] = {};
+            vec2 nc[Game::H][Game::W] = {};
+            int dst = Game::H - 1;
+            for (int y = Game::H - 1; y >= 0; y--) {
+                if (rows[y]) continue;
+                std::memcpy(ni[dst], ids_[y], sizeof(ids_[y]));
+                std::memcpy(nc[dst], clay_[y], sizeof(clay_[y]));
+                dst--;
+            }
+            std::memcpy(ids_, ni, sizeof(ids_));
+            std::memcpy(clay_, nc, sizeof(clay_));
         }
         rings_.push_back({0.f, 0.35f + 0.15f * ev.count});
         if (quadClear) {
@@ -1254,8 +1352,14 @@ void DioramaUniverse::simulate(const Game& game, const MusicState& music, float 
             if (std::sqrt(qx * qx + qz * qz) < 0.82f) ground = GROUND_Y;
             const bool plinth = std::fabs(b.pos.x) < 6.9f && b.pos.z > -1.9f && b.pos.z < 1.4f;
             if (plinth) ground = -10.5f;
-            if (b.pos.y - 0.45f < ground && b.vel.y < 0.f) {
-                b.pos.y = ground + 0.45f;
+            // (a body of several cells rests on its lowest one)
+            float low = 0.45f;
+            if (b.n > 1) {
+                const vec4 q = quatAxis(b.axis, b.angle);
+                for (int k = 0; k < b.n; k++) low = std::max(low, 0.45f - qrot(q, vec3(b.off[k].x, b.off[k].y, 0.f)).y * b.scale);
+            }
+            if (b.pos.y - low < ground && b.vel.y < 0.f) {
+                b.pos.y = ground + low;
                 b.vel.y = -b.vel.y * 0.32f;
                 b.vel.x *= 0.75f;
                 b.vel.z *= 0.75f;
@@ -1264,7 +1368,7 @@ void DioramaUniverse::simulate(const Game& game, const MusicState& music, float 
                 if (b.vel.y < 1.2f) b.vel.y = 0.f;
                 if (rng_.chance(0.4f)) spawnDust(b.pos + vec3(0, -0.4f, 0), vec3(0, 0.3f, 0), 1, 0.6f);
             }
-            if (b.vel.y == 0.f && b.pos.y - 0.45f <= ground + 0.01f && !plinth) {
+            if (b.vel.y == 0.f && b.pos.y - low <= ground + 0.01f && !plinth) {
                 b.vel.x *= std::exp(-1.5f * dt);
                 b.vel.z *= std::exp(-1.5f * dt);
                 b.spin *= std::exp(-3.f * dt);
@@ -1363,13 +1467,51 @@ void DioramaUniverse::collect(const Game& g, const MusicState& music, double tim
     collectSprites();
 }
 
+// The pieces of the stack: a cell of no known piece (or not the one locked there: the board filled anew) stays alone.
+void DioramaUniverse::syncCells(const Game& g) {
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) {
+            const int t = g.cell(x, y).type;
+            if (t >= 0 && (ids_[y][x] == 0 || (ids_[y][x] > 0 && ids_[y][x] % 8 != t + 1))) ids_[y][x] = -1 - (y * Game::W + x);
+            if (t < 0) ids_[y][x] = 0;
+        }
+}
+
+// A stack cell's neighbours in its piece (a row still falling after a clear joins its piece once it has landed).
+int DioramaUniverse::gridMask(const Game& g, int x, int y) const {
+    const int id = ids_[y][x];
+    if (id <= 0) return 0;
+    return neighbourMask(x, y, [&](int a, int b) {
+        return a >= 0 && a < Game::W && b >= 0 && b < Game::H && ids_[b][a] == id &&
+               std::fabs(g.rowOffset(b) - g.rowOffset(y)) < 1e-3f;
+    });
+}
+
 // The game's blocks: the stack, the piece and its ghost, the previews, the tumbling bodies.
 void DioramaUniverse::collectBlocks(const Game& g, double time) {
     const float S = 0.95f;
-    auto inst = [&](vec3 p, vec3 sc, vec3 col, float kind = 0, float mask = 0, vec4 q = vec4(0, 0, 0, 1), float glow = 0) {
-        solid_.push_back({vec4(p, kind), vec4(sc, mask), q, vec4(col, glow)});
+    // One cell of a piece's shape (nb: its neighbours in the piece, as neighbourMask; occ: its crevices; half: half
+    // its pitch, to reach the next cell): one box joined on every side toward the piece, or, around an inner corner
+    // (two joined sides whose diagonal cell is not in the piece), a box per axis and one per filled corner.
+    auto cell = [&](std::vector<Inst>& out, vec3 p, vec3 sc, vec3 col, float kind, int occ, int nb, vec2 half, vec2 clay,
+                    vec4 q = vec4(0, 0, 0, 1)) {
+        const int j = nb & 15;
+        const int corner[4][2] = {{1 | 4, 16}, {2 | 4, 32}, {1 | 8, 64}, {2 | 8, 128}};
+        auto box = [&](int e) {
+            out.push_back({vec4(p, kind), vec4(sc, (float)((occ & ~j) | e << 4 | nb << 8)), q, vec4(col, 0.f),
+                           vec4(half.x, half.y, clay.x, clay.y)});
+        };
+        bool inner = false;
+        for (auto& c : corner)
+            if ((j & c[0]) == c[0] && !(nb & c[1])) inner = true;
+        if (!inner) { box(j); return; }
+        box(j & 3);
+        box(j & 12);
+        for (auto& c : corner)
+            if ((j & c[0]) == c[0] && (nb & c[1])) box(c[0]);
     };
     auto occupied = [&](int x, int y) { return x >= 0 && x < Game::W && y >= 0 && y < Game::H && g.cell(x, y).type >= 0; };
+    syncCells(g);
 
     // Pieces locked together share one flash value: squash each about its own bottom.
     struct Group { float flash; float bottom; };
@@ -1391,6 +1533,7 @@ void DioramaUniverse::collectBlocks(const Game& g, double time) {
             if (c.type < 0) continue;
             vec3 p = cellPos((float)x, y - g.rowOffset(y));
             vec3 sc(S, S * breath, S);
+            float pitch = 1.f; // (the rows' pitch, squashed with the piece)
             if (c.flash > 0.f && c.dropped) {
                 const float age = (1.f - c.flash) * Game::LOCK_FX_SECONDS;
                 if (age < 1.4f) {
@@ -1405,11 +1548,12 @@ void DioramaUniverse::collectBlocks(const Game& g, double time) {
                     const float sy = 1.f - w, sxz = 1.f + 0.55f * w;
                     p.y = by + (p.y - by) * sy;
                     sc = vec3(S * sxz, S * sy * breath, S * sxz);
+                    pitch = sy;
                 }
             }
             int mask = (occupied(x - 1, y) ? 1 : 0) | (occupied(x + 1, y) ? 2 : 0) | (occupied(x, y - 1) ? 4 : 0) |
                        (occupied(x, y + 1) ? 8 : 0);
-            inst(p, sc, env_.piece[c.type], 0, (float)mask);
+            cell(solid_, p, sc, env_.piece[c.type], 0, mask, gridMask(g, x, y), vec2{0.5f, 0.5f * pitch}, clay_[y][x]);
             const int ty = Game::H - 1 - y; // 0 at the bottom row
             if (ty >= 0 && ty < 20) occ[ty + 1][x + 1] = 255;
         }
@@ -1417,34 +1561,29 @@ void DioramaUniverse::collectBlocks(const Game& g, double time) {
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 12, 22, GL_RED, GL_UNSIGNED_BYTE, occ);
 
-    // The falling piece and its ghost (a tile pressed into the back wall).
+    // The falling piece and its ghost (their clay the one the piece keeps once locked: the next lock's).
     if (g.hasPiece()) {
         const Piece& p = g.piece();
         int cells[4][2];
         g.pieceCells(p, cells);
+        int minx, miny;
+        cellsMin(cells, minx, miny);
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
-        auto inP = [&](int x, int y) {
-            for (auto& c : cells)
-                if (c[0] == x && c[1] == y) return true;
-            return false;
-        };
         for (auto& c : cells) {
             if (c[1] < Game::HIDDEN - 1) continue;
-            int mask = (inP(c[0] - 1, c[1]) ? 1 : 0) | (inP(c[0] + 1, c[1]) ? 2 : 0) | (inP(c[0], c[1] - 1) ? 4 : 0) |
-                       (inP(c[0], c[1] + 1) ? 8 : 0);
-            inst(cellPos(c[0] + dx, c[1] + dy), vec3(S), env_.piece[p.type], 0, (float)mask);
+            cell(solid_, cellPos(c[0] + dx, c[1] + dy), vec3(S), env_.piece[p.type], 0, 0, pieceMask(cells, c[0], c[1]),
+                 vec2{0.5f, 0.5f}, clayAt(lockCount_ + 1, c[0], c[1], minx, miny));
         }
         // The ghost: the piece itself where it will land, in translucent clay glass (drawn after the scene).
         Piece gp = p;
         gp.y = g.ghostY();
         if (gp.y > p.y) {
             g.pieceCells(gp, cells);
+            cellsMin(cells, minx, miny);
             for (auto& c : cells) {
                 if (c[1] < Game::HIDDEN) continue;
-                int mask = (inP(c[0] - 1, c[1]) ? 1 : 0) | (inP(c[0] + 1, c[1]) ? 2 : 0) | (inP(c[0], c[1] - 1) ? 4 : 0) |
-                           (inP(c[0], c[1] + 1) ? 8 : 0); // (cells now holds the ghost's)
-                ghost_.push_back({vec4(cellPos((float)c[0], (float)c[1]), 2.f), vec4(vec3(S), (float)mask), vec4(0, 0, 0, 1),
-                                  vec4(env_.piece[p.type], 0.f)});
+                cell(ghost_, cellPos((float)c[0], (float)c[1]), vec3(S), env_.piece[p.type], 2.f, 0,
+                     pieceMask(cells, c[0], c[1]), vec2{0.5f, 0.5f}, clayAt(lockCount_ + 1, c[0], c[1], minx, miny));
             }
         }
     }
@@ -1468,19 +1607,23 @@ void DioramaUniverse::collectBlocks(const Game& g, double time) {
         for (auto& cc : cells) {
             vec3 o((cc[0] - (minx + maxx) * 0.5f) * sc, -(cc[1] - (miny + maxy) * 0.5f) * sc, 0);
             vec3 r(o.x * c, o.y, -o.x * s);
-            inst(center + r, vec3(sc * S), col, 0, 0, q);
+            cell(solid_, center + r, vec3(sc * S), col, 0, 0, pieceMask(cells, cc[0], cc[1]), vec2{0.5f * sc, 0.5f * sc},
+                 clayAt(type, cc[0], cc[1], (int)minx, (int)miny), q);
         }
     };
     if (g.holdType() >= 0) preview(g.holdType(), vec3(-8.6f, 7.2f, -0.12f), 0.62f, 0.f, g.holdUsed());
     for (int i = 0; i < 3; i++) if (g.next(i) >= 0) preview(g.next(i), vec3(8.6f, 7.2f - i * 3.2f, -0.12f), i == 0 ? 0.62f : 0.5f, 1.3f + i * 2.1f, false);
 
-    // Tumbling bodies.
+    // Tumbling bodies (a piece's cells cleared together: one shape, turning as one).
     for (const Body& b : bodies_) {
-        float sc = S * b.scale;
-        if (b.delay > 0.f) sc *= 1.f + 0.1f * std::sin(std::min(1.f, b.delay * 8.f) * PI);
-        inst(b.pos, vec3(sc), b.color, 0, 0, quatAxis(b.axis, b.angle));
+        float k = b.scale;
+        if (b.delay > 0.f) k *= 1.f + 0.1f * std::sin(std::min(1.f, b.delay * 8.f) * PI);
+        if (k <= 1e-3f) continue;
+        const vec4 q = quatAxis(b.axis, b.angle);
+        for (int i = 0; i < b.n; i++)
+            cell(solid_, b.pos + qrot(q, vec3(b.off[i].x, b.off[i].y, 0.f) * k), vec3(S * k), b.color, 0, 0, b.mask[i],
+                 vec2{0.5f * k, 0.5f * k}, b.clay[i], q);
     }
-
 }
 
 // The sprites: dust, splashes, leaves, birds, the lanterns' halos and fireflies (a break: the world's own only).
@@ -1751,23 +1894,6 @@ void DioramaUniverse::render(const Frame& f, GLuint fbo) {
         glBindVertexArray(waterMesh_.vao);
         glDrawArrays(GL_TRIANGLES, 0, waterMesh_.count);
     }
-    // The ghost (premultiplied, over the scene; the alpha channel keeps the view distance).
-    if (!ghost_.empty()) {
-        glDepthMask(GL_FALSE);
-        glEnable(GL_BLEND);
-        glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
-        glEnable(GL_CULL_FACE);
-        glUseProgram(progBlock_);
-        setCommonUniforms(progBlock_);
-        setMat(progBlock_, "uVP", vp_);
-        setMat(progBlock_, "uMirror", mat4::identity());
-        set1f(progBlock_, "uClipY", -1e6f);
-        set1f(progBlock_, "uLanternGlow", 0.f);
-        drawInstances(cube_, ghost_, progBlock_);
-        glDisable(GL_CULL_FACE);
-        glDisable(GL_BLEND);
-        glDepthMask(GL_TRUE);
-    }
     // Sprites (premultiplied; the alpha channel keeps the view distance).
     if (!sprites_.empty()) {
         glDepthMask(GL_FALSE);
@@ -1784,6 +1910,35 @@ void DioramaUniverse::render(const Frame& f, GLuint fbo) {
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)sprites_.size());
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);
+    }
+    // The ghost (premultiplied, over the scene; the alpha channel keeps the view distance): only the piece's outer
+    // surface, once per pixel (its depth first, then its nearest surface blended where the stencil is still clear),
+    // so neither its boxes' overlaps nor its inner faces show through the glass.
+    if (!ghost_.empty()) {
+        glEnable(GL_CULL_FACE);
+        glUseProgram(progBlock_);
+        setCommonUniforms(progBlock_);
+        setMat(progBlock_, "uVP", vp_);
+        setMat(progBlock_, "uMirror", mat4::identity());
+        set1f(progBlock_, "uClipY", -1e6f);
+        set1f(progBlock_, "uLanternGlow", 0.f);
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+        drawInstances(cube_, ghost_, progBlock_);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glClear(GL_STENCIL_BUFFER_BIT);
+        glEnable(GL_STENCIL_TEST);
+        glStencilFunc(GL_EQUAL, 0, 0xFF);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+        glDepthMask(GL_FALSE);
+        glDepthFunc(GL_LEQUAL);
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+        drawInstances(cube_, ghost_, progBlock_);
+        glDisable(GL_BLEND);
+        glDepthFunc(GL_LESS);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_STENCIL_TEST);
+        glDisable(GL_CULL_FACE);
     }
     glDisable(GL_DEPTH_TEST);
 

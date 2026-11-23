@@ -89,26 +89,53 @@ vec3 shade(vec3 albedo, vec3 n, vec3 wp, float ao, float sh) {
 )";
 
 // ---------- Blocks (instanced: falling pieces, the stack, previews, tumbling bodies).
+// A piece is one joined shape: each cell is one clay box, or a few whose union is the cell's part of the shape. A
+// box's side toward a cell of the same piece reaches the cell's boundary with no bevel (its vertices pushed out
+// there, the rounded profile of the other axes kept), so it meets the neighbour's side face to face; the inner
+// corner of an L, T, S or Z is the union of two boxes, each joined along one axis only.
 inline const char* BLOCK_VS = R"(
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNrm;
 layout(location = 2) in vec4 iPosKind;   // world position, kind (0 block, 2 ghost)
-layout(location = 3) in vec4 iScaleMask; // scale, neighbour mask (1 left, 2 right, 4 up, 8 down)
+// scale, masks (1 left, 2 right, 4 up, 8 down): the crevices, x16 the box's joined sides, x256 the cell's neighbours
+// in its piece (as the box's, and 16 up left, 32 up right, 64 down left, 128 down right)
+layout(location = 3) in vec4 iScaleMask;
 layout(location = 4) in vec4 iQuat;
 layout(location = 5) in vec4 iColGlow;   // albedo (linear), glow
+layout(location = 6) in vec4 iJoin;      // half the cell's pitch (x, y), the cell's place in its piece (the clay)
 uniform mat4 uVP, uMirror;
 uniform float uClipY;
-out vec3 vWP, vN, vLocal, vCol;
+out vec3 vWP, vN, vLN, vLocal, vClay, vCol;
 flat out float vKind, vMask, vGlow;
 vec3 qrot(vec4 q, vec3 v) { return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v); }
 void main() {
-    vec3 wp = iPosKind.xyz + qrot(iQuat, aPos * iScaleMask.xyz);
+    vec3 sc = iScaleMask.xyz, p = aPos, n = aNrm;
+    int m = int(iScaleMask.w + 0.5), j = (m >> 4) & 15;
+    bool jx = n.x < -1e-4 ? (j & 1) != 0 : (n.x > 1e-4 && (j & 2) != 0);
+    bool jy = n.y > 1e-4 ? (j & 4) != 0 : (n.y < -1e-4 && (j & 8) != 0);
+    if (jx || jy) {
+        // A joined side: out to the cell's boundary, straight (a hair past it, inside the neighbour, so no crack
+        // opens between them); the other axes keep the bevel's profile.
+        vec3 core = aPos - 0.13 * aNrm;
+        if (jx) n.x = 0.0;
+        if (jy) n.y = 0.0;
+        float l = length(n);
+        n = l > 1e-4 ? n / l : vec3(0.0);
+        p = core + 0.13 * n;
+        if (jx) p.x = sign(aNrm.x) * iJoin.x * 1.006 / sc.x;
+        if (jy) p.y = sign(aNrm.y) * iJoin.y * 1.006 / sc.y;
+        if (l <= 1e-4) n = aNrm; // (the inner face, against the neighbour's)
+    }
+    vec3 wp = iPosKind.xyz + qrot(iQuat, p * sc);
     vWP = wp;
-    vN = qrot(iQuat, aNrm / iScaleMask.xyz);
-    vLocal = aPos;
+    vN = qrot(iQuat, n / sc);
+    vLN = n;
+    vLocal = p;
+    // The clay's mottling runs on through the piece: the cell's place in it plus the point's, in cells.
+    vClay = vec3(iJoin.zw, 0.0) + p * sc / (2.0 * iJoin.xyx);
     vCol = iColGlow.rgb;
     vKind = iPosKind.w;
-    vMask = iScaleMask.w;
+    vMask = float(m);
     vGlow = iColGlow.a;
     gl_Position = uVP * uMirror * vec4(wp, 1.0);
     gl_ClipDistance[0] = wp.y - uClipY;
@@ -116,10 +143,12 @@ void main() {
 )";
 
 inline const char* BLOCK_FS = R"(
-in vec3 vWP, vN, vLocal, vCol;
+in vec3 vWP, vN, vLN, vLocal, vClay, vCol;
 flat in float vKind, vMask, vGlow;
 out vec4 frag;
 uniform float uLanternGlow;
+// a piece's inner corners: its two joined sides, its diagonal cell (up left, up right, down left, down right)
+const ivec2 CORNERS[4] = ivec2[](ivec2(1 | 4, 16), ivec2(2 | 4, 32), ivec2(1 | 8, 64), ivec2(2 | 8, 128));
 void main() {
 #ifdef DEPTH_ONLY
     frag = vec4(1.0);
@@ -128,20 +157,37 @@ void main() {
     vec3 alb = vCol;
     int m = int(vMask + 0.5);
     float ao = 1.0;
-    // Crevices between touching blocks: the bevels facing a neighbour see less sky.
+    // Crevices between touching pieces: the bevels facing a neighbour see less sky.
     if ((m & 1) != 0) ao -= 0.45 * smoothstep(0.0, 0.9, -n.x);
     if ((m & 2) != 0) ao -= 0.45 * smoothstep(0.0, 0.9, n.x);
     if ((m & 4) != 0) ao -= 0.45 * smoothstep(0.0, 0.9, n.y);
     if ((m & 8) != 0) ao -= 0.45 * smoothstep(0.0, 0.9, -n.y);
     ao = max(ao, 0.45);
     // Painted clay: a faint mottling, slightly lighter top faces.
-    float g = vnoise(vLocal.xy * 7.0 + vLocal.z * 5.0 + vCol.rg * 31.0);
+    float g = vnoise(vClay.xy * 7.0 + vClay.z * 5.0 + vCol.rg * 31.0);
     alb *= 0.95 + 0.08 * g;
     alb *= 1.0 + 0.05 * max(n.y, 0.0);
-    // Local face coordinates (for the lantern glow and the ghost tile's rim).
-    vec3 an = abs(vLocal);
-    vec2 f = an.x > an.y && an.x > an.z ? vLocal.yz : (an.y > an.z ? vLocal.xz : vLocal.xy);
-    float edge = max(abs(f.x), abs(f.y)) * 2.0; // 0 center .. 1 edge
+    // How near the piece's outline this is on its face (0 in the middle .. 1 at the edge; the lantern glow and the
+    // ghost's rim): the distance to the cell's sides that are not joined, and to the piece's inner corners, so it
+    // runs on across a join (and is the same on every box of a cell, their shared faces shading alike).
+    vec3 ln = abs(vLN), q = vLocal;
+    int k = ln.x > ln.y && ln.x > ln.z ? 0 : (ln.y > ln.z ? 1 : 2), nb = m >> 8;
+    float d = 1.0;
+    if (k != 0) {
+        if ((nb & 1) == 0) d = min(d, 0.5 + q.x);
+        if ((nb & 2) == 0) d = min(d, 0.5 - q.x);
+    }
+    if (k != 1) {
+        if ((nb & 4) == 0) d = min(d, 0.5 - q.y);
+        if ((nb & 8) == 0) d = min(d, 0.5 + q.y);
+    }
+    if (k != 2) d = min(d, 0.5 - abs(q.z));
+    else
+        for (int i = 0; i < 4; i++) {
+            ivec2 c = CORNERS[i];
+            if ((nb & c.x) == c.x && (nb & c.y) == 0) d = min(d, length(q.xy - vec2(i % 2 == 0 ? -0.5 : 0.5, i < 2 ? 0.5 : -0.5)));
+        }
+    float edge = 1.0 - 2.0 * max(d, 0.0);
     float sh = shadowAt(vWP, n);
     vec3 col = shade(alb, n, vWP, ao, sh);
     // Lanterns: at night the blocks glow from inside, through their walls.
@@ -156,7 +202,7 @@ void main() {
         // Ghost: the piece in translucent glass, its bevels and silhouette brighter (premultiplied).
         vec3 v = normalize(uCamPos - vWP);
         float fres = pow(1.0 - max(dot(n, v), 0.0), 2.0);
-        float bev = smoothstep(0.32, 0.46, max(abs(f.x), abs(f.y)));
+        float bev = smoothstep(0.64, 0.92, edge);
         float a = clamp(0.22 + 0.45 * bev + 0.35 * fres, 0.0, 0.8);
         col = mix(col, col * 0.6 + vec3(0.35), 0.35 * bev);
         frag = vec4(col * a, a);
