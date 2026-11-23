@@ -1921,10 +1921,36 @@ void IslandsUniverse::buildBoard(const Game& g) {
                     if (c[0] == x && c[1] == y) return true;
                 return false;
             };
-            // on the tiles' plane: the piece's shape in a light translucent fill, no outline
+            // on the tiles' plane: the piece's pastel outline, a little lighter, over a light translucent fill
+            const vec3 ink = mixDisplay(pieceCol(pc.type), vec3(1.f), 0.1f);
+            const float in = 0.06f, w = 0.065f, zz = 0.002f;
             for (auto& c : gc)
-                if (c[1] >= Game::HIDDEN)
-                    flatTile(layout::cellPos((float)c[0], (float)c[1]), 1.f, pieceCol(pc.type), 0.4f, false, neighbourMask(c[0], c[1], inG));
+                if (c[1] >= Game::HIDDEN) {
+                    const vec3 p = layout::cellPos((float)c[0], (float)c[1]);
+                    quad(vec3(p.x, p.y, zz - 0.001f), 0.5f, 0.5f, pieceCol(pc.type), 0.3f, 0.f, 0.f);
+                }
+            for (auto& c : gc) {
+                if (c[1] < Game::HIDDEN) continue;
+                const vec3 p = layout::cellPos((float)c[0], (float)c[1]);
+                const float l = p.x - 0.5f + in, r = p.x + 0.5f - in, t = p.y + 0.5f - in, b = p.y - 0.5f + in;
+                const int x = c[0], y = c[1];
+                const bool L = inG(x - 1, y), R = inG(x + 1, y), U = inG(x, y - 1), D = inG(x, y + 1);
+                // an edge runs on to the next cell's edge, or turns at a corner: inset at an outer corner, past the
+                // cell boundary by the inset at an inner one (where the diagonal neighbour is in the piece), so the
+                // contour stays closed
+                // (at a corner, outer or inner, the edge runs on by half the line's width: square corners, no notch)
+                auto endX = [&](bool side, int sx, int sy, float inner, float edge) {
+                    return !side ? inner + sx * w * 0.5f : inG(x + sx, y + sy) ? edge + sx * (in + w * 0.5f) : edge;
+                };
+                auto endY = [&](bool side, int sx, int sy, float inner, float edge) {
+                    return !side ? inner - sy * w * 0.5f : inG(x + sx, y + sy) ? edge - sy * (in + w * 0.5f) : edge;
+                };
+                const float xl = p.x - 0.5f, xr = p.x + 0.5f, yt = p.y + 0.5f, yb = p.y - 0.5f;
+                if (!L) line(l, endY(D, -1, 1, b, yb), l, endY(U, -1, -1, t, yt), zz, w, ink, 1.f);
+                if (!R) line(r, endY(D, 1, 1, b, yb), r, endY(U, 1, -1, t, yt), zz, w, ink, 1.f);
+                if (!U) line(endX(L, -1, -1, l, xl), t, endX(R, 1, -1, r, xr), t, zz, w, ink, 1.f);
+                if (!D) line(endX(L, -1, 1, l, xl), b, endX(R, 1, 1, r, xr), b, zz, w, ink, 1.f);
+            }
         }
     }
     // the sand of a hard drop
