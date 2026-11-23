@@ -2084,7 +2084,8 @@ const char* IslandsUniverse::hourName() const {
 void IslandsUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
     const VariantDef& V = VARIANTS[variant_];
     // (the ink turns from navy to white quickly: never a mid grey on the dusk sky)
-    const float dark = smoothstepf(0.4f, 0.52f, night_);
+    // (FLAT: the scene stays light at dusk, the ink navy all along)
+    const float dark = flat() ? 0.f : smoothstepf(0.4f, 0.52f, night_);
     ink = ugl::toSrgb(lerp(lin(flat() ? 0x0b2038 : 0x0e2238), lin(0xfaf4ea), dark));
     halo = ugl::toSrgb(lerp(lin(0xf4f8fa), lin(0x0c1426), dark));
     accent = ugl::toSrgb(dark > 0.5f ? lin(V.accent) : mixDisplay(lin(V.accent), lin(0x000000), 0.1f));
@@ -2753,6 +2754,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         glDepthMask(GL_FALSE);
         glUseProgram(progGlow_);
         setMat(progGlow_, "uVP", vp_);
+        set1f(progGlow_, "uFlat", flat() ? 1.f : 0.f);
         set3f(progGlow_, "uRight", right_);
         set3f(progGlow_, "uUp", up_);
         glBindVertexArray(glowVao_);

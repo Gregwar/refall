@@ -518,8 +518,8 @@ void main() {
         // (the warm light late in the day only dims it, the sky's color tints it a little: never a green sea; at
         // midday its colors exactly)
         float warm = clamp((uFlatLit.r - uFlatLit.b) * 2.0, 0.0, 1.0);
-        float lum = dot(uFlatLit, vec3(0.3, 0.5, 0.2));
-        col = mix(col * lum, uSkyHor * lum, 0.16 * warm);
+        float lum = mix(1.0, dot(uFlatLit, vec3(0.3, 0.5, 0.2)), 0.5);
+        col = mix(col * lum, uSkyHor * lum, 0.1 * warm);
     } else {
         col = mix(uDeep * 0.82, mix(uDeep, uShallow, 0.3), far);
         vec3 ledge = mix(uShallow, uDeep, 0.5);
@@ -684,11 +684,17 @@ inline const char* GLOW_FS = R"(#version 330 core
 in vec2 vQ;
 in vec4 vCol;
 out vec4 frag;
+uniform float uFlat;
 void main() {
     float r = length(vQ);
     float core = smoothstep(0.25, 0.0, r);
     float halo = exp(-r * r * 6.0) * (1.0 - smoothstep(0.75, 1.0, r));
     float a = core * (1.0 - vCol.a) + halo * (0.3 + vCol.a);
+    // (FLAT: a crisp disc, the softest ones (the beam, the mist) kept soft)
+    if (uFlat > 0.5 && vCol.a < 0.95) {
+        float w = fwidth(r);
+        a = (1.0 - smoothstep(0.32 - w, 0.32 + w, r)) * 0.55;
+    }
     frag = vec4(vCol.rgb * a, 0.0);
 }
 )";
