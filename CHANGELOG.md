@@ -3,6 +3,17 @@
 Each release's section is its GitHub release message (the release workflow takes the section of its tag): the
 changes to the whole game, then those of single universes, each list with the most important changes first.
 
+## 1.0.11
+
+### Game
+
+- Fixes: HYPERDROP stayed on during the bonus (each piece fell straight onto the stack and couldn't be moved where wanted); it now pauses for the bonus, and a piece already dropped goes back up when the bonus starts
+
+### Universes
+
+- ISLANDS: the camera flies higher and looks down on the sea and the islands
+- Fixes: ISLANDS's boats sailing into the islands and drifting sideways (they now sail bow first and steer around the land), ISLANDS's camera going inside the mountains, LIGHTSOURCE's pieces lit as separate cubes (a bar in several shades, a T half in shadow)
+
 ## 1.0.10
 
 ### Game
