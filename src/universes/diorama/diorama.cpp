@@ -918,7 +918,7 @@ void DioramaUniverse::setLevel(int level, float energy, float seconds, float imp
     startLight(tod, worldTo_, seconds, impact);
 }
 
-// The drop's first downbeat: the sun comes back low over the place, a golden evening for the whole drop.
+// The drop's first downbeat: the sun comes back low over the place, a dusk for the whole drop.
 void DioramaUniverse::drop(float strength) {
     if (level_ >= 2) inDrop_ = true;
     gust_ = std::max(gust_, saturate(strength));
@@ -1140,10 +1140,10 @@ void DioramaUniverse::computeEnv(float dt, const MusicState& music) {
 
     const Variant &VA = VARIANTS[worldFrom_], &VB = VARIANTS[worldTo_];
     // Always night (the moon crossing the sky with the phases); the slow-motion bonus turns it to day.
-    // A drop brings a golden evening (the bonus' day wins over it).
+    // A drop brings a dusk (the bonus' day wins over it).
     eve_ = approach(eve_, inDrop_ ? 1.f : 0.f, inDrop_ ? 1.1f : 0.6f, dt);
     const float n = smoothstepf(0.f, 1.f, night_);
-    const float ev = 0.6f * smoothstepf(0.f, 1.f, eve_) * (1.f - n); // evening share of the light (a dusk: part of the night stays)
+    const float ev = 0.32f * smoothstepf(0.f, 1.f, eve_) * (1.f - n); // evening share of the light (a dusk: most of the night stays)
     const float d = std::max(n, ev);                           // how much it is not night
     nightV_ = 1.f - d;
     nightAll_ = nightV_;
@@ -1157,7 +1157,7 @@ void DioramaUniverse::computeEnv(float dt, const MusicState& music) {
         N.stars *= 1.f - 0.3f * u;
         N.cloud = 0.25f;
     }
-    Light L = mixLight(N, mixLight(lightOf(TOD[1]), mixLight(lightOf(TOD[2]), lightOf(TOD[3]), 0.35f), ev / std::max(d, 1e-4f)), d);
+    Light L = mixLight(N, mixLight(lightOf(TOD[1]), mixLight(lightOf(TOD[2]), lightOf(TOD[3]), 0.85f), ev / std::max(d, 1e-4f)), d);
     Env& e = env_;
     // Sky: a night place's own three nights (calm / mid / peak), the shared night elsewhere; by day (the bonus)
     // the place's own day sky (the shared one for a night place).
@@ -1166,7 +1166,7 @@ void DioramaUniverse::computeEnv(float dt, const MusicState& music) {
         auto one = [&](const Variant& V) {
             const vec3 ni = V.night ? hex(V.sky[nk][which]) : hex(which ? NIGHT.horizon : NIGHT.zenith);
             const vec3 dy = V.night ? hex(which ? TOD[1].horizon : TOD[1].zenith) : hex(V.sky[1][which]);
-            const vec3 eve = V.night ? hex(which ? TOD[2].horizon : TOD[2].zenith) : hex(V.sky[2][which]);
+            const vec3 eve = which ? lerp(hex(TOD[3].horizon), hex(TOD[3].zenith), 0.5f) : hex(TOD[3].zenith); // (a dusk's, dimmed)
             return lerp(ni, lerp(dy, eve, ev / std::max(d, 1e-4f)), d);
         };
         return lerp(one(VA), one(VB), wm);
@@ -1920,7 +1920,7 @@ void DioramaUniverse::hudLine(const HudText& h0, text::Line& out) {
         break;
     case HUD_UNIVERSE: {
         const int mi = tod_ < 0.5f ? 0 : tod_ < 1.5f ? 1 : tod_ < 2.3f ? 2 : 3;
-        t.text += std::string("  ") + (night_ > 0.5f ? "DAY" : eve_ > 0.5f ? "GOLDEN HOUR" : NIGHT_NAMES[mi]);
+        t.text += std::string("  ") + (night_ > 0.5f ? "DAY" : eve_ > 0.5f ? "DUSK" : NIGHT_NAMES[mi]);
         lead = nudge(10.f, 1.3f);
         t.alpha = std::min(1.f, 0.4f + t.alpha);
         break;
