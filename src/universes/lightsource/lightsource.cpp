@@ -118,6 +118,11 @@ bool LightsourceUniverse::init(int width, int height) {
     progBlock_ = compile(shaders::BLOCK_VS, shaders::BLOCK_FS, "lightsource block");
     progFx_ = compile(shaders::FX_VS, shaders::FX_FS, "lightsource fx");
     progFinal_ = compile(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "lightsource final");
+    glGenTextures(1, &ownTex_);
+    glBindTexture(GL_TEXTURE_2D, ownTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32I, Game::W, Game::H, 0, GL_RGBA_INTEGER, GL_INT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     progPanel_ = compile(shaders::PANEL_VS, shaders::PANEL_FS, "lightsource panel");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -192,6 +197,7 @@ LightsourceUniverse::~LightsourceUniverse() {
     if (lightFbo_) glDeleteFramebuffers(1, &lightFbo_);
     if (lightTex_) glDeleteTextures(1, &lightTex_);
     if (dirTex_) glDeleteTextures(1, &dirTex_);
+    if (ownTex_) glDeleteTextures(1, &ownTex_);
     for (GLuint p : {progLight_, progScene_, progBlock_, progFx_, progFinal_, progPanel_}) glDeleteProgram(p);
     for (GLuint v : {instVao_, panelVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, instVbo_, panelVbo_}) glDeleteBuffers(1, &b);
@@ -598,6 +604,25 @@ void LightsourceUniverse::buildRows(const Game& g) {
         rowMask_[r] = m;
         if (m && rowMin_ == Game::H) rowMin_ = r;
     }
+    // each cell's piece: the cells sharing its id (a piece spans at most 4 rows); a cell of no known piece: itself
+    for (int r = 0; r < Game::H; r++)
+        for (int x = 0; x < Game::W; x++) {
+            int* o = own_[r][x];
+            o[0] = r; o[1] = 1 << x; o[2] = 0; o[3] = 0;
+            const int id = ids_[r][x];
+            if (id == 0 || g.cell(x, r).type < 0) continue;
+            int r0 = r;
+            for (int y = std::max(0, r - 3); y < r; y++)
+                for (int c = 0; c < Game::W; c++)
+                    if (ids_[y][c] == id && g.cell(c, y).type >= 0 && y < r0) r0 = y;
+            o[0] = r0; o[1] = 0;
+            for (int y = r0; y < std::min(Game::H, r0 + 4); y++)
+                for (int c = 0; c < Game::W; c++)
+                    if (ids_[y][c] == id && g.cell(c, y).type >= 0) o[1 + (y - r0) / 2] |= 1 << (c + 10 * ((y - r0) & 1));
+            o[(r - r0) / 2 + 1] |= 1 << (x + 10 * ((r - r0) & 1));
+        }
+    glBindTexture(GL_TEXTURE_2D, ownTex_);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, Game::W, Game::H, GL_RGBA_INTEGER, GL_INT, own_);
 }
 
 void LightsourceUniverse::setRowUniforms(GLuint prog) {
@@ -1177,6 +1202,10 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
     glUseProgram(progLight_);
     set4f(progLight_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     setRowUniforms(progLight_);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, ownTex_);
+    set1i(progLight_, "uOwn", 3);
+    glActiveTexture(GL_TEXTURE0);
     {
         float col[MAXL * 4] = {}, par[MAXL * 4] = {}, par2[MAXL * 4] = {}, own[MAXL * 8], pts[MAXP * 2] = {}, aim[MAXL * 4] = {};
         for (float& o : own) o = -1.f;

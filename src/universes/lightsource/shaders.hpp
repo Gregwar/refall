@@ -74,7 +74,10 @@ uniform int uNG;
 uniform vec4 uGPos[MAXG];     // unshadowed glows: position, radius
 uniform vec4 uGCol[MAXG];     // a spot: its aim (xy), the cosines of its cone's outer and inner edges (z = 0: all around)
 
+uniform highp isampler2D uOwn; // a cell's piece: first row, then 10-bit masks (two rows per int)
+
 ivec2 ownC[4];
+ivec4 selfP; // the piece of the pixel's cell: never its own shadow (its cells light each other as one block)
 bool blocked(vec2 a, vec2 b, ivec2 self) {
     float y0 = min(a.y, b.y), y1 = max(a.y, b.y);
     if (y0 > uTopY) return false;
@@ -84,7 +87,8 @@ bool blocked(vec2 a, vec2 b, ivec2 self) {
         if (ry - 0.5 > y1) continue;
         if (ry + 0.5 < y0) break;
         int m = uRowMask[r];
-        if (self.y == r) m &= ~(1 << self.x);
+        int pk = r - selfP.x;
+        if (pk >= 0 && pk < 4) m &= ~(((pk < 2 ? selfP.y : selfP.z) >> (10 * (pk & 1))) & 1023);
         for (int k = 0; k < 4; k++) if (ownC[k].y == r) m &= ~(1 << ownC[k].x);
         if (m == 0) continue;
         float ta = 0.0, tb = 1.0;
@@ -107,6 +111,7 @@ bool blocked(vec2 a, vec2 b, ivec2 self) {
 void main() {
     vec2 p = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     ivec2 self = cellAt(p);
+    selfP = self.x >= 0 ? texelFetch(uOwn, self, 0) : ivec4(-99, 0, 0, 0);
     // a rotated 2x2 pattern per pixel (interleaved gradient noise): the area lights' samples
     float ang = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
     mat2 rot = mat2(cos(ang), sin(ang), -sin(ang), cos(ang));

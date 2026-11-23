@@ -93,6 +93,10 @@ private:
     float rowY_[Game::H];
     int rowMask_[Game::H];
     int rowMin_ = Game::H;
+    // each cell's piece (its cells, row by row: first row, then four 10-bit masks), so that a piece never shadows
+    // itself: a texture the light pass reads at its pixel's cell
+    int own_[Game::H][Game::W][4];
+    GLuint ownTex_ = 0;
     void buildRows(const Game& g);
     void setRowUniforms(GLuint prog);
     // m: how far the piece has turned to the drop's single color (0: its own)
