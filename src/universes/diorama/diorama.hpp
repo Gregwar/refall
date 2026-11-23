@@ -125,7 +125,7 @@ private:
     float squashT_[Game::H][Game::W] = {};
 
     // Per frame.
-    std::vector<Inst> solid_;
+    std::vector<Inst> solid_, ghost_; // (the ghost drawn translucent, after the scene)
     std::vector<Sprite> sprites_;
     mat4 view_, proj_, vp_, lightVP_, mirror_;
     vec3 camPos_, camRight_, camUp_;

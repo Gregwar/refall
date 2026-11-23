@@ -92,7 +92,7 @@ vec3 shade(vec3 albedo, vec3 n, vec3 wp, float ao, float sh) {
 inline const char* BLOCK_VS = R"(
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNrm;
-layout(location = 2) in vec4 iPosKind;   // world position, kind (0 block, 1 ghost tile)
+layout(location = 2) in vec4 iPosKind;   // world position, kind (0 block, 2 ghost)
 layout(location = 3) in vec4 iScaleMask; // scale, neighbour mask (1 left, 2 right, 4 up, 8 down)
 layout(location = 4) in vec4 iQuat;
 layout(location = 5) in vec4 iColGlow;   // albedo (linear), glow
@@ -142,11 +142,6 @@ void main() {
     vec3 an = abs(vLocal);
     vec2 f = an.x > an.y && an.x > an.z ? vLocal.yz : (an.y > an.z ? vLocal.xz : vLocal.xy);
     float edge = max(abs(f.x), abs(f.y)) * 2.0; // 0 center .. 1 edge
-    if (vKind > 0.5 && vKind < 1.5) {
-        // Ghost: a tile pressed on the back wall, with a lighter raised rim.
-        float rim = smoothstep(0.62, 0.8, max(abs(vLocal.x), abs(vLocal.y)) * 2.0 * 0.9);
-        alb = mix(alb, vec3(1.0, 0.97, 0.92) * 0.95, rim * 0.55);
-    }
     float sh = shadowAt(vWP, n);
     vec3 col = shade(alb, n, vWP, ao, sh);
     // Lanterns: at night the blocks glow from inside, through their walls.
@@ -157,6 +152,16 @@ void main() {
         col += lc * glow;
     }
     col = applyFog(col, vWP);
+    if (vKind > 1.5) {
+        // Ghost: the piece in translucent glass, its bevels and silhouette brighter (premultiplied).
+        vec3 v = normalize(uCamPos - vWP);
+        float fres = pow(1.0 - max(dot(n, v), 0.0), 2.0);
+        float bev = smoothstep(0.32, 0.46, max(abs(f.x), abs(f.y)));
+        float a = clamp(0.22 + 0.45 * bev + 0.35 * fres, 0.0, 0.8);
+        col = mix(col, col * 0.6 + vec3(0.35), 0.35 * bev);
+        frag = vec4(col * a, a);
+        return;
+    }
     frag = vec4(col, length(vWP - uCamPos));
 #endif
 }

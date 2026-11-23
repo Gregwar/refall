@@ -1353,6 +1353,7 @@ void DioramaUniverse::simulate(const Game& game, const MusicState& music, float 
 
 void DioramaUniverse::collect(const Game& g, const MusicState& music, double time) {
     solid_.clear();
+    ghost_.clear();
     sprites_.clear();
     (void)music;
     if (!bare_) collectBlocks(g, time);
@@ -1430,14 +1431,17 @@ void DioramaUniverse::collectBlocks(const Game& g, double time) {
                        (inP(c[0], c[1] + 1) ? 8 : 0);
             inst(cellPos(c[0] + dx, c[1] + dy), vec3(S), env_.piece[p.type], 0, (float)mask);
         }
+        // The ghost: the piece itself where it will land, in translucent clay glass (drawn after the scene).
         Piece gp = p;
         gp.y = g.ghostY();
         if (gp.y > p.y) {
             g.pieceCells(gp, cells);
             for (auto& c : cells) {
                 if (c[1] < Game::HIDDEN) continue;
-                vec3 col = lerp(env_.pal[S_WALL], env_.piece[p.type], 0.55f);
-                inst(cellPos((float)c[0], (float)c[1]) + vec3(0, 0, -0.45f), vec3(0.88f, 0.88f, 0.14f), col, 1);
+                int mask = (inP(c[0] - 1, c[1]) ? 1 : 0) | (inP(c[0] + 1, c[1]) ? 2 : 0) | (inP(c[0], c[1] - 1) ? 4 : 0) |
+                           (inP(c[0], c[1] + 1) ? 8 : 0); // (cells now holds the ghost's)
+                ghost_.push_back({vec4(cellPos((float)c[0], (float)c[1]), 2.f), vec4(vec3(S), (float)mask), vec4(0, 0, 0, 1),
+                                  vec4(env_.piece[p.type], 0.f)});
             }
         }
     }
@@ -1743,6 +1747,23 @@ void DioramaUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progWater_, "uGlint", env_.glint);
         glBindVertexArray(waterMesh_.vao);
         glDrawArrays(GL_TRIANGLES, 0, waterMesh_.count);
+    }
+    // The ghost (premultiplied, over the scene; the alpha channel keeps the view distance).
+    if (!ghost_.empty()) {
+        glDepthMask(GL_FALSE);
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+        glEnable(GL_CULL_FACE);
+        glUseProgram(progBlock_);
+        setCommonUniforms(progBlock_);
+        setMat(progBlock_, "uVP", vp_);
+        setMat(progBlock_, "uMirror", mat4::identity());
+        set1f(progBlock_, "uClipY", -1e6f);
+        set1f(progBlock_, "uLanternGlow", 0.f);
+        drawInstances(cube_, ghost_, progBlock_);
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
+        glDepthMask(GL_TRUE);
     }
     // Sprites (premultiplied; the alpha channel keeps the view distance).
     if (!sprites_.empty()) {
