@@ -53,6 +53,7 @@ private:
     float curv_ = 0.f, near_ = 0.5f, far_ = 40000.f, fov_ = 50.f;
     void fly(float dt, float wdt, const std::string& section);
     float floorAhead(const vec3& from, float yaw, float v, float& hard) const;
+    float tgtPrev_ = 0.f, tgtVel_ = 0.f;   // the floor ahead (log) last frame, its rate
     Spring hardS_;                         // the least altitude now (see floorAhead), eased in
     float clear_ = 60.f;                   // the eye's height over the ground (and what stands on it) under it
 

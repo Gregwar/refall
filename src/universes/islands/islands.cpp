@@ -523,7 +523,7 @@ void IslandsUniverse::setLevel(int level, float energy, float seconds, float imp
     lvDur_ = std::clamp(seconds, rising ? 1.5f : 3.f, 7.f);
 }
 
-// The drop: one big dive, from wherever the camera is down to the waves.
+// The drop: one big dive, from wherever the camera is down low over the waves.
 void IslandsUniverse::drop(float strength) {
     dropMode_ = true;
     diveT_ = 0.f;
@@ -644,15 +644,16 @@ void IslandsUniverse::Spring::step(float target, float omega, float dt) {
     v = nv;
 }
 
-// The altitude the route ahead needs: over every hill, palm, roof and boat the camera must pass, with a margin, and
-// an easy climb toward it (it rises well before); `hard`, the least it may be now (the same with a steeper climb, a
-// support under the flight: never into a slope the easy climb was too slow for). The ground as drawn (its facets stand above the
-// height function where it dips between their vertices), around the route, a little along the view too (no
-// hillside right in front of the lens), and the boats where they will be when the camera gets there.
+// The altitude the route ahead needs: well over every hill, palm, roof and boat the camera must pass (it looks down
+// on them), with an easy climb toward it (it rises well before); `hard`, the least it may be now (a small margin and
+// a steeper climb, a support under the flight: never into a slope the easy climb was too slow for). The ground as
+// drawn (its facets stand above the height function where it dips between their vertices), around the route, a
+// little along the view too (no hillside right in front of the lens), and the boats where they will be when the
+// camera gets there.
 float IslandsUniverse::floorAhead(const vec3& from, float yaw, float v, float& hard) const {
     float need = 3.2f;
     hard = 0.f;
-    const float reach = std::max(500.f, v * 14.f);
+    const float reach = std::max(1200.f, v * 25.f);
     // (what is this near held at its full height: a sample's spacing, and the lag of the spring easing it in)
     const float slack = 6.f + 0.7f * v;
     std::vector<const Boat*> near;
@@ -667,8 +668,17 @@ float IslandsUniverse::floorAhead(const vec3& from, float yaw, float v, float& h
         // (around the samples near, where the eye and its near plane will be; along the line further on)
         const float h = i < 40 ? world_->groundMax(r.x, r.z, d < slack + 18.f ? 4.f : 0.f) : world_->obstacle(r.x, r.z);
         if (h > 0.3f) {
-            need = std::max(need, h + 5.f - d * 0.26f);
-            hard = std::max(hard, h + 2.5f - std::max(0.f, d - slack) * 0.6f);
+            need = std::max(need, h + 45.f - d * 0.26f);
+            hard = std::max(hard, h + 8.f - std::max(0.f, d - slack) * 0.6f);
+        }
+        // (and what rises beside the route: never flying along a cliff or a peak's flank close by, looking into it;
+        // the further aside, the less over it)
+        if ((i % 2 == 0 || i >= 40) && world_->landNear(r.x, r.z, 90.f)) {
+            for (const float rr : {15.f, 40.f, 80.f}) {
+                const float w = world_->groundMax(r.x, r.z, rr);
+                if (w > 0.3f) need = std::max(need, w + 40.f - d * 0.26f - 0.25f * rr);
+                if (rr < 20.f && i < 40 && w > 0.3f) hard = std::max(hard, w + 2.f - std::max(0.f, d - slack) * 0.6f);
+            }
         }
         if (i < 40)
             for (const Boat* b : near) {
@@ -679,15 +689,16 @@ float IslandsUniverse::floorAhead(const vec3& from, float yaw, float v, float& h
                 rad += 0.6f * b->speed * std::min(t, 8.f);
                 const float dx = at.x - r.x, dz = at.z - r.z;
                 if (dx * dx + dz * dz < rad * rad) {
-                    need = std::max(need, top + 4.f - d * 0.26f);
+                    need = std::max(need, top + 12.f - d * 0.26f);
                     hard = std::max(hard, top + 2.5f - std::max(0.f, d - slack) * 0.6f);
                 }
             }
     }
-    for (int i = 1; i <= 8; i++) {
-        const float d = i * 8.f;
+    // (along the view: a hillside it looks at from close fills the picture; it rises to look down on it instead)
+    for (int i = 1; i <= 20; i++) {
+        const float d = i * 15.f;
         const float h = world_->groundMax(from.x + std::cos(yaw) * d, from.z + std::sin(yaw) * d, 0.f);
-        if (h > 0.3f) need = std::max(need, h + 3.f - d * 0.3f);
+        if (h > 0.3f) need = std::max(need, h + 35.f - std::max(0.f, d - 120.f) * 0.3f);
     }
     return need;
 }
@@ -709,19 +720,19 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     cruisePhase_ += wdt / 30.f;
     const isl::Hero* hero = world_->heroNear(s_, 1100.0, 200.0);
 
-    // ---- the altitude wanted: calm wide (lower, and only now and then a climb above the clouds), mid cruising with
-    // quick climbs and dives over the water, a peak skimming low
+    // ---- the altitude wanted, always well above the sea (a drone looking down on it): calm wide (and only now and then
+    // a climb above the clouds), mid cruising with climbs and dives, a peak at its lowest, still well above the water
     const float cyc = 0.5f - 0.5f * std::cos(calmPhase_ * TAU);
-    float aCalm = std::exp(lerpf(std::log(90.f), std::log(1700.f), smoothstepf(0.55f, 0.95f, cyc)) + 0.6f * std::sin(cruisePhase_ * TAU * 1.3f));
-    float aMid = 20.f * std::exp(1.1f * std::sin(cruisePhase_ * TAU) + 0.5f * std::sin(cruisePhase_ * TAU * 2.7f + 1.f));
-    float aPeak = 4.2f + 1.4f * std::sin(cruisePhase_ * TAU * 3.1f);
+    float aCalm = std::exp(lerpf(std::log(150.f), std::log(1700.f), smoothstepf(0.55f, 0.95f, cyc)) + 0.5f * std::sin(cruisePhase_ * TAU * 1.3f));
+    float aMid = std::max(32.f, 62.f * std::exp(0.75f * std::sin(cruisePhase_ * TAU) + 0.35f * std::sin(cruisePhase_ * TAU * 2.7f + 1.f)));
+    float aPeak = 26.f + 6.f * std::sin(cruisePhase_ * TAU * 3.1f);
     if (hero && !hero->gap) {
-        // a pass: down to the island, close over the water beside its beach, its deck, its palms (or an orbit)
+        // a pass: down toward the island, over the water beside its beach, its deck, its palms (or an orbit)
         const float ds = (float)(hero->sc - s_);
         float k = smoothstepf(900.f, 260.f, ds) * smoothstepf(-260.f, -70.f, ds);
         if (hero->orbit) k = smoothstepf((float)(hero->s0), (float)(hero->s0 + 300.0), (float)s_) * smoothstepf((float)hero->s1, (float)(hero->s1 - 200.0), (float)s_);
-        aMid = std::exp(lerpf(std::log(aMid), std::log(hero->orbit ? 28.f : 7.f), k * 0.92f));
-        aCalm = std::exp(lerpf(std::log(aCalm), std::log(hero->orbit ? 90.f : 25.f), k * 0.8f));
+        aMid = std::exp(lerpf(std::log(aMid), std::log(hero->orbit ? 55.f : 26.f), k * 0.92f));
+        aCalm = std::exp(lerpf(std::log(aCalm), std::log(hero->orbit ? 120.f : 50.f), k * 0.8f));
     }
     float target = wc * std::log(aCalm) + wm * std::log(aMid) + wp * std::log(aPeak);
     float omega = 0.42f;
@@ -729,7 +740,7 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     target = lerpf(target, std::max(target, std::log(620.f)), buildK_);
     if (diveT_ < 9.f) {
         diveT_ += wdt;
-        target = std::log(4.5f);
+        target = std::log(20.f);
         omega = 0.52f;
     }
     if (hookAlt() > 0.f) target = std::log(hookAlt());
@@ -738,13 +749,24 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     const float fl = floorAhead(vec3(world_->route(s_).x, 0.f, world_->route(s_).z), yaw_, vel_, hard);
     if (std::log(fl) > target) {
         target = std::log(fl);
-        omega = std::max(omega, 0.75f);
+        // (quicker the further below it is: a hillside rising in the view is climbed over before it fills it)
+        omega = std::max(omega, lerpf(1.f, 1.8f, smoothstepf(0.1f, 0.6f, target - logAlt_.x)));
     }
     if (!camInit_) {
         logAlt_.x = target;
         logAlt_.v = 0.f;
+        tgtPrev_ = std::log(fl);
+        tgtVel_ = 0.f;
     }
-    logAlt_.step(target, omega, wdt);
+    // (the floor rising steadily, over a slope: followed without the spring's lag, its rate eased and added ahead,
+    // while it is what the flight follows and only while it rises)
+    if (wdt > 0.f) {
+        const float lf = std::log(fl);
+        tgtVel_ = approach(tgtVel_, std::clamp((lf - tgtPrev_) / wdt, -1.f, 1.f), 3.f, wdt);
+        tgtPrev_ = lf;
+    }
+    const float lead = std::log(fl) >= target - 1e-4f ? std::min(0.4f, std::max(0.f, tgtVel_) * 2.f / omega) : 0.f;
+    logAlt_.step(target + lead, omega, wdt);
     alt_ = std::exp(logAlt_.x);
     // the least altitude, as a support under the flight (smooth: its own fast spring, and a soft max with the
     // altitude wanted; sampled at points along the route, it would rise in small steps as a narrow peak or a palm
@@ -775,7 +797,7 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     // never into a hill, a roof, a boat: the eye kept above the ground as drawn where it is now (the floor ahead
     // makes it climb well before; this only catches what it missed), with room for the near plane
     {
-        float here = std::max(0.f, world_->groundMax(eye_.x, eye_.z, 4.f));
+        float here = std::max({0.f, world_->groundMax(eye_.x, eye_.z, 4.f), world_->groundMax(eye_.x, eye_.z, 12.f) - 2.f});
         for (const std::vector<Boat>* list : {&boats_, &fleet_})
             for (const Boat& b : *list) {
                 float rad;
@@ -814,10 +836,11 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     if (!camInit_) { yawOff_.x = offTgt_; yawOff_.v = 0.f; }
     yawOff_.step(offTgt_, 0.75f, wdt);
     yaw_ = travel + yawOff_.x;
-    // the pitch: near level skimming, looking down from high, the horizon kept in view above the clouds
+    // the pitch: looking down on the sea and the islands at any height, the horizon kept in view high in the picture
+    // (from very high, a little less: the curved sea's horizon dips)
     const float la = std::log(alt_);
-    float p = -lerpf(0.06f, 0.5f, smoothstepf(std::log(10.f), std::log(1000.f), la));
-    p = lerpf(p, -0.36f, smoothstepf(std::log(1300.f), std::log(2200.f), la));
+    float p = -lerpf(0.3f, 0.38f, smoothstepf(std::log(25.f), std::log(600.f), la));
+    p = lerpf(p, -0.3f, smoothstepf(std::log(1300.f), std::log(2200.f), la));
     if (wF > 0.f) p = lerpf(p, std::clamp(pitchF * 0.5f + p * 0.5f, -1.f, 0.f), wF * smoothstepf(std::log(400.f), std::log(30.f), la) * 0.6f);
     if (!camInit_) { pitch_.x = p; pitch_.v = 0.f; }
     pitch_.step(p, 0.55f, wdt);
