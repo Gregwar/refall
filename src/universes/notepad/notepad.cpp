@@ -455,6 +455,9 @@ void NotepadUniverse::onEvent(const GameEvent& ev, const Game& game) {
     case GameEvent::HardDrop:
         hardPending_ = true;
         break;
+    case GameEvent::Fill: // (a filled board's piece: drawn as one, an id of its own)
+        activeId_ = serial_++;
+        [[fallthrough]];
     case GameEvent::Lock: {
         // The falling piece lands: its cells join the stack's drawing.
         for (size_t i = 0; i < ev.cells.size(); i++) {

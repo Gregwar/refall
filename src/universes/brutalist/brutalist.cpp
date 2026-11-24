@@ -482,7 +482,8 @@ void BrutalistUniverse::puff(const vec3& at, int count, float spread, float up, 
 void BrutalistUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         // the piece is one cast: its cells share an id (the joints only show between pieces)
         const int id = nextPid_++;
         int bottom = -1;
@@ -493,6 +494,7 @@ void BrutalistUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 seeds_[c.y][c.x] = rng_.uniform();
                 bottom = std::max(bottom, c.y);
             }
+        if (ev.type == GameEvent::Fill) break; // (a filled board: no dust)
         // dust pushed out from under it, at the contact
         for (auto& c : ev.cells)
             if (c.y == bottom) { xs += (float)c.x; n += 1.f; }

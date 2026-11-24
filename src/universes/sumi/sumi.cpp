@@ -504,7 +504,8 @@ void SumiUniverse::spawnBloom(vec2 pos, float size, float strength, vec3 col) {
 
 void SumiUniverse::onEvent(const GameEvent& ev, const Game&) {
     switch (ev.type) {
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         if (ev.cells.empty()) break;
         int minX = 99, minY = 99;
         for (auto& c : ev.cells) minX = std::min(minX, c.x), minY = std::min(minY, c.y);

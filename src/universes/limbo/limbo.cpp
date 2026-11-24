@@ -865,7 +865,8 @@ void LimboUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     const VariantDef& V = VARIANTS[variant_];
     switch (ev.type) {
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         const int id = nextId_++;
         for (auto& c : ev.cells) {
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
