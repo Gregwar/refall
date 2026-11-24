@@ -3,6 +3,21 @@
 Each release's section is its GitHub release message (the release workflow takes the section of its tag): the
 changes to the whole game, then those of single universes, each list with the most important changes first.
 
+## 1.0.12
+
+### Game
+
+- No changes to the whole game in this release
+
+### Universes
+
+- ISLANDS in a new flat illustrated style whose drops turn psychedelic: neon paint washes in from the horizon over the same islands and flowing sea, then recedes; four palettes, LAGOON, CORAL, GOLDEN and ULTRAVIOLET (the old variants load as the nearest one); a lighter HUD, NEXT and the bonus gauge in one pane
+- TERRARIUM becomes BREAKOUT: a sealed specimen jar on a lab bench cracks, its roots, vines and beetle escape, overgrow the lab and take over the city at night; the drop bursts the glass; the pieces are shards of fogged glass with moss in their cracks
+- Joined pieces: each piece one shape, with no gaps between its own cells, in FRACTAL, DIORAMA (one clay shape, tumbling as one body when cleared) and TERRARIUM
+- DIORAMA: the ghost as a 3D preview of the piece in translucent clay glass; the drop's light a true dusk (was a bright pink evening); cleared blocks ejected harder, toward the viewer and to a side
+- MARBLES: no trail of light above the falling piece, only its soft glow
+- Fixes: DIORAMA's cleared blocks staying stuck against the tower
+
 ## 1.0.11
 
 ### Game
