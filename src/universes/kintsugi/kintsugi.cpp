@@ -745,16 +745,19 @@ void KintsugiUniverse::breakRows(const GameEvent& ev, bool quadClear) {
 
 void KintsugiUniverse::onEvent(const GameEvent& ev, const Game&) {
     switch (ev.type) {
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         if (ev.cells.empty()) break;
-        // the piece's cells belong together (one vessel), with its own pattern of seams
+        // the piece's cells belong together (one vessel), with its own pattern of seams (a filled board's pieces
+        // cracked already)
         const int id = nextId_++;
         const float sx = rng_.range(0.f, 50.f), sy = rng_.range(0.f, 50.f);
         int bottom = -1;
         for (auto& c : ev.cells) bottom = std::max(bottom, c.y);
+        const float at = ev.type == GameEvent::Fill ? now_ - 60.f : now_;
         for (auto& c : ev.cells)
-            if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) own_[c.y][c.x] = {c.type, id, sx, sy, bottom, now_};
-        lastDrop_ = 0;
+            if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) own_[c.y][c.x] = {c.type, id, sx, sy, bottom, at};
+        if (ev.type == GameEvent::Lock) lastDrop_ = 0;
         break;
     }
     case GameEvent::HardDrop:
