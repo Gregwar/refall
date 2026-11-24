@@ -451,7 +451,8 @@ vec3 ShadowUniverse::pileSlot(int dest, int n) const {
 void ShadowUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         const int id = nextId_++;
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) ids_[c.y][c.x] = id;

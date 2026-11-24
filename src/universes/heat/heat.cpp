@@ -578,6 +578,19 @@ void HeatUniverse::onEvent(const GameEvent& ev, const Game& game) {
     case GameEvent::HardDrop:
         hardPending_ = true;
         break;
+    case GameEvent::Fill: {
+        // a filled board's piece: one body, long cooled
+        int x0 = Game::W, y0 = Game::H;
+        for (auto& c : ev.cells) { x0 = std::min(x0, c.x); y0 = std::min(y0, c.y); }
+        const int id = nextId_++;
+        for (auto& c : ev.cells)
+            if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) {
+                ids_[c.y][c.x] = id;
+                heat_[c.y][c.x] = 0.f;
+                tex_[c.y][c.x] = lavaAt(id, c.x, c.y, x0, y0);
+            }
+        break;
+    }
     case GameEvent::Lock: {
         // the piece lands white hot; a hard drop's impact heats the cells it hits, a breath of hot air at the contact
         const int id = nextId_++;

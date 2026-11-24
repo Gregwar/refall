@@ -408,12 +408,14 @@ TransitionHints LaserUniverse::hints() const {
 
 void LaserUniverse::onEvent(const GameEvent& ev, const Game& game) {
     switch (ev.type) {
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         if (ev.cells.empty()) break;
         // the piece's cells keep its identity (one acrylic shape, never joined with another piece)
         const int id = pieceCounter_++;
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) own_[c.y][c.x] = {id, c.type};
+        if (ev.type == GameEvent::Fill) break; // (a filled board: no projector, no light)
         // the falling piece's projector stays with it in the stack
         if (hasFall_) {
             Proj pr = fall_;

@@ -810,14 +810,16 @@ void BricksUniverse::syncIds(const Game& g) {
 void BricksUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
-    case GameEvent::Lock: {
-        // the piece clicks onto the board's studs
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
+        // the piece clicks onto the board's studs (a filled board's pieces pressed home already)
         const int id = nextId_++;
+        const bool lock = ev.type == GameEvent::Lock;
         for (auto& c : ev.cells) {
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             ids_[c.y][c.x] = id;
-            press_[c.y][c.x] = HOLD_Z;
-            pressV_[c.y][c.x] = -1.5f;
+            press_[c.y][c.x] = lock ? HOLD_Z : 0.f;
+            pressV_[c.y][c.x] = lock ? -1.5f : 0.f;
         }
         break;
     }

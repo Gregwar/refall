@@ -477,7 +477,8 @@ void Garden16Universe::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
     case GameEvent::HardDrop: lastDrop_ = ev.count; break;
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         if (ev.cells.empty()) break;
         const int id = nextId_++;
         const uint32_t pseed = hash2(id, 77, seedU_);
@@ -487,7 +488,9 @@ void Garden16Universe::onEvent(const GameEvent& ev, const Game& game) {
             s.id = id; s.type = std::clamp((int)c.type, 0, 6);
             s.age = 0.f;
             s.seed = hash2(c.x, c.y, pseed);
+            if (ev.type == GameEvent::Fill) s.age = 12.f + 8.f * hash01(c.x, c.y, 3); // (a filled board: grown)
         }
+        if (ev.type == GameEvent::Fill) break;
         // a hard landing pushes two small puffs of dust out from the contact, one each side of the piece's base
         if (lastDrop_ >= 2 && bridge_.amount < 0.5f) {
             int maxY = -1;

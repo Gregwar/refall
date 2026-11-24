@@ -468,7 +468,8 @@ void PolarUniverse::onEvent(const GameEvent& ev, const Game& game) {
         d.cdy = y - ice_[y][x].cy;
     };
     switch (ev.type) {
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         // The piece freezes from where it touched down: its resting cells (on the floor or on the stack).
         float cx = 0.f, cy = 0.f, n = 0.f;
         int bottom = -1;
@@ -490,7 +491,8 @@ void PolarUniverse::onEvent(const GameEvent& ev, const Game& game) {
         // the piece's cells keep its identity (they join into one body of ice, never with another piece)
         const int id = pieceCounter_++;
         for (auto& c : ev.cells)
-            if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) ice_[c.y][c.x] = {id, c.type, iceClock_, cx, cy};
+            if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) ice_[c.y][c.x] = {id, c.type, ev.type == GameEvent::Fill ? iceClock_ - 60.f : iceClock_, cx, cy};
+        if (ev.type == GameEvent::Fill) break; // (a filled board's: long frozen, no sparkle)
         // a tiny sparkle where it touched (just inside the ice)
         const vec3 p = layout::cellPos(cx, cy - 0.62f);
         glints_.push_back({v2(p.x, p.y), 0.f, 0.3f, 0.32f});

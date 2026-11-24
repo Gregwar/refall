@@ -480,7 +480,8 @@ void GardenUniverse::onEvent(const GameEvent& ev, const Game&) {
     case GameEvent::HardDrop:
         lastDrop_ = ev.count;
         break;
-    case GameEvent::Lock: {
+    case GameEvent::Lock:
+    case GameEvent::Fill: {
         if (ev.cells.empty()) break;
         // the piece's cells belong together (one clod); its grain origin is its bounding box's corner, the same
         // origin the falling piece used, so the clod keeps its grain as it lands
@@ -498,7 +499,9 @@ void GardenUniverse::onEvent(const GameEvent& ev, const Game&) {
             s.nc = v2((float)(c.x - minX) + sx, -(float)(c.y - minY) + sy);
             s.age = 0.f; s.cover = 0.f; s.coverType = -1; s.sunk = 0;
             s.seed = rng_.range(0.f, 100.f);
+            if (ev.type == GameEvent::Fill) s.age = 12.f + 8.f * hashf(s.seed, 3.f); // (a filled board: grown)
         }
+        if (ev.type == GameEvent::Fill) break;
         // a hard landing pushes one puff of soil dust out from under the piece, at the contact
         if (lastDrop_ >= 2 && bridge_.amount < 0.5f) {
             const vec3 col = lerp(pal_.piece[type], pal_.ground, 0.3f) * 1.1f;
