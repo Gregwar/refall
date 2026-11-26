@@ -376,7 +376,8 @@ void main() {
         vec2 cn = vec2(k == 0 || k == 3 ? -cs : cs, k < 2 ? -cs : cs);
         vec2 a0 = cn - co, ab = vec2(2.0 * co);
         float t = clamp(dot(p - a0, ab) / dot(ab, ab), 0.0, 1.0);
-        dJoin = min(dJoin, length(p - a0 - ab * t));
+)"
+R"(        dJoin = min(dJoin, length(p - a0 - ab * t));
     }
     float lw = px * 0.45;
     float eFront = smoothstep(lw + px, lw, dFront);
