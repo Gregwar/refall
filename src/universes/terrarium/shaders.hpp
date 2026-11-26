@@ -126,14 +126,28 @@ vec3 sky(vec3 rd) {
     float mr = length(md);
     float moon = smoothstep(0.03, 0.025, mr) * (1.0 - 0.6 * smoothstep(0.025, 0.0, length(md - vec2(0.011, 0.003))));
     c += vec3(0.9, 0.93, 1.0) * uMoon * (moon * 1.4 + exp(-mr * 22.0) * 0.18);
-    // stars
+    // stars: points about a pixel wide (their size measured in screen pixels, whatever the lens), in three layers (a
+    // few bright ones with a soft halo, more dim ones, many faint ones: most stars barely there), each its own tint
+    // (bluish white to warm) and a slow, slight twinkle
     if (uStars > 0.01) {
-        vec2 sc = vec2(az * 90.0, E * 40.0);
-        vec2 ci = floor(sc);
-        vec2 h = hash2(ci);
-        float star = smoothstep(0.2, 0.0, length(fract(sc) - h)) * step(0.84, hash(ci + 3.1));
-        star *= 0.6 + 0.4 * sin(uTime * (0.8 + 2.0 * h.x) + h.y * 30.0);
-        c += vec3(0.8, 0.85, 1.0) * star * uStars * smoothstep(0.3, 0.9, E) * 1.2;
+        vec3 st = vec3(0.0);
+        for (int l = 0; l < 3; l++) {
+            float fl = float(l);
+            vec2 sc = vec2(az * 90.0, E * 40.0) * (1.0 + fl * 1.3) + fl * 17.0;
+            vec2 px = max(fwidth(sc), vec2(1e-4)); // a pixel, in cells
+            vec2 ci = floor(sc);
+            vec2 h = hash2(ci + fl * 31.0);
+            float keep = step(0.86 + 0.04 * fl, hash(ci + 3.1 + fl * 7.0)); // (sparse: a few in a cell's worth of sky)
+            vec2 d = (fract(sc) - (0.15 + 0.7 * h)) / px; // to the star, in pixels
+            float m = hash(ci + 9.7 + fl * 5.0);
+            float mag = (l == 0 ? 0.45 + 0.55 * m * m : l == 1 ? 0.18 + 0.3 * m : 0.06 + 0.16 * m);
+            float core = exp(-dot(d, d) / (l == 0 ? 0.9 : 0.55));
+            float halo = l == 0 ? exp(-length(d) * 0.55) * 0.12 * mag : 0.0;
+            float tw = 0.8 + 0.2 * sin(uTime * (0.6 + 1.6 * h.x) + h.y * 40.0);
+            vec3 tint = mix(vec3(0.75, 0.84, 1.0), vec3(1.0, 0.9, 0.76), hash(ci + 1.3 + fl));
+            st += tint * (core * mag + halo) * tw * keep;
+        }
+        c += st * uStars * smoothstep(0.3, 0.9, E) * 1.6;
     }
     // toon clouds drifting slowly: a lit top, a shaded belly
     {
