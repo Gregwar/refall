@@ -76,7 +76,7 @@ float smin(float a, float b, float k) {
 }
 
 constexpr float WELL_HALF = 5.2f, WELL_TOP = 10.15f;   // the pane's extent (the drop's waves start there)
-constexpr float TILE_H = 0.46f, TILE_R = 0.33f;       // a tile's half size, its marble's radius (board units)
+constexpr float TILE_H = 0.46f, TILE_R = 0.38f;       // a tile's half size, its marble's radius (board units)
 constexpr int MAX_MARBLES = 140;
 constexpr float R_MIN = 0.38f, R_MAX = 0.43f;          // the marbles on the table
 constexpr float ROLL = 2.2f, DRAG = 0.2f;              // the felt's rolling resistance: units/s^2, and 1/s
@@ -87,7 +87,6 @@ constexpr float STAIN_V = 0.6f;                        // a hit at least this ha
 const int CORE_STYLE[7] = {0, 1, 2, 1, 0, 2, 1};
 float mseed(int type, float seed) { return (float)CORE_STYLE[std::clamp(type, 0, 6)] + std::fmod(std::fabs(seed), 1.f) * 0.999f; }
 constexpr float POP = 0.14f;
-constexpr float WELL_RIM = 0.26f;                      // the glass box's bevelled walls (board units)
 constexpr float SHUTTER = 0.035f;                      // the motion blur of a rolling marble (s)
 constexpr float WORLD_K = 0.74f;                       // the marbles on the table, dimmer than the board's
 const vec3 SPEC_FX[3] = {{1.15f, 0.22f, 0.12f}, {0.25f, 1.05f, 0.35f}, {0.12f, 0.3f, 1.2f}};   // red, green, blue                          // a tile pops in this long (s, real time)
@@ -1319,10 +1318,9 @@ void MarblesUniverse::drawBoard(const Game& g, float world) {
     const float bb = smoothstepf(0.3f, 0.95f, bridge_.amount);
     const float glow = 0.3f * slow_;
     // The well's pane: one even tone of smoked (or frosted) glass with a hairline edge.
-    // The well: a clear glass box over the table, its floor dark glass with a fine grid of cells, its walls thick
-    // bevelled glass catching the light.
+    // The well: its floor dark glass over the table with a fine grid of cells, no frame around it.
     put(0.f, 0.f, 5.04f, 10.04f, lerp(pal_.panel, bridge_.color, bb), pal_.panelAlpha * (1.f - 0.5f * bb), 0.f, 0.f, 0.f, 4,
-        WELL_RIM * (1.f - bb), 1.f, 0.5f * (1.f - bb));
+        0.f, 1.f, 0.5f * (1.f - bb));
     // The previews' thin glass frames (HOLD; the three NEXT).
     if (bb < 0.99f) {
         const vec3 fc = lerp(pal_.panel, pal_.panelEdge, 0.15f);

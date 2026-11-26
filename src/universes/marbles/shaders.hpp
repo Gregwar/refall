@@ -365,48 +365,52 @@ void main() {
     vec3 Lc = v4.rgb;
     vec2 ld = vec2(cos(v4.w), sin(v4.w));
     if (v4.w < -5.0) { Lc = uKeyCol * uKey.z; ld = uKey.xy; }
+    // a clear glass cube seen a little from below left: its front face (down left) and its back face (up right)
+    // joined at the corners, drawn as fine edges of light in the marble's color, its glass barely there
+    float co = 0.055 * h / 0.46, cs = h - co;               // the faces' offset, their half size
+    vec2 pf = p + co, pb = p - co;                            // around the front face, the back face
+    float dFront = abs(sdRoundBox(pf, vec2(cs), 0.02));
+    float dBack = abs(sdRoundBox(pb, vec2(cs), 0.02));
+    float dJoin = 1e3;
+    for (int k = 0; k < 4; k++) {
+        vec2 cn = vec2(k == 0 || k == 3 ? -cs : cs, k < 2 ? -cs : cs);
+        vec2 a0 = cn - co, ab = vec2(2.0 * co);
+        float t = clamp(dot(p - a0, ab) / dot(ab, ab), 0.0, 1.0);
+        dJoin = min(dJoin, length(p - a0 - ab * t));
+    }
+    float lw = px * 0.45;
+    float eFront = smoothstep(lw + px, lw, dFront);
+    float eBack = smoothstep(lw + px, lw, min(dBack, dJoin));
+    vec3 edgeCol = mix(c0, vec3(1.0), 0.6);
+    if (kind == 1) mo -= co * 0.7;   // the marble sits in the middle of the cube, between its faces
     if (kind >= 1) {
-        float d = sdRoundBox(p, vec2(h), 0.075 * h / 0.46);
-        float a = smoothstep(px, -px, d);
+        float hull = max(smoothstep(px, -px, sdRoundBox(pf, vec2(cs), 0.02)), smoothstep(px, -px, sdRoundBox(pb, vec2(cs), 0.02)));
         if (kind == 2) {
-            // the ghost: the tile's outline only
-            float line = smoothstep(px * 1.5, px * 0.2, abs(d + px * 1.2));
-            frag = vec4(mix(c0, uBridgeInk, bb), line * alpha);
+            // the ghost: the cube's edges only
+            frag = vec4(mix(c0, uBridgeInk, bb), max(eFront, eBack * 0.6) * 0.6 * alpha);
             return;
         }
-        // a block of deep tinted glass holding its marble: a body of the marble's color, darker toward the middle,
-        // a bevel all round (lit up left, shaded down right), a crisp edge
-        float hb = 0.13 * h / 0.46;                          // the bevel's width
-        float bev = smoothstep(-hb, -hb + px * 1.5, d);       // 0 on the face, 1 on the bevel
-        vec2 bn = normalize(p + 1e-4);                       // which side of the bevel
-        float side = dot(abs(p.x) > abs(p.y) ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y)), vec2(-0.7071, 0.7071));
-        vec3 deep = c0 * (0.32 + 0.08 * uLightGround);
-        vec3 base = mix(deep, c0 * 0.55, smoothstep(0.0, h, length(p)) * 0.6);
-        base *= 1.0 + 0.10 * (p.y / h);
-        base = mix(base, mix(c0 * 0.3, mix(c0, vec3(1.0), 0.12) * 0.9, side * 0.5 + 0.5), bev);
-        float ta = mix(0.62, 0.8, bev) * (0.75 + 0.25 * uTileAlpha);
-        // what the marble sees behind it: the block's glass
-        tileEnv = base * 1.1 + 0.01;
-)"
-R"(        // the marble's shadow on the back of the block, and the light it focuses there
-        vec2 sp = (p - mo - ld * 0.09) / R;
-        float sh = exp(-dot(sp, sp) * 1.4);
-        base *= 1.0 - 0.45 * sh * (1.0 - bev);
-        vec2 cq = (p - mo - ld * 0.32) / R;
-        float caus = exp(-dot(cq, cq) * 6.0) * (1.0 - bev);
-        base += (c0 * 0.8 + 0.1) * caus * (0.25 + 0.7 * dot(Lc, vec3(0.3, 0.5, 0.2)));
-        // a hairline along the outer edge and the bevel's inner edge, brighter up left
-        float rim = smoothstep(px * 1.3, px * 0.15, abs(d + px * 1.0));
-        float inner = smoothstep(px * 1.2, px * 0.1, abs(d + hb));
-        float lit = clamp(dot(bn, vec2(-0.7071, 0.7071)) * 0.5 + 0.5, 0.0, 1.0);
-        vec3 hi = mix(c0, vec3(1.0), 0.55);
-        base = mix(base, hi, rim * (0.25 + 0.6 * lit) + inner * 0.3 * lit);
-        ta = max(ta, rim * 0.9);
-        // the bridge: plain squares of ink
+        // the glass: a faint tint, the top and right side faces a little lighter; the back edges seen through it;
+        // the marble's shadow on the back face
+        float onFront = smoothstep(px, -px, sdRoundBox(pf, vec2(cs), 0.02));
+        vec3 base = mix(bgAt(v0.xy), c0, 0.25) * 0.6 + edgeCol * 0.06 * (1.0 - onFront);
+        float ta = 0.16 + 0.1 * (1.0 - onFront);
+        if (kind == 1) {
+            vec2 sp = (p - mo - vec2(0.06, 0.04)) / R;
+            float sh = exp(-dot(sp, sp) * 1.4);
+            base *= 1.0 - 0.6 * sh;
+            ta = mix(ta, 0.6, sh * 0.5);
+        }
+        base = mix(base, edgeCol, eBack * 0.5);
+        ta = max(ta, eBack * 0.3);
         base = mix(base, uBridgeInk, bb);
         ta = mix(ta, 0.95, bb);
-        outc = vec4(base, a * ta);
-        if (kind == 3) { frag = vec4(outc.rgb, outc.a * alpha); return; }
+        outc = vec4(base, hull * ta);
+        if (kind == 3) {
+            outc = vec4(mix(outc.rgb, edgeCol, eFront * (1.0 - bb)), max(outc.a, eFront * 0.85));
+            frag = vec4(outc.rgb, outc.a * alpha);
+            return;
+        }
     }
     // the marble
     vec2 q = (p - mo) / R;
@@ -439,19 +443,23 @@ R"(        // the marble's shadow on the back of the block, and the light it foc
         float a = ca + sa * (1.0 - ca);
         outc = vec4((c * ca + outc.rgb * sa * (1.0 - ca)) / max(a, 1e-4), a);
     } else if (ma > 0.0) {
-        vec3 m = glassMarble(q, v0.xy + mo, R, col, v2.x, v2.z, v2.y, v3.z, kind >= 1, tileEnv, Lc, ld);
+        vec3 m = glassMarble(q, v0.xy + mo, R, col, v2.x, v2.z, v2.y, v3.z, false, tileEnv, Lc, ld);
         if (kind == 0) m *= uWorldK;
+        else m = m * 1.2 + c0 * 0.05;   // in its cube, a little brighter: the cube's glass catches the room's light
         float a = ma + outc.a * (1.0 - ma);
         vec3 c = (m * ma + outc.rgb * outc.a * (1.0 - ma)) / max(a, 1e-4);
         outc = vec4(c, a);
     }
     if (kind == 1 && bb < 1.0) {
-        // the block's front face over its marble: a faint tint and a broad diagonal sheen, so the marble sits inside
-        float d = sdRoundBox(p, vec2(h), 0.075 * h / 0.46);
-        float face = smoothstep(px, -px, d) * (1.0 - bb);
-        float band = smoothstep(0.30, 0.0, abs(dot(p / h, vec2(0.7071, 0.7071)) - 0.55)) * smoothstep(0.0, -0.13 * h / 0.46, d);
-        outc.rgb = mix(outc.rgb, c0 * 0.6, 0.12 * face);
-        outc.rgb += mix(c0, vec3(1.0), 0.6) * band * 0.10 * face;
+        // the cube's front edges over its marble, and a faint window on its front face
+        vec2 qf = pf / cs;
+        float face = smoothstep(px, -px, sdRoundBox(pf, vec2(cs), 0.02)) * (1.0 - bb);
+        float wb = dot(qf, vec2(0.6, 0.8)) - 0.3;
+        float win = smoothstep(0.0, 0.2, wb) * smoothstep(0.7, 0.45, wb) * smoothstep(0.3, -0.6, qf.x - qf.y * 0.2);
+        outc.rgb += uLightCol * win * 0.06 * face;
+        float ef = eFront * (1.0 - bb);
+        outc.rgb = mix(outc.rgb, edgeCol, ef * 0.6);
+        outc.a = max(outc.a, max(ef * 0.6, win * 0.06 * face));
     }
     frag = vec4(outc.rgb, outc.a * alpha);
 }
