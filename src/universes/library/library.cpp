@@ -3,7 +3,7 @@
 //
 // The board stays a clean game board over a deep saturated ground, its cells a packed shelf: each cell two or three
 // real books standing on their spines in its piece's color (the room's books, a little stockier: pushCell), seen in a
-// real perspective from above the well's middle (their tops' pages show, more the lower they are), and each cell keeps
+// gentle perspective from level with the well's top rows (their tops' pages show, more the lower they are), and each cell keeps
 // its books through falls and clears (its seed follows it). When a row
 // clears, its blocks dissolve into light where they stand, and three of its cells send a book to the room: from behind
 // the cells' places on the board, at a depth behind the well, only ever going deeper (never in front of the board or
@@ -119,11 +119,11 @@ const VariantDef VARIANTS[] = {
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-// The board's camera: closer than the reference one (a real perspective: the books' tops show, more the lower they are;
-// the columns off the middle show their inner sides) and above the well's middle, its image shifted so the board plane
-// keeps the reference pixels exactly (the cells stay the game's cells).
-constexpr float BOARD_EYE_Y = 15.f;  // its height (above the top row: even the falling piece shows its books' tops)
-constexpr float BOARD_EYE_D = 22.f;  // its distance from the board plane (the reference's is some 35)
+// The board's camera: a little closer than the reference one (a gentle perspective: the books' tops show, more the lower
+// they are; the columns off the middle show their inner sides) and level with the well's top rows, its image shifted so
+// the board plane keeps the reference pixels exactly (the cells stay the game's cells).
+constexpr float BOARD_EYE_Y = 10.f;  // its height (level with the top row: the top rows seen from the front)
+constexpr float BOARD_EYE_D = 30.f;  // its distance from the board plane (the reference's is some 35)
 constexpr float FX_T = 0.27f;        // a cleared row dissolves in this long (the stack above waits 0.3 s)
 
 // Test hooks: REFALL_LIBRARY_LINES=N adds N lines (their books already in place: for screenshots),
