@@ -3,6 +3,17 @@
 Each release's section is its GitHub release message (the release workflow takes the section of its tag): the
 changes to the whole game, then those of single universes, each list with the most important changes first.
 
+## 1.0.13
+
+### Game
+
+- No changes to the whole game in this release
+
+### Universes
+
+- MARBLES: each cell a marble wrapped in a clear glass cube seen in real perspective (as LIBRARY's books), its edges fine lines of light in a pale tint of the marble's color; the ghost the cube's edges alone
+- MARBLES: no frame around the play area, HOLD or NEXT; the well's grid a faint dot where four cells meet; no glow under the falling piece
+
 ## 1.0.12
 
 ### Game

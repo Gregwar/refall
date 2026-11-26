@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "refall"
-version = "1.0.12"
+version = "1.0.13"
 description = "A falling-block puzzle game across 61 hand-directed universes, staged by any music you like (local files or YouTube)"
 readme = "README.md"
 license = "PolyForm-Noncommercial-1.0.0"
