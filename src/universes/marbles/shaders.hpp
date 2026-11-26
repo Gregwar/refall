@@ -330,10 +330,10 @@ void main() {
         vec3 c = col;
         float a = alpha * aIn;
         if (v3.y > 0.5) {
-            // the grid: fine lines between the cells, a faint reflection of the room sliding across the glass
+            // the grid: a faint dot where four cells meet, a faint reflection of the room sliding across the glass
             vec2 gp = abs(fract(p + 0.5) - 0.5);
-            float ln = smoothstep(px * 1.3, px * 0.2, min(gp.x, gp.y)) * aIn;
-            ln *= step(abs(p.x), v0.z - 0.25) * step(abs(p.y), v0.w - 0.25);   // only between the cells: no line round the well
+            float ln = smoothstep(0.035 + px, 0.035 - px, length(gp)) * aIn * 1.6;
+            ln *= step(abs(p.x), v0.z - 0.25) * step(abs(p.y), v0.w - 0.25);   // only inside: no dot on the well's edge
             c += uPanelEdge * ln * v3.z;
             float sd = -p.x * 0.6 + p.y * 0.8 + 2.0;
             float sheet = smoothstep(0.0, 4.0, sd) * smoothstep(9.0, 4.0, sd);
