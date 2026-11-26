@@ -62,13 +62,16 @@ no song previews.
   right moves between the petals (the rosette turns the focused one to the right, where its songs are listed), up
   reaches the difficulty. **Enter plays the whole stage** from its first song; **Space** (or Tab, gamepad X / Y) opens
   the petal, fanning out its songs: left / right chooses one, Enter plays the stage from that song to its last
-  one, Esc or Space closes the petal. A locked petal can be focused, not played. Surviving all the songs of a run
-  started from the first one **clears** the stage and unlocks the next one (on that difficulty and every easier one:
-  a stage reached on HARD is playable on NORMAL and EASY too, not done there). On EXPERT a stage also opens once it
-  is cleared (or its songs all beaten) on HARD. A run started from a later song is fine for practice: the songs it survives count as beaten (with their
-  best score) but the stage isn't cleared; once all of a stage's songs are beaten, in any runs, the next stage opens
-  too (quietly: only a clear turns the petal and celebrates). A game over ends the run; a key goes back to the stages. The game remembers,
-  per difficulty, the stages cleared (with the run's score and lines) and the songs beaten (with the points scored and
+  one, Esc or Space closes the petal. A locked petal can be focused, not played. Beating all of a stage's songs, in
+  one run or several, **clears** the stage and unlocks the next one (on that difficulty and every easier one: a stage
+  reached on HARD is playable on NORMAL and EASY too, not done there); its petal turns, rimmed in gold with a gold
+  number disc. Surviving all the songs of one run started from the first one (no game over: RETRY SONG starts another
+  run) is a **PERFECT CLEAR**: the petal becomes a plate of polished gold (a bevelled frame, engraved scrolls in its
+  tips, a glint now and then), its number on a domed gold coin; a stage cleared before turns to gold with its own
+  celebration (golden waves and a burst of sparkles). On
+  EXPERT a stage also opens once it is cleared on HARD. A run started from a later song is fine for practice: the
+  songs it survives count as beaten (with their best score). A game over ends the run; a key goes back to the stages. The game remembers,
+  per difficulty, the stages cleared (with the run's score and lines, and whether a PERFECT CLEAR) and the songs beaten (with the points scored and
   lines cleared during each, and the most lines ever cleared during it), shown in the Voyage's song list, stage header
   and info panel (`-` for lines recorded before they were kept), in `campaign-progress.tsv` in the user data folder
   (`~/.local/share/refall/` on Linux). The file keys songs by their video id and stage clears by their songs, so

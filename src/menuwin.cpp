@@ -88,7 +88,12 @@ struct Worlds {
     bool cleared(int s) const { return m.progress_ && m.progress_->cleared(s, m.diff_); }
     // cleared as the menu shows it: a stage being celebrated only once its petal turns (TURN_AT into it)
     static constexpr float TURN_AT = 2.3f;
-    bool shownCleared(int s) const { return cleared(s) && !(m.celebrate_ == s && m.celebrateT_ < TURN_AT); }
+    bool shownCleared(int s) const {
+        return cleared(s) && !(m.celebrate_ == s && !m.celebrateWasCleared_ && m.celebrateT_ < TURN_AT);
+    }
+    // a PERFECT CLEAR (every song survived in one run from the first), as the menu shows it: likewise once it turns
+    bool perfect(int s) const { return m.progress_ && m.progress_->perfect(s, m.diff_); }
+    bool shownPerfect(int s) const { return perfect(s) && !(m.celebrate_ == s && m.celebratePerfect_ && m.celebrateT_ < TURN_AT); }
     // a song's colour: its stage's hue, in a gradient across the stage's songs (song 1 lighter and a touch warmer,
     // song 5 deeper and a touch cooler), so a stage reads as one family
     Col songCol(int s, int k) const {
@@ -156,6 +161,23 @@ struct Worlds {
     // (`clip` > 0: only the kite's part within that distance of (cx, cy) along its axis, cut straight across)
     void kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC, float clip = 0.f);
     void padlock(float x, float y, float s, float rot, float open, Col c);
+    // A cleared stage's petal is rimmed in gold (its number disc gold); a PERFECT CLEAR's is a plate of polished gold
+    // (goldPlate), its number on a gold coin; `glint(k)` (k in [0, 1), wrapping) the warm tints of its sparkles, from pale
+    // gold to white and amber; a sparkle: a four-pointed star of light (drawn additive), turned by `rot`.
+    void goldPlate(float cx, float cy, float a, float r0, float r1, float halfAng, float alpha, Col lead, int seed);
+    static constexpr uint32_t GOLD = 0xe8c06a, GOLD_RING = 0xfff0c8, GOLD_INK = 0x1a1408;
+    static Col glint(float k) {
+        k -= std::floor(k);
+        const float w = 0.5f + 0.5f * std::cos(TAU * k);
+        return mixc(mixc(hex(0xffb347), hex(0xffe6a0), w), hex(0xffffff), 0.35f * w);
+    }
+    void sparkle(float x, float y, float r, float rot, Col c) {
+        p.glow(x, y, r * 2.2f, withA(c, c.a * 0.35f));
+        for (int i = 0; i < 2; i++) {
+            const float d = rot + i * PI * 0.5f, dx = std::cos(d) * r, dy = std::sin(d) * r;
+            p.line(x - dx, y - dy, x + dx, y + dy, r * 0.22f, c, r * 0.3f);
+        }
+    }
     void wheel(float cx, float cy, float R, float rot, float alpha = 1.f);
     void medallion(float cx, float cy, float R, Col hue, float alpha = 1.f, float ring = 1.f);
     void kalTitle();
@@ -271,7 +293,8 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
         std::snprintf(b, sizeof(b), "%d / %d SONGS BEATEN ON %s", beat, nSongs(fs), difficultyName(m.diff_));
         p.text(body, b, lx, y0 + 160 * u, 17 * u, dim, -1, 0.3f);
         if (shownCleared(fs)) {
-            std::snprintf(b, sizeof(b), "CLEARED    BEST %d    %s LINES", m.progress_->stageBest(fs, m.diff_),
+            std::snprintf(b, sizeof(b), "%s    BEST %d    %s LINES", shownPerfect(fs) ? "PERFECT CLEAR" : "CLEARED",
+                          m.progress_->stageBest(fs, m.diff_),
                           linesStr(m.progress_->stageLines(fs, m.diff_)).c_str());
             p.text(body, b, rx, y0 + 46 * u, 18 * u, hex(0xffd27a), 1, 0.3f);
         }
@@ -310,7 +333,8 @@ void Worlds::infoPortrait(F head, F body, Col ink, Col dim) {
         std::snprintf(b, sizeof(b), "%d / %d SONGS BEATEN ON %s", beat, nSongs(fs), difficultyName(m.diff_));
         p.text(body, b, lx, y0 + 165 * u, 17 * T * u, dim, -1, 0.3f);
         if (shownCleared(fs)) {
-            std::snprintf(b, sizeof(b), "CLEARED    BEST %d    %s LINES", m.progress_->stageBest(fs, m.diff_),
+            std::snprintf(b, sizeof(b), "%s    BEST %d    %s LINES", shownPerfect(fs) ? "PERFECT CLEAR" : "CLEARED",
+                          m.progress_->stageBest(fs, m.diff_),
                           linesStr(m.progress_->stageLines(fs, m.diff_)).c_str());
             p.text(body, b, lx, y0 + 216 * u, 17 * T * u, hex(0xffd27a), -1, 0.3f);
         }
@@ -470,6 +494,110 @@ void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng
     }
 }
 
+// A PERFECT CLEAR's petal as a plate of polished gold: a smooth gradient lit from up left, a bevelled frame round an inner
+// panel (its edges catching the light or in shade), engraved scrolls in its two tips, a glint now and then on a corner.
+void Worlds::goldPlate(float cx, float cy, float a, float r0, float r1, float halfAng, float alpha, Col lead, int seed) {
+    const float rm = lerpf(r0, r1, 0.45f), rt = lerpf(r0, r1, 0.52f), t = m.time_;
+    float P[4][2] = {{cx + std::cos(a) * r0, cy + std::sin(a) * r0},
+                     {cx + std::cos(a - halfAng) * rm, cy + std::sin(a - halfAng) * rm},
+                     {cx + std::cos(a) * r1, cy + std::sin(a) * r1},
+                     {cx + std::cos(a + halfAng) * rm, cy + std::sin(a + halfAng) * rm}};
+    const float tx = cx + std::cos(a) * rt, ty = cy + std::sin(a) * rt, size = (r1 - r0) * 0.5f;
+    float Q[4][2]; // the inner panel
+    for (int i = 0; i < 4; i++) {
+        const float k = i % 2 ? 0.8f : 0.86f; // (the tips' border as wide as the sides')
+        Q[i][0] = tx + (P[i][0] - tx) * k; Q[i][1] = ty + (P[i][1] - ty) * k;
+    }
+    const float lx = -0.55f, ly = -0.83f; // toward the light
+    auto gold = [&](float x, float y, float bias) { // the gradient: dark low right, bright up left
+        const float k = std::clamp(0.5f + 0.5f * (((x - tx) * lx + (y - ty) * ly) / size) * 1.45f + bias, 0.f, 1.f);
+        const Col c = k < 0.5f ? mixc(hex(0x7c4e10), hex(0xdca23a), k * 2.f) : mixc(hex(0xdca23a), hex(0xffeaa6), (k - 0.5f) * 2.f);
+        return withA(c, alpha);
+    };
+    // the bevel: each side's strip lit by how it faces the light
+    for (int e = 0; e < 4; e++) {
+        const int g = (e + 1) % 4;
+        const float mx = (P[e][0] + P[g][0]) * 0.5f - tx, my = (P[e][1] + P[g][1]) * 0.5f - ty, ml = std::max(1e-3f, std::sqrt(mx * mx + my * my));
+        const float face = (mx * lx + my * ly) / ml; // 1: facing the light
+        const float b = 0.42f * face;
+        p.tri(P[e][0], P[e][1], P[g][0], P[g][1], Q[g][0], Q[g][1], gold(P[e][0], P[e][1], b), gold(P[g][0], P[g][1], b), gold(Q[g][0], Q[g][1], b));
+        p.tri(P[e][0], P[e][1], Q[g][0], Q[g][1], Q[e][0], Q[e][1], gold(P[e][0], P[e][1], b), gold(Q[g][0], Q[g][1], b), gold(Q[e][0], Q[e][1], b));
+    }
+    // the panel: the gradient a little flatter, a broad soft sheen across it
+    for (int e = 0; e < 4; e++) {
+        const int g = (e + 1) % 4;
+        p.tri(tx, ty, Q[e][0], Q[e][1], Q[g][0], Q[g][1], gold(tx, ty, 0.05f), gold(Q[e][0], Q[e][1], -0.04f), gold(Q[g][0], Q[g][1], -0.04f));
+    }
+    {
+        const float sh = std::fmod(t * 0.12f + seed * 0.37f, 1.f), d = (sh * 2.f - 1.f) * size * 1.4f;
+        const float px = -ly, py = lx; // across the light
+        p.setAdditive(true);
+        p.line(tx + lx * d - px * size, ty + ly * d - py * size, tx + lx * d + px * size, ty + ly * d + py * size, size * 0.18f,
+               hex(0xfff2c8, 0.2f * std::sin(sh * PI) * alpha), size * 0.2f);
+        p.setAdditive(false);
+    }
+    // the panel's edges: bright where they face the light, dark in shade; the plate's outline
+    for (int e = 0; e < 4; e++) {
+        const int g = (e + 1) % 4;
+        const float mx = (Q[e][0] + Q[g][0]) * 0.5f - tx, my = (Q[e][1] + Q[g][1]) * 0.5f - ty, ml = std::max(1e-3f, std::sqrt(mx * mx + my * my));
+        const float face = (mx * lx + my * ly) / ml;
+        p.line(Q[e][0], Q[e][1], Q[g][0], Q[g][1], 1.3f * u, face > 0.f ? hex(0x6a420c, 0.8f * alpha) : hex(0xfff0c0, 0.75f * alpha), 1.f * u);
+        p.line(P[e][0], P[e][1], P[g][0], P[g][1], 1.4f * u, hex(0x4a2e08, 0.85f * alpha), 1.f * u);
+    }
+    if (lead.a > 0.5f && lead.r > 0.9f && lead.g > 0.9f && lead.b > 0.9f) // (the focused one keeps its white outline)
+        for (int e = 0; e < 4; e++) p.line(P[e][0], P[e][1], P[(e + 1) % 4][0], P[(e + 1) % 4][1], 2.4f * u, withA(lead, lead.a * alpha));
+    // engraved scrolls in the two tips: along each side from the tip, curling into a spiral toward the middle
+    auto engrave = [&](float x0, float y0, float x1, float y1) {
+        p.line(x0, y0, x1, y1, 1.2f * u, hex(0x6a420c, 0.85f * alpha), 0.8f * u);
+        p.line(x0 + lx * 0.7f * u, y0 + ly * 0.7f * u, x1 + lx * 0.7f * u, y1 + ly * 0.7f * u, 0.7f * u, hex(0xfff0c0, 0.55f * alpha), 0.6f * u);
+    };
+    for (int tip = 0; tip <= 2; tip += 2) {
+        const float Tx = Q[tip][0], Ty = Q[tip][1];
+        const float dx = tx - Tx, dy = ty - Ty, L = std::max(1e-3f, std::sqrt(dx * dx + dy * dy));
+        const float ax = dx / L, ay = dy / L, nx = -ay, ny = ax;
+        for (int sg = -1; sg <= 1; sg += 2) {
+            // the stem: from near the tip, along the side, bowing out a little
+            const int N = 10;
+            float px = 0.f, py = 0.f, ex = 0.f, ey = 0.f;
+            for (int i = 0; i <= N; i++) {
+                const float k = (float)i / N, along = L * (0.1f + 0.36f * k);
+                const float wide = along * std::tan(halfAng * 1.15f) * 0.62f + L * 0.04f * std::sin(k * PI);
+                const float x = Tx + ax * along + nx * sg * wide, y = Ty + ay * along + ny * sg * wide;
+                if (i > 0) engrave(px, py, x, y);
+                px = x; py = y; ex = x; ey = y;
+            }
+            // the curl: a spiral turning inward, toward the axis
+            const float r0s = L * 0.075f, cxs = ex - nx * sg * r0s, cys = ey - ny * sg * r0s;
+            float th0 = std::atan2(ey - cys, ex - cxs), qx = ex, qy = ey;
+            for (int i = 1; i <= 16; i++) {
+                const float th = th0 + sg * (-1.f) * i * 0.42f, rr = r0s * std::exp(-0.11f * i);
+                const float x = cxs + std::cos(th) * rr, y = cys + std::sin(th) * rr;
+                engrave(qx, qy, x, y);
+                qx = x; qy = y;
+            }
+            // a small leaf off the stem, back toward the tip
+            const float bx = Tx + ax * L * 0.3f + nx * sg * (L * 0.3f * std::tan(halfAng * 1.15f) * 0.62f + L * 0.04f);
+            const float by = Ty + ay * L * 0.3f + ny * sg * (L * 0.3f * std::tan(halfAng * 1.15f) * 0.62f + L * 0.04f);
+            float lx0 = bx, ly0 = by;
+            for (int i = 1; i <= 6; i++) {
+                const float k = i / 6.f;
+                const float x = bx - ax * L * 0.12f * k - nx * sg * L * 0.06f * std::sin(k * PI * 0.9f), y = by - ay * L * 0.12f * k - ny * sg * L * 0.06f * std::sin(k * PI * 0.9f);
+                engrave(lx0, ly0, x, y);
+                lx0 = x; ly0 = y;
+            }
+        }
+    }
+    // a glint on the outer tip or a corner, now and then
+    const float ph = seed * 1.7f, fl = std::pow(std::max(0.f, std::sin(t * 0.9f + ph)), 10.f);
+    if (fl > 0.02f) {
+        const int c = seed % 2 ? 1 : 2;
+        p.setAdditive(true);
+        p.glow(P[c][0], P[c][1], 14.f * u, hex(0xfff2c8, 0.5f * fl * alpha));
+        sparkle(P[c][0], P[c][1], 9.f * u * fl, 0.f, hex(0xffffff, 0.95f * fl * alpha));
+        p.setAdditive(false);
+    }
+}
+
 // A padlock (as Painter::lock: size s, centred on its body's top) turned by `rot`; `open` 0..1 springs its shackle:
 // it rises out of the body and swings out round its right leg.
 void Worlds::padlock(float x, float y, float s, float rot, float open, Col c) {
@@ -606,8 +734,11 @@ void Worlds::kalCampaign() {
             const float tau = uK - 0.3f, q = tau / (OPEN - 0.3f);
             a += 0.012f * q * std::sin(TAU * (6.f * tau + 6.f * tau * tau));
         }
-        const bool o = open(s), cl = o && cleared(s);
-        const float ck = cl ? (cel ? sstep(std::clamp((cT - TURN) / 0.12f, 0.f, 1.f)) : 1.f) : 0.f;
+        const bool o = open(s), cl = o && cleared(s), pf = cl && perfect(s);
+        const float turnK = sstep(std::clamp((cT - TURN) / 0.12f, 0.f, 1.f));
+        // (a perfect clear's celebration on a stage cleared before: cleared from the start, turning to a gold plate)
+        const float ck = cl ? (cel && !m.celebrateWasCleared_ ? turnK : 1.f) : 0.f;
+        const float pk = pf ? (cel && m.celebratePerfect_ ? turnK : 1.f) : 0.f;
         const float f = focusStage(s);
         const float op = s == fs ? ao : 0.f; // this petal's opening
         const Col c = o ? stageCol(s) : hex(0x1c1e26);
@@ -618,21 +749,24 @@ void Worlds::kalCampaign() {
             p.glow(cx + std::cos(a) * 205 * u, cy + std::sin(a) * 205 * u, (130 + 60 * op) * u, withA(c, 0.5f * f));
             p.setAdditive(false);
         }
-        // three clear states: locked (grey), open but not cleared (its hue dimmed, like unlit glass), cleared (its
-        // full hue lit, a gold rim, a gold number disc)
+        // four clear states: locked (grey), open but not cleared (its hue dimmed, like unlit glass), cleared (its
+        // full hue lit, a gold rim, a gold number disc), perfect (a plate of polished gold, its number on a gold coin)
         const Col pcOpen = mixc(c, hex(0x14141c), 0.5f), pcClear = mixc(c, hex(0xffffff), 0.12f * op);
         // (the focused one lit up, standing out of the wheel)
         const Col pc = mixc(!o ? c : mixc(pcOpen, pcClear, ck), hex(0xffffff), 0.18f * f * (1.f - op));
-        const Col edgeCl = mixc(hex(0x08080c, 0.9f), hex(0xe8c06a, 0.95f), ck);
+        const Col edgeCl = mixc(hex(0x08080c, 0.9f), hex(GOLD, 0.95f), ck);
         const float pr0 = (140 - 5 * f + 10 * op) * u, pr1 = (246 + 52 * f + 12 * op) * u, pha = (0.17f + 0.09f * f + 0.07f * op) * wk;
         // an opening petal fills from its base to its tip: its locked look under it, its open one cut at `fill`
         const float fillK = unl && o ? sstep((uK - OPEN - 0.05f) / 0.75f) : 1.f, fill = lerpf(pr0, pr1 + 2 * u, fillK);
         if (fillK < 1.f)
             kite(cx, cy, a, pr0, pr1, pha, mixc(hex(0x1c1e26), hex(0xffffff), 0.18f * f * (1.f - op)), 0.95f, true, hex(0x8a90a0, 0.6f));
         // (the others smaller: the focused one grows out of them)
-        kite(cx, cy, a, pr0, pr1, pha, pc, !o ? 0.95f : lerpf(0.85f, 0.97f, ck), true,
-             focusClosed && (!cel || cT > TURN + 1.f) && (!unl || uK > OPEN + 1.f) ? hex(0xffffff, 0.95f * pulse) : o ? edgeCl : hex(0x8a90a0, 0.6f),
-             fillK < 1.f ? std::max(1.f, fill) : 0.f);
+        const Col leadC = focusClosed && (!cel || cT > TURN + 1.f) && (!unl || uK > OPEN + 1.f) ? hex(0xffffff, 0.95f * pulse) : o ? edgeCl : hex(0x8a90a0, 0.6f);
+        kite(cx, cy, a, pr0, pr1, pha, pc, !o ? 0.95f : lerpf(0.85f, 0.97f, ck), true, leadC, fillK < 1.f ? std::max(1.f, fill) : 0.f);
+        if (pf) { // a perfect one: a plate of polished gold (fading in as it turns)
+            const float gk = cel && m.celebratePerfect_ ? sstep(std::clamp((cT - TURN + 0.05f) / 0.6f, 0.f, 1.f)) : 1.f;
+            if (gk > 0.f) goldPlate(cx, cy, a, pr0, pr1, pha, gk, leadC, s);
+        }
         if (fillK > 0.f && fillK < 1.f) { // the line of light across the petal, where its hue has reached
             const float rm = lerpf(pr0, pr1, 0.45f);
             const float px[4] = {cx + std::cos(a) * pr0, cx + std::cos(a - pha) * rm, cx + std::cos(a) * pr1, cx + std::cos(a + pha) * rm};
@@ -692,11 +826,25 @@ void Worlds::kalCampaign() {
                 const float age = cT - TURN - 0.16f * w, life = 1.5f;
                 if (age <= 0.f || age >= life) continue;
                 const float k = age / life, sc = 1.f + 7.f * (1.f - (1.f - k) * (1.f - k));
-                const Col wc = hex(0xffffff, 0.85f * std::pow(1.f - k, 1.6f) * (1.f - 0.25f * w));
+                // (a perfect clear's: one gold, one in the stage's hue, one white)
+                const Col wc0 = m.celebratePerfect_ ? (w == 0 ? hex(GOLD_RING) : w == 1 ? mixc(c, hex(0xffffff), 0.35f) : hex(0xffffff)) : hex(0xffffff);
+                const Col wc = withA(wc0, 0.85f * std::pow(1.f - k, 1.6f) * (1.f - 0.25f * w));
                 for (int e = 0; e < 4; e++) {
                     const int g = (e + 1) % 4;
                     p.line(mx + (px[e] - mx) * sc, my + (py[e] - my) * sc, mx + (px[g] - mx) * sc, my + (py[g] - my) * sc,
                            (3.f + 2.f * k) * u, wc, (1.5f + 6.f * k) * u);
+                }
+            }
+            if (m.celebratePerfect_) { // a burst of golden sparkles out of the petal, slowing, falling a little, fading
+                for (int i = 0; i < 26; i++) {
+                    const float h = std::fmod(std::sin(i * 12.9898f + s * 78.233f) * 43758.5453f, 1.f), hh = h < 0.f ? h + 1.f : h;
+                    const float age = cT - TURN - 0.03f * (i % 5), life = 1.1f + 0.6f * hh;
+                    if (age <= 0.f || age >= life) continue;
+                    const float k = age / life, dir = i * TAU / 26 + 0.4f * hh; // (all around the petal)
+                    const float dist = (50.f + 190.f * hh) * u * (1.f - (1.f - k) * (1.f - k));
+                    const float sx = mx + std::cos(dir) * dist, sy = my + std::sin(dir) * dist + 60.f * u * k * k;
+                    const Col sc = withA(glint(hh + 0.15f * k), 0.95f * std::pow(1.f - k, 1.3f));
+                    sparkle(sx, sy, (5.f + 7.f * hh) * u * (1.f - 0.5f * k), age * 4.f, sc);
                 }
             }
             p.setAdditive(false);
@@ -778,14 +926,23 @@ void Worlds::kalCampaign() {
                 p.setAdditive(false);
             }
             p.circle(nx, ny, rad + 6 * u, hex(0x000000, 0.35f), 10 * u);
-            // cleared: a gold disc (a just cleared one turns gold as the light reaches it)
+            // cleared: a gold disc (a just cleared one turns gold as the light reaches it); perfect: a domed gold coin
             const float dk = ck;
-            p.circle(nx, ny, rad, mixc(hex(0x0a0a10, 0.82f), hex(0xe8c06a, 0.95f), dk));
+            p.circle(nx, ny, rad, mixc(hex(0x0a0a10, 0.82f), hex(GOLD, 0.95f), dk));
             const Col ringOpen = o ? withA(mixc(c, hex(0xffffff), 0.25f), 0.95f) : hex(0x8a8c96, 0.7f);
-            p.ring(nx, ny, rad, (1.6f + 1.4f * f) * u, mixc(ringOpen, hex(0xfff0c8, 0.95f), dk));
+            p.ring(nx, ny, rad, (1.6f + 1.4f * f) * u, mixc(ringOpen, hex(GOLD_RING, 0.95f), dk));
+            if (pk > 0.f) { // a perfect one's number on a domed gold coin, a raised rim
+                p.circle(nx, ny, rad + 2.5f * u, hex(0x6e4610, 0.9f * pk));
+                p.circle(nx, ny, rad, hex(0xf2c457, pk));
+                p.circle(nx - rad * 0.12f, ny - rad * 0.14f, rad * 0.8f, hex(0xffe9a8, 0.45f * pk), rad * 0.5f); // the dome's light
+                p.circle(nx + rad * 0.1f, ny + rad * 0.12f, rad * 0.86f, hex(0xa86e1c, 0.25f * pk), rad * 0.5f);   // its shade
+                p.ring(nx, ny, rad * 0.8f, 1.2f * u, hex(0x8a5a14, 0.75f * pk));
+                p.ring(nx, ny, rad * 0.8f + 1.2f * u, 0.9f * u, hex(0xfff2c0, 0.6f * pk));
+                p.ring(nx, ny, rad - 0.6f * u, 1.1f * u, hex(0xfff2c0, 0.85f * pk));
+            }
             const float ts = (22 + 17 * f) * u;
             const Col numOpen = o ? hex(0xffffff, 0.85f + 0.15f * f) : hex(0xa0a2ac, 0.75f);
-            p.text(F::JOSEFIN, std::to_string(s + 1), nx, ny + ts * 0.36f, ts, mixc(numOpen, hex(0x1a1408), dk), 0, 0.02f);
+            p.text(F::JOSEFIN, std::to_string(s + 1), nx, ny + ts * 0.36f, ts, mixc(mixc(numOpen, hex(GOLD_INK), dk), hex(0x2a1804), pk), 0, 0.02f);
             if (unl && uK >= OPEN) { // the disc flashes as the lock opens, a ring of light leaving it
                 const float k = (uK - OPEN) / 0.6f, fl = std::exp(-std::pow((uK - OPEN - 0.04f) / 0.16f, 2.f));
                 p.setAdditive(true);
@@ -851,22 +1008,21 @@ void Worlds::kalCampaign() {
         const float rowH = ns > 0 ? std::min(70.f, 350.f / ns) : 70.f;
         p.glass(X(1198), Y(160), 614 * u, (350 + std::max(0, ns - 1) * rowH + 20 + 32 - 160) * u, 26 * u, u, 0.f, 0.42f);
         p.text(F::JOSEFIN_LIGHT, "STAGE " + std::to_string(fs + 1), x, Y(250), 64 * u, hex(0xffffff), -1, 0.15f);
-        // (a stage being celebrated says CLEARED only once its petal turns; one being unlocked says LOCKED until its
-        // lock breaks: open() already waits for it; the new word comes in with a pop and a glow)
-        const bool celebrating = m.celebrate_ == fs && cleared(fs) && m.celebrateT_ < TURN;
-        const bool cl = cleared(fs) && !celebrating;
+        // (a stage being celebrated says CLEARED or PERFECT CLEAR only once its petal turns; one being unlocked says
+        // LOCKED until its lock breaks: open() already waits for it; the new word comes in with a pop and a glow)
+        const bool cl = shownCleared(fs), pf = shownPerfect(fs);
         float since = 99.f; // the time since the word changed
         if (m.celebrate_ == fs && cleared(fs)) since = m.celebrateT_ - TURN;
         else if (m.unlock_ == fs && m.unlockDiff_ == m.diff_) since = m.unlockT_ - Menu::UNLOCK_OPEN;
-        const char* st = !o ? "LOCKED" : cl ? "CLEARED" : "OPEN";
-        const Col stc = !o ? hex(0xb0b0b8) : cl ? hex(0x86e8a8) : hex(0xffffff, 0.9f);
+        const char* st = !o ? "LOCKED" : pf ? "PERFECT CLEAR" : cl ? "CLEARED" : "OPEN";
+        const Col stc = !o ? hex(0xb0b0b8) : pf ? hex(0xffd27a) : cl ? hex(0x86e8a8) : hex(0xffffff, 0.9f);
         const float pop = since >= 0.f && since < 0.7f ? std::exp(-since * 6.f) : 0.f;
         if (pop > 0.01f) {
             p.setAdditive(true);
             p.glow(x + p.width(F::JOSEFIN, st, 18 * T * u, 0.4f) * 0.5f, Y(286), (60 + 40 * pop) * u, withA(stc, 0.55f * pop));
             p.setAdditive(false);
         }
-        p.text(F::JOSEFIN, st, x, Y(292), 18 * T * u * (1.f + 0.35f * pop), mixc(stc, hex(0xffffff), 0.6f * pop), -1, 0.4f);
+        p.text(F::JOSEFIN, st, x, Y(292), 18 * T * u * (1.f + (pf ? 0.12f : 0.35f) * pop), mixc(stc, hex(0xffffff), 0.6f * pop), -1, 0.4f); // (the long word grows less: clear of BEST)
         // the scores and lines in two right-aligned columns (lines dimmer): the stage's on the header line
         const float colS = x + 430 * u, colL = x + 528 * u;
         if (o && cl) {

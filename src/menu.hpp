@@ -83,8 +83,11 @@ public:
     void setCampaignDifficulty(int d) { diff_ = d; }
     void setCursor(int stage, int song) { stage_ = stage; song_ = song; row_ = 1; petal_ = false; }
     // A stage just cleared: once the Voyage's screen is back (after the debrief), its petal turns into its cleared look
-    // under the focus, then the focus moves on to the next stage (if the player hasn't moved).
-    void celebrateClear(int stage, int next) { celebrate_ = stage; celebrateNext_ = next; celebrateT_ = 0.f; }
+    // under the focus, then the focus moves on to the next stage (if the player hasn't moved). `perfect`: a PERFECT
+    // CLEAR, the petal turns into its perfect look instead (from its cleared one when `wasCleared`).
+    void celebrateClear(int stage, int next, bool perfect = false, bool wasCleared = false) {
+        celebrate_ = stage; celebrateNext_ = next; celebrateT_ = 0.f; celebratePerfect_ = perfect; celebrateWasCleared_ = wasCleared;
+    }
     // A stage just opened on difficulty `diff` (by the run that ended): its petal is drawn still locked until its
     // unlock plays, once the Voyage's screen shows that difficulty and no clear is being celebrated (a clear's focus
     // moves on to the next stage, whose unlock then follows); the focus goes to it. The player moving cancels it.
@@ -265,6 +268,7 @@ private:
     static constexpr float CELEBRATE_MOVE = 4.8f; // when the focus moves on to the next stage
     int celebrate_ = -1, celebrateNext_ = -1; // the stage just cleared (see celebrateClear), the one to move on to
     float celebrateT_ = 0;
+    bool celebratePerfect_ = false, celebrateWasCleared_ = false; // (see celebrateClear)
     // the unlocks (see celebrateUnlock): still to play, and the one playing (its time from when the wheel stands on
     // it: it starts at -UNLOCK_LEAD while the wheel turns there; the lock opens at UNLOCK_OPEN, it's over at UNLOCK_END)
     static constexpr float UNLOCK_LEAD = 0.7f, UNLOCK_OPEN = 1.05f, UNLOCK_END = 2.6f;

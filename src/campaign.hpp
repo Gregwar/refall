@@ -50,7 +50,8 @@ private:
 // Progress, per stage, song and difficulty: a song is "beaten" once survived to its end in a campaign run (started
 // from any song of its stage), with its best score (the points scored during that song), the lines cleared during that
 // best-scoring song and the most lines ever cleared during it; a stage is "cleared" once
-// its songs were all survived in one run started from its first song. Stage N + 1 is unlocked on a difficulty once
+// its songs are all beaten (in one run or several), and "perfect" once they were all survived in one run started from
+// its first song (no game over: RETRY SONG starts another run). Stage N + 1 is unlocked on a difficulty once
 // stage N is cleared on it or on a harder one, or once its songs are all beaten there, in any runs (stage 1 always is;
 // reaching a stage on HARD opens it on NORMAL and EASY too, not done there but playable), or everything once UNLOCK ALL
 // was used on the save slot (saveslots.hpp).
@@ -82,6 +83,7 @@ public:
         return false;
     }
     bool cleared(int stage, int diff) const;
+    bool perfect(int stage, int diff) const; // a PERFECT CLEAR: every song survived in one run from the first
     bool allBeaten(int stage, int diff) const; // every song of the stage beaten on that difficulty (not in one run)
     bool clearedAny(int stage) const;
     bool beaten(int stage, int song, int diff) const;
@@ -94,12 +96,13 @@ public:
     int stageLines(int stage, int diff) const;
     void setBeaten(int stage, int song, int diff, int score, int lines = -1);
     void setCleared(int stage, int diff, int runScore, int runLines = -1);
+    void setPerfect(int stage, int diff); // (on a cleared stage only)
     int clearedCount() const;
 
 private:
     struct SongRec { bool beaten = false; int best = 0, lines = -1, mostLines = -1; };
     struct StageRec {
-        bool cleared[DIFF_COUNT] = {};
+        bool cleared[DIFF_COUNT] = {}, perfect[DIFF_COUNT] = {};
         int best[DIFF_COUNT] = {}, lines[DIFF_COUNT] = {-1, -1, -1, -1, -1};
         std::vector<SongRec> songs[DIFF_COUNT];
     };

@@ -191,6 +191,7 @@ Progress::StageRec& Progress::at(int stage) {
 }
 
 bool Progress::cleared(int stage, int diff) const { const StageRec* r = get(stage); return r && r->cleared[diff]; }
+bool Progress::perfect(int stage, int diff) const { const StageRec* r = get(stage); return r && r->cleared[diff] && r->perfect[diff]; }
 bool Progress::clearedAny(int stage) const {
     for (int d = 0; d < DIFF_COUNT; d++)
         if (cleared(stage, d)) return true;
@@ -239,6 +240,10 @@ void Progress::setCleared(int stage, int diff, int runScore, int runLines) {
     r.cleared[diff] = true;
     played_ = (int64_t)std::time(nullptr);
 }
+void Progress::setPerfect(int stage, int diff) {
+    StageRec& r = at(stage);
+    if (r.cleared[diff]) r.perfect[diff] = true;
+}
 int Progress::clearedCount() const {
     int n = 0;
     for (int s = 0; s < (int)stages_.size(); s++) n += clearedAny(s);
@@ -256,7 +261,7 @@ std::string Progress::stageKey(int stage) const {
 //   unlock	all	(UNLOCK ALL used on the save slot)
 //   played	<seconds since the epoch>	(the last song beaten or stage cleared)
 //   reach	<stage 1..>	(stages up to it open)
-//   stage	<stage 1..>	<DIFF>	<best run score>	<its lines>	<its songs' ids, comma separated>
+//   stage	<stage 1..>	<DIFF>	<best run score>	<its lines>	<its songs' ids, comma separated>	[perfect]
 //   songid	<video id>	<DIFF>	<best score>	<its lines>	<most lines>
 // DIFF is EASY, NORMAL, HARD, EXPERT2 or MASTER (EXPERT: a bare EXPERT is HARD's former name, read as HARD, so that files
 // written before EXPERT existed keep their HARD results). Lines are -1 when unknown. Older files: "song <stage> <song> <diff> <best> [<lines> <most>]" and stage lines
@@ -304,8 +309,12 @@ void Progress::load(const std::string& path, const Campaign* camp) {
         else if (c[0] == "stage" && c.size() >= 4) {
             const int s = std::atoi(c[1].c_str()) - 1, d = diffOf(c[2]);
             if (s < 0 || s >= 100 || d < 0) continue;
-            if (!camp_) { setCleared(s, d, std::atoi(c[3].c_str()), num(c, 4)); continue; }
-            if (c.size() >= 6 && c[5] == stageKey(s)) { setCleared(s, d, std::atoi(c[3].c_str()), num(c, 4)); continue; }
+            const bool perf = c.size() >= 7 && c[6] == "perfect"; // (a column older versions ignore)
+            if (!camp_ || (c.size() >= 6 && c[5] == stageKey(s))) {
+                setCleared(s, d, std::atoi(c[3].c_str()), num(c, 4));
+                if (perf) setPerfect(s, d);
+                continue;
+            }
             // a clear of a stage that is no longer one (regrouped): dropped, but the stage after it stays open
             std::string last;
             if (c.size() >= 6) last = c[5].substr(c[5].rfind(',') == std::string::npos ? 0 : c[5].rfind(',') + 1);
@@ -373,8 +382,8 @@ bool Progress::save() const {
     for (int s = 0; s < (int)stages_.size(); s++)
         for (int d = 0; d < DIFF_COUNT; d++) {
             if (stages_[s].cleared[d])
-                std::fprintf(f, "stage\t%d\t%s\t%d\t%d\t%s\n", s + 1, fileName(d), stages_[s].best[d], stages_[s].lines[d],
-                             stageKey(s).c_str());
+                std::fprintf(f, "stage\t%d\t%s\t%d\t%d\t%s%s\n", s + 1, fileName(d), stages_[s].best[d], stages_[s].lines[d],
+                             stageKey(s).c_str(), stages_[s].perfect[d] ? "\tperfect" : "");
             for (int k = 0; k < (int)stages_[s].songs[d].size(); k++) {
                 const SongRec& r = stages_[s].songs[d][k];
                 if (!r.beaten) continue;

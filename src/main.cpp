@@ -217,8 +217,8 @@ static void usage() {
         "  --playlists FILE     free play's remembered playlists (default: playlists.tsv in the user data folder)\n"
         "  --no-menu-music      no music on the menu's screens\n"
         "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free|slots|debrief-over|debrief-clear|\n"
-        "                       debrief-songs|debrief-over-songs|unlock, --menu-hover S:SONG, --menu-time SECONDS\n"
-        "                       into the screen), then exit (testing)\n"
+        "                       debrief-songs|debrief-over-songs|debrief-perfect|debrief-clear-perfect|unlock, --menu-hover\n"
+        "                       S:SONG, --menu-time SECONDS into the screen), then exit (testing)\n"
         "  --menu-clip OUT.mp4  a video walking through the menus (needs ffmpeg), then exit; --menu-demo shows\n"
         "                       made-up campaign progress in shots (clips always do; never saved)\n");
 }
@@ -300,7 +300,7 @@ private:
         // as it started: the stages open on each difficulty (stage * DIFF_COUNT + difficulty), and whether its stage was
         // done on its difficulty (cleared, or its songs all beaten)
         std::vector<char> openBefore;
-        bool doneBefore = false;
+        bool doneBefore = false, perfectBefore = false;
     } run_;
     bool muffleWas_ = false;
     // where the menu was: saved next to the progress (debounced while the menu shows, and when leaving it)
@@ -336,8 +336,10 @@ private:
     // (`score` and `lines` its record, kept if better); the stages it opened get their unlocks on the wheel. `fresh`:
     // the stage is done for the first time on this difficulty (its clear is celebrated), `nextOpened`: the next stage
     // just opened on it, `harderOpened`: the stage itself on EXPERT (done on HARD) or MASTER (done on EXPERT), -1 none.
-    struct RunOutcome { bool fresh = false, nextOpened = false; int harderOpened = -1; };
-    RunOutcome campaignOutcome(int score, int lines);
+    // `perfectRun`: the run survived every song from the stage's first (a PERFECT CLEAR); `perfect`: its first on this
+    // difficulty (celebrated, from the cleared look if the stage was done before).
+    struct RunOutcome { bool fresh = false, nextOpened = false, perfect = false; int harderOpened = -1; };
+    RunOutcome campaignOutcome(int score, int lines, bool perfectRun = false);
     // A Voyage game over: once the board has dissolved, the frame is kept and the debrief comes over it.
     bool debriefPending_ = false;
     void gameOverDebrief();
@@ -2744,14 +2746,17 @@ void App::runSnapshot() {
     for (int s = 0; s < campaign_.size(); s++)
         for (int d = 0; d < DIFF_COUNT; d++) run_.openBefore[s * DIFF_COUNT + d] = progress_.unlocked(s, d);
     run_.doneBefore = progress_.cleared(run_.stage, run_.diff) || progress_.allBeaten(run_.stage, run_.diff);
+    run_.perfectBefore = progress_.perfect(run_.stage, run_.diff);
 }
 
-App::RunOutcome App::campaignOutcome(int score, int lines) {
+App::RunOutcome App::campaignOutcome(int score, int lines, bool perfectRun) {
     const int stage = run_.stage, diff = run_.diff;
     RunOutcome r;
     if (progress_.allBeaten(stage, diff)) progress_.setCleared(stage, diff, score, lines);
+    if (perfectRun) progress_.setPerfect(stage, diff);
     progress_.save();
     r.fresh = progress_.cleared(stage, diff) && !run_.doneBefore;
+    r.perfect = progress_.perfect(stage, diff) && !run_.perfectBefore;
     for (int s = 0; s < campaign_.size() && (size_t)s * DIFF_COUNT < run_.openBefore.size(); s++)
         for (int d = 0; d < DIFF_COUNT; d++) {
             if (run_.openBefore[s * DIFF_COUNT + d] || !progress_.unlocked(s, d)) continue;
@@ -2760,9 +2765,9 @@ App::RunOutcome App::campaignOutcome(int score, int lines) {
             if (s == stage && d == diff + 1 && d >= DIFF_EXPERT) r.harderOpened = d;
             std::printf("[campaign] stage %d opened on %s\n", s + 1, difficultyName(d));
         }
-    if (r.fresh) {
+    if (r.fresh || r.perfect) {
         menu_.setCursor(stage, 0);
-        menu_.celebrateClear(stage, stage + 1 < campaign_.size() ? stage + 1 : -1);
+        menu_.celebrateClear(stage, stage + 1 < campaign_.size() ? stage + 1 : -1, r.perfect, !r.fresh);
     }
     return r;
 }
@@ -2772,16 +2777,17 @@ App::RunOutcome App::campaignOutcome(int score, int lines) {
 void App::campaignEnd() {
     const int stage = run_.stage;
     menu_.setCursor(stage, 0);
-    const RunOutcome r = campaignOutcome(game_.score(), game_.lines());
+    const bool perfect = run_.from == 0; // (every song survived from the first: a game over would have ended the run)
+    const RunOutcome r = campaignOutcome(game_.score(), game_.lines(), perfect);
     std::string note = r.nextOpened ? "NEXT STAGE UNLOCKED" : "";
     if (stage + 1 >= campaign_.size() && (run_.from == 0 || r.fresh)) note = "THE VOYAGE IS COMPLETE";
     if (r.harderOpened >= 0) note += std::string(note.empty() ? "" : "   /   ") + difficultyName(r.harderOpened) + " UNLOCKED";
     char sub[128];
     if (run_.from == 0 || r.fresh) {
         std::printf("[campaign] stage %d cleared on %s (%d points, %d lines)%s\n", stage + 1, difficultyName(run_.diff),
-                    game_.score(), game_.lines(), run_.from == 0 ? "" : ", its last songs beaten");
-        std::snprintf(sub, sizeof(sub), "STAGE %d CLEARED   /   %s", stage + 1, difficultyName(run_.diff));
-        toDebrief({true, "CONGRATULATIONS", sub, note, game_.score(), game_.lines()});
+                    game_.score(), game_.lines(), run_.from == 0 ? ", a perfect clear" : ", its last songs beaten");
+        std::snprintf(sub, sizeof(sub), "STAGE %d %s   /   %s", stage + 1, perfect ? "PERFECT CLEAR" : "CLEARED", difficultyName(run_.diff));
+        toDebrief({true, r.perfect ? "PERFECT CLEAR" : "CONGRATULATIONS", sub, note, game_.score(), game_.lines()});
     } else {
         std::snprintf(sub, sizeof(sub), "STAGE %d   /   SONGS %d-%zu SURVIVED   /   %s", stage + 1, run_.from + 1,
                       campaign_.stages()[stage].songs.size(), difficultyName(run_.diff));
@@ -2992,6 +2998,7 @@ int App::runMenuShot() {
                 progress_.setCleared(s, DIFF_NORMAL, run, runLines);
                 if (s == 0) progress_.setCleared(s, DIFF_EASY, runE, runLinesE);
             }
+            progress_.setPerfect(0, DIFF_NORMAL); // (stage 1 a perfect clear, stage 2 cleared over several runs)
             if (campaign_.size() > 2)
                 for (int k = 0; k < 2 && k < (int)campaign_.stages()[2].songs.size(); k++)
                     progress_.setBeaten(2, k, DIFF_NORMAL, k ? 9870 : 11240, k ? 37 : 40);
@@ -3050,6 +3057,23 @@ int App::runMenuShot() {
         d.score = sc == "debrief-songs" ? 21460 : 13870;
         d.lines = sc == "debrief-songs" ? 79 : 52;
         menu_.openDebrief(d);
+    }
+    // a PERFECT CLEAR's end: on stage 2, cleared before (debrief-perfect: the wheel turns its petal from bronze to gold),
+    // or on stage 3 done for the first time (debrief-clear-perfect: open to gold at once, stage 4 opening after it)
+    if ((sc == "debrief-perfect" || sc == "debrief-clear-perfect") && campaign_.size() > 3) {
+        const bool first = sc == "debrief-clear-perfect";
+        const int st = first ? 2 : 1;
+        char b[128];
+        std::snprintf(b, sizeof(b), "STAGE %d PERFECT CLEAR   /   NORMAL", st + 1);
+        menu_.openDebrief(Menu::Debrief{true, "PERFECT CLEAR", b, first ? "NEXT STAGE UNLOCKED" : "", 52340, 171});
+        if (first)
+            for (int k = 0; k < (int)campaign_.stages()[2].songs.size(); k++) progress_.setBeaten(2, k, DIFF_NORMAL, 10400 + 310 * k, 39 + k);
+        progress_.setCleared(st, DIFF_NORMAL, 52340, 171);
+        progress_.setPerfect(st, DIFF_NORMAL);
+        menu_.setCampaignDifficulty(DIFF_NORMAL);
+        menu_.setCursor(st, 0);
+        menu_.celebrateClear(st, st + 1, true, !first);
+        if (first) menu_.celebrateUnlock(3, DIFF_NORMAL);
     }
     if (sc == "unlock" && campaign_.size() > 3) { // the Voyage, stage 4 just opened (stage 3 done, celebrated before)
         progress_.setCleared(2, DIFF_NORMAL, 48710, 163);
