@@ -374,28 +374,34 @@ void main() {
             frag = vec4(mix(c0, uBridgeInk, bb), line * alpha);
             return;
         }
-        // a frosted tile tinted by its marble
-        vec3 base = mix(uTileCol, c0, uTileTint);
-        base *= 1.0 + 0.12 * (p.y / h);
-        float ta = uTileAlpha * 0.075;
-        // what the marble sees behind it: the tile over the pane over the world
-        vec3 behind = mix(bgAt(v0.xy), uPanel.rgb, uPanel.a);
-        tileEnv = mix(behind, base, clamp(ta * 2.0, 0.0, 1.0)) * 0.95 + 0.015;
+        // a block of deep tinted glass holding its marble: a body of the marble's color, darker toward the middle,
+        // a bevel all round (lit up left, shaded down right), a crisp edge
+        float hb = 0.13 * h / 0.46;                          // the bevel's width
+        float bev = smoothstep(-hb, -hb + px * 1.5, d);       // 0 on the face, 1 on the bevel
+        vec2 bn = normalize(p + 1e-4);                       // which side of the bevel
+        float side = dot(abs(p.x) > abs(p.y) ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y)), vec2(-0.7071, 0.7071));
+        vec3 deep = c0 * (0.32 + 0.08 * uLightGround);
+        vec3 base = mix(deep, c0 * 0.55, smoothstep(0.0, h, length(p)) * 0.6);
+        base *= 1.0 + 0.10 * (p.y / h);
+        base = mix(base, mix(c0 * 0.3, mix(c0, vec3(1.0), 0.12) * 0.9, side * 0.5 + 0.5), bev);
+        float ta = mix(0.62, 0.8, bev) * (0.75 + 0.25 * uTileAlpha);
+        // what the marble sees behind it: the block's glass
+        tileEnv = base * 1.1 + 0.01;
 )"
-R"(        // the marble's shadow on the tile, and the light it focuses there
-        vec2 sp = (p - mo - ld * 0.11) / R;
-        float sh = exp(-dot(sp, sp) * 1.6);
-        base *= 1.0 - 0.5 * sh * (1.0 - uLightGround * 0.3);
-        ta = mix(ta, max(ta, 0.04), sh * 0.5);
-        vec2 cq = (p - mo - ld * 0.35) / R;
-        float caus = exp(-dot(cq, cq) * 6.0);
-        base += (c0 * 0.8 + 0.1) * caus * (0.35 + 0.9 * dot(Lc, vec3(0.3, 0.5, 0.2)));
-        ta = max(ta, caus * 0.075);
-        // a hairline lit along the top left of the tile's edge
+R"(        // the marble's shadow on the back of the block, and the light it focuses there
+        vec2 sp = (p - mo - ld * 0.09) / R;
+        float sh = exp(-dot(sp, sp) * 1.4);
+        base *= 1.0 - 0.45 * sh * (1.0 - bev);
+        vec2 cq = (p - mo - ld * 0.32) / R;
+        float caus = exp(-dot(cq, cq) * 6.0) * (1.0 - bev);
+        base += (c0 * 0.8 + 0.1) * caus * (0.25 + 0.7 * dot(Lc, vec3(0.3, 0.5, 0.2)));
+        // a hairline along the outer edge and the bevel's inner edge, brighter up left
         float rim = smoothstep(px * 1.3, px * 0.15, abs(d + px * 1.0));
-        float lit = clamp(dot(normalize(p + 1e-4), vec2(-0.7071, 0.7071)) * 0.5 + 0.5, 0.0, 1.0);
-        base = mix(base, mix(mix(c0, vec3(1.0), 0.6), c0 * 0.75, uLightGround), rim * (0.25 + 0.5 * mix(lit, 1.0 - lit * 0.5, uLightGround)));
-        ta = max(ta, rim * (0.012 + 0.02 * lit));
+        float inner = smoothstep(px * 1.2, px * 0.1, abs(d + hb));
+        float lit = clamp(dot(bn, vec2(-0.7071, 0.7071)) * 0.5 + 0.5, 0.0, 1.0);
+        vec3 hi = mix(c0, vec3(1.0), 0.55);
+        base = mix(base, hi, rim * (0.25 + 0.6 * lit) + inner * 0.3 * lit);
+        ta = max(ta, rim * 0.9);
         // the bridge: plain squares of ink
         base = mix(base, uBridgeInk, bb);
         ta = mix(ta, 0.95, bb);
@@ -438,6 +444,14 @@ R"(        // the marble's shadow on the tile, and the light it focuses there
         float a = ma + outc.a * (1.0 - ma);
         vec3 c = (m * ma + outc.rgb * outc.a * (1.0 - ma)) / max(a, 1e-4);
         outc = vec4(c, a);
+    }
+    if (kind == 1 && bb < 1.0) {
+        // the block's front face over its marble: a faint tint and a broad diagonal sheen, so the marble sits inside
+        float d = sdRoundBox(p, vec2(h), 0.075 * h / 0.46);
+        float face = smoothstep(px, -px, d) * (1.0 - bb);
+        float band = smoothstep(0.30, 0.0, abs(dot(p / h, vec2(0.7071, 0.7071)) - 0.55)) * smoothstep(0.0, -0.13 * h / 0.46, d);
+        outc.rgb = mix(outc.rgb, c0 * 0.6, 0.12 * face);
+        outc.rgb += mix(c0, vec3(1.0), 0.6) * band * 0.10 * face;
     }
     frag = vec4(outc.rgb, outc.a * alpha);
 }

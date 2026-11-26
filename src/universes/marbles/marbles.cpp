@@ -76,7 +76,7 @@ float smin(float a, float b, float k) {
 }
 
 constexpr float WELL_HALF = 5.2f, WELL_TOP = 10.15f;   // the pane's extent (the drop's waves start there)
-constexpr float TILE_H = 0.46f, TILE_R = 0.455f;      // a tile's half size, its marble's radius (board units)
+constexpr float TILE_H = 0.46f, TILE_R = 0.33f;       // a tile's half size, its marble's radius (board units)
 constexpr int MAX_MARBLES = 140;
 constexpr float R_MIN = 0.38f, R_MAX = 0.43f;          // the marbles on the table
 constexpr float ROLL = 2.2f, DRAG = 0.2f;              // the felt's rolling resistance: units/s^2, and 1/s
@@ -1375,8 +1375,6 @@ void MarblesUniverse::drawBoard(const Game& g, float world) {
             if (cells[i][1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
             put(w.x, w.y, TILE_H, TILE_R, pal_.piece[type], 1.f, hashf((float)nextId_, i + 10.f) * TAU, glow, mseed(type, hashf((float)nextId_, (float)i)), 1);
-            // it glows a little as it falls (no trail)
-            putFx(w.x, w.y, 0.85f, 0.f, pal_.piece[type], 0.16f * (1.f - bb), 0);
         }
     }
     (void)world;
