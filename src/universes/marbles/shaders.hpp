@@ -333,6 +333,7 @@ void main() {
             // the grid: fine lines between the cells, a faint reflection of the room sliding across the glass
             vec2 gp = abs(fract(p + 0.5) - 0.5);
             float ln = smoothstep(px * 1.3, px * 0.2, min(gp.x, gp.y)) * aIn;
+            ln *= step(abs(p.x), v0.z - 0.25) * step(abs(p.y), v0.w - 0.25);   // only between the cells: no line round the well
             c += uPanelEdge * ln * v3.z;
             float sd = -p.x * 0.6 + p.y * 0.8 + 2.0;
             float sheet = smoothstep(0.0, 4.0, sd) * smoothstep(9.0, 4.0, sd);
@@ -340,7 +341,7 @@ void main() {
         }
         // the rim's bevel: t 0 at the inner edge .. 1 at the outer one, its slope facing out
         float t = clamp(din / max(rim, 1e-3), 0.0, 1.0);
-        float onRim = aOut * (1.0 - aIn);
+        float onRim = rim > 0.0 ? aOut * (1.0 - aIn) : 0.0;   // (no rim: no hairline in the edge's antialiasing either)
         if (onRim > 0.0) {
             vec2 qq = abs(p) - v0.zw;
             vec2 n = qq.x > qq.y ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y));

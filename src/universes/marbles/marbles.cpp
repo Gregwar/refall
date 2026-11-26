@@ -1322,17 +1322,16 @@ void MarblesUniverse::drawWorld(float world) {
 void MarblesUniverse::drawBoard(const Game& g, float world) {
     const float bb = smoothstepf(0.3f, 0.95f, bridge_.amount);
     const float glow = 0.3f * slow_;
-    // The well's pane: one even tone of smoked (or frosted) glass with a hairline edge.
-    // The well: its floor dark glass over the table with a fine grid of cells, no frame around it.
+    // The well: its floor dark glass over the table with a dim grid between the cells, no frame around it.
     put(0.f, 0.f, 5.04f, 10.04f, lerp(pal_.panel, bridge_.color, bb), pal_.panelAlpha * (1.f - 0.5f * bb), 0.f, 0.f, 0.f, 4,
-        0.f, 1.f, 0.5f * (1.f - bb));
-    // The previews' thin glass frames (HOLD; the three NEXT).
+        0.f, 1.f, 0.25f * (1.f - bb));
+    // The previews' panes of glass (HOLD; the three NEXT), no frame around them.
     if (bb < 0.99f) {
         const vec3 fc = lerp(pal_.panel, pal_.panelEdge, 0.15f);
         const vec3 h = layout::HOLD_CENTER;
-        put(h.x, h.y, 1.42f, 1.22f, fc, 0.35f * (1.f - bb), 0.f, 0.f, 0.f, 4, 0.07f, 0.f);
+        put(h.x, h.y, 1.42f, 1.22f, fc, 0.35f * (1.f - bb), 0.f, 0.f, 0.f, 4, 0.f, 0.f);
         const float top = layout::nextCenter(0).y + 1.35f, bot = layout::nextCenter(2).y - 1.05f;
-        put(layout::nextCenter(0).x, 0.5f * (top + bot), 1.32f, 0.5f * (top - bot), fc, 0.35f * (1.f - bb), 0.f, 0.f, 0.f, 4, 0.07f, 0.f);
+        put(layout::nextCenter(0).x, 0.5f * (top + bot), 1.32f, 0.5f * (top - bot), fc, 0.35f * (1.f - bb), 0.f, 0.f, 0.f, 4, 0.f, 0.f);
     }
     // The ghost: the tiles' outline.
     if (g.hasPiece() && !g.over()) {
