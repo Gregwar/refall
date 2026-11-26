@@ -78,6 +78,7 @@ float smin(float a, float b, float k) {
 constexpr float WELL_HALF = 5.2f, WELL_TOP = 10.15f;   // the pane's extent (the drop's waves start there)
 constexpr float TILE_H = 0.46f, TILE_R = 0.38f;       // a tile's half size, its marble's radius (board units)
 constexpr int MAX_MARBLES = 140;
+constexpr float PERSP = 0.024f;                         // the cubes' back faces pulled toward the vanishing point
 constexpr float R_MIN = 0.38f, R_MAX = 0.43f;          // the marbles on the table
 constexpr float ROLL = 2.2f, DRAG = 0.2f;              // the felt's rolling resistance: units/s^2, and 1/s
 constexpr float E_MARBLE = 0.86f;                      // restitution, marble on marble
@@ -1208,6 +1209,10 @@ void MarblesUniverse::flush() {
     const float bb = smoothstepf(0.3f, 0.95f, bridge_.amount);
     glUseProgram(progMarble_);
     setMat(progMarble_, "uVP", vp_);
+    // the cubes' perspective: a camera in front of the well, a little above its middle (eight rows below its top)
+    const vec3 vanish = layout::cellPos(4.5f, (float)Game::HIDDEN + 8.f);
+    set2f(progMarble_, "uVanish", vanish.x, vanish.y);
+    set1f(progMarble_, "uPersp", PERSP);
     set1f(progMarble_, "uPx", px_);
     set1f(progMarble_, "uTileTint", pal_.tileTint);
     set1f(progMarble_, "uTileAlpha", pal_.tileAlpha);

@@ -164,6 +164,8 @@ layout(location = 3) in vec4 a2;   // rotation, glow, seed, kind
 layout(location = 4) in vec4 a3;   // marble offset x, y (in the tile), flare, haze
 layout(location = 5) in vec4 a4;   // the light it receives: linear rgb, the angle it travels (< -5: the key light)
 uniform mat4 uVP;
+uniform vec2 uVanish;   // the cubes' vanishing point (board units)
+uniform float uPersp;   // how far their back faces are pulled toward it
 out vec2 vP;
 flat out vec4 v0, v1, v2, v3, v4;
 void main() {
@@ -171,7 +173,7 @@ void main() {
     vec2 ext;
     if (kind == 0) ext = vec2(a0.w * (a3.w > 0.5 ? 1.08 : 1.6)) + abs(a3.xy);   // (a3.xy: its motion blur)
     else if (kind == 4) ext = vec2(a0.z, a0.w) + a3.x + 0.05;                    // (a3.x: the rim's width)
-    else ext = vec2(a0.z + 0.12);
+    else ext = vec2(a0.z + 0.12) + abs(uVanish - a0.xy) * uPersp * (a0.z / 0.46);   // (the back face, in perspective)
     vP = aQ * ext;
     v0 = a0; v1 = a1; v2 = a2; v3 = a3; v4 = a4;
     gl_Position = uVP * vec4(a0.xy + vP, 0.0, 1.0);
@@ -183,6 +185,8 @@ flat in vec4 v0, v1, v2, v3, v4;
 out vec4 frag;
 uniform vec4 uKey;             // the key light (the beams' source): the direction it travels xy, its strength, -
 uniform vec3 uKeyCol;
+uniform vec2 uVanish;
+uniform float uPersp;
 uniform float uPx, uTileTint, uTileAlpha, uBridge, uLightGround, uSat, uCore, uWorldK, uGloss;
 uniform vec3 uTileCol, uLightCol, uHazeCol, uBridgeInk, uPanelEdge;
 uniform vec4 uPanel;           // the well's pane: rgb, opacity (what a marble in a tile sees behind it)
@@ -365,35 +369,51 @@ void main() {
     vec3 Lc = v4.rgb;
     vec2 ld = vec2(cos(v4.w), sin(v4.w));
     if (v4.w < -5.0) { Lc = uKeyCol * uKey.z; ld = uKey.xy; }
-    // a clear glass cube seen a little from below left: its front face (down left) and its back face (up right)
-    // joined at the corners, drawn as fine edges of light in the marble's color, its glass barely there
-    float co = 0.055 * h / 0.46, cs = h - co;               // the faces' offset, their half size
-    vec2 pf = p + co, pb = p - co;                            // around the front face, the back face
-    float dFront = abs(sdRoundBox(pf, vec2(cs), 0.02));
-    float dBack = abs(sdRoundBox(pb, vec2(cs), 0.02));
-    float dJoin = 1e3;
-    for (int k = 0; k < 4; k++) {
-        vec2 cn = vec2(k == 0 || k == 3 ? -cs : cs, k < 2 ? -cs : cs);
-        vec2 a0 = cn - co, ab = vec2(2.0 * co);
-        float t = clamp(dot(p - a0, ab) / dot(ab, ab), 0.0, 1.0);
+    // a clear glass cube in perspective, seen from a camera in front of the well (above its middle, as LIBRARY's
+    // books): its front face on the cell, its back face pulled toward the vanishing point and a little smaller, so a
+    // cube off the middle shows its inner side and one lower down its top; all twelve edges drawn as fine lines of
+    // light in the marble's color, its glass barely there
+    float hf = h * 0.985, hk = hf * (1.0 - uPersp);         // the front and back faces' half sizes
+    vec2 off = (uVanish - v0.xy) * uPersp * (h / 0.46);      // the back face's center, from the front's
+    vec2 pf = p, pb = p - off;
+    float dFront = abs(sdRoundBox(pf, vec2(hf), 0.02));
+    float dBack = abs(sdRoundBox(pb, vec2(hk), 0.02));
 )"
-R"(        dJoin = min(dJoin, length(p - a0 - ab * t));
+R"(    float dJoin = 1e3;
+    for (int k = 0; k < 4; k++) {
+        vec2 sg = vec2(k == 0 || k == 3 ? -1.0 : 1.0, k < 2 ? -1.0 : 1.0);
+        vec2 a0 = sg * hf, ab = off + sg * hk - a0;
+        float t = clamp(dot(p - a0, ab) / dot(ab, ab), 0.0, 1.0);
+        dJoin = min(dJoin, length(p - a0 - ab * t));
     }
-    float lw = px * 0.85;
+    float lw = px * 0.4;
     float eFront = smoothstep(lw + px, lw, dFront);
     float eBack = smoothstep(lw + px, lw, min(dBack, dJoin));
     vec3 edgeCol = mix(c0, vec3(1.0), 0.65);
-    if (kind == 1) mo -= co * 0.7;   // the marble sits in the middle of the cube, between its faces
+    if (kind == 1) mo += off * 0.5;   // the marble sits in the middle of the cube, between its faces
     if (kind >= 1) {
-        float hull = max(smoothstep(px, -px, sdRoundBox(pf, vec2(cs), 0.02)), smoothstep(px, -px, sdRoundBox(pb, vec2(cs), 0.02)));
+        // inside the cube's outline: some face between the front (t 0) and the back (t 1) holds the pixel
+        float lo = 0.0, hi = 1.0;
+        for (int i = 0; i < 2; i++) {
+            float pi = i == 0 ? p.x : p.y, oi = i == 0 ? off.x : off.y, dd = hk - hf;
+            // |pi - t oi| <= hf + t dd: two conditions A <= t B
+            for (int sgn = 0; sgn < 2; sgn++) {
+                float sv = sgn == 0 ? 1.0 : -1.0;
+                float A = sv * pi - hf, B = sv * oi + dd;
+                if (abs(B) < 1e-6) { if (A > 0.0) hi = -1.0; }
+                else if (B > 0.0) lo = max(lo, A / B);
+                else hi = min(hi, A / B);
+            }
+        }
+        float hull = lo <= hi ? 1.0 : 0.0;
         if (kind == 2) {
             // the ghost: the cube's edges only
-            frag = vec4(mix(c0, uBridgeInk, bb), max(eFront, eBack * 0.75) * 0.7 * alpha);
+            frag = vec4(mix(c0, uBridgeInk, bb), max(eFront, eBack * 0.7) * 0.5 * alpha);
             return;
         }
         // the glass: a faint tint, the top and right side faces a little lighter; the back edges seen through it;
         // the marble's shadow on the back face
-        float onFront = smoothstep(px, -px, sdRoundBox(pf, vec2(cs), 0.02));
+        float onFront = smoothstep(px, -px, sdRoundBox(pf, vec2(hf), 0.02));
         vec3 base = mix(bgAt(v0.xy), c0, 0.25) * 0.6 + edgeCol * 0.06 * (1.0 - onFront);
         float ta = 0.16 + 0.1 * (1.0 - onFront);
         if (kind == 1) {
@@ -402,11 +422,11 @@ R"(        dJoin = min(dJoin, length(p - a0 - ab * t));
             base *= 1.0 - 0.6 * sh;
             ta = mix(ta, 0.6, sh * 0.5);
         }
-        base = mix(base, edgeCol, eBack * 0.8);
-        ta = max(ta, eBack * 0.6);
+        base = mix(base, edgeCol, eBack * 0.5);
+        ta = max(ta, eBack * 0.35);
         base = mix(base, uBridgeInk, bb);
         ta = mix(ta, 0.95, bb);
-        outc = vec4(base, max(hull * ta, eBack * 0.6));   // (two corners' joins lie outside both faces)
+        outc = vec4(base, max(hull * ta, eBack * 0.35));   // (two corners' joins lie outside both faces)
         if (kind == 3) {
             outc = vec4(mix(outc.rgb, edgeCol, eFront * (1.0 - bb)), max(outc.a, eFront * 0.85));
             frag = vec4(outc.rgb, outc.a * alpha);
@@ -453,14 +473,14 @@ R"(        dJoin = min(dJoin, length(p - a0 - ab * t));
     }
     if (kind == 1 && bb < 1.0) {
         // the cube's front edges over its marble, and a faint window on its front face
-        vec2 qf = pf / cs;
-        float face = smoothstep(px, -px, sdRoundBox(pf, vec2(cs), 0.02)) * (1.0 - bb);
+        vec2 qf = pf / hf;
+        float face = smoothstep(px, -px, sdRoundBox(pf, vec2(hf), 0.02)) * (1.0 - bb);
         float wb = dot(qf, vec2(0.6, 0.8)) - 0.3;
         float win = smoothstep(0.0, 0.2, wb) * smoothstep(0.7, 0.45, wb) * smoothstep(0.3, -0.6, qf.x - qf.y * 0.2);
         outc.rgb += uLightCol * win * 0.06 * face;
         float ef = eFront * (1.0 - bb);
-        outc.rgb = mix(outc.rgb, edgeCol, ef * 0.85);
-        outc.a = max(outc.a, max(ef * 0.85, win * 0.06 * face));
+        outc.rgb = mix(outc.rgb, edgeCol, ef * 0.55);
+        outc.a = max(outc.a, max(ef * 0.55, win * 0.06 * face));
     }
     frag = vec4(outc.rgb, outc.a * alpha);
 }
