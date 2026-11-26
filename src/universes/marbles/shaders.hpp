@@ -379,16 +379,16 @@ void main() {
 )"
 R"(        dJoin = min(dJoin, length(p - a0 - ab * t));
     }
-    float lw = px * 0.45;
+    float lw = px * 0.85;
     float eFront = smoothstep(lw + px, lw, dFront);
     float eBack = smoothstep(lw + px, lw, min(dBack, dJoin));
-    vec3 edgeCol = mix(c0, vec3(1.0), 0.6);
+    vec3 edgeCol = mix(c0, vec3(1.0), 0.65);
     if (kind == 1) mo -= co * 0.7;   // the marble sits in the middle of the cube, between its faces
     if (kind >= 1) {
         float hull = max(smoothstep(px, -px, sdRoundBox(pf, vec2(cs), 0.02)), smoothstep(px, -px, sdRoundBox(pb, vec2(cs), 0.02)));
         if (kind == 2) {
             // the ghost: the cube's edges only
-            frag = vec4(mix(c0, uBridgeInk, bb), max(eFront, eBack * 0.6) * 0.6 * alpha);
+            frag = vec4(mix(c0, uBridgeInk, bb), max(eFront, eBack * 0.75) * 0.7 * alpha);
             return;
         }
         // the glass: a faint tint, the top and right side faces a little lighter; the back edges seen through it;
@@ -402,8 +402,8 @@ R"(        dJoin = min(dJoin, length(p - a0 - ab * t));
             base *= 1.0 - 0.6 * sh;
             ta = mix(ta, 0.6, sh * 0.5);
         }
-        base = mix(base, edgeCol, eBack * 0.5);
-        ta = max(ta, eBack * 0.3);
+        base = mix(base, edgeCol, eBack * 0.8);
+        ta = max(ta, eBack * 0.6);
         base = mix(base, uBridgeInk, bb);
         ta = mix(ta, 0.95, bb);
         outc = vec4(base, hull * ta);
@@ -459,8 +459,8 @@ R"(        dJoin = min(dJoin, length(p - a0 - ab * t));
         float win = smoothstep(0.0, 0.2, wb) * smoothstep(0.7, 0.45, wb) * smoothstep(0.3, -0.6, qf.x - qf.y * 0.2);
         outc.rgb += uLightCol * win * 0.06 * face;
         float ef = eFront * (1.0 - bb);
-        outc.rgb = mix(outc.rgb, edgeCol, ef * 0.6);
-        outc.a = max(outc.a, max(ef * 0.6, win * 0.06 * face));
+        outc.rgb = mix(outc.rgb, edgeCol, ef * 0.85);
+        outc.a = max(outc.a, max(ef * 0.85, win * 0.06 * face));
     }
     frag = vec4(outc.rgb, outc.a * alpha);
 }
