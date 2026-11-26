@@ -406,7 +406,7 @@ R"(        dJoin = min(dJoin, length(p - a0 - ab * t));
         ta = max(ta, eBack * 0.6);
         base = mix(base, uBridgeInk, bb);
         ta = mix(ta, 0.95, bb);
-        outc = vec4(base, hull * ta);
+        outc = vec4(base, max(hull * ta, eBack * 0.6));   // (two corners' joins lie outside both faces)
         if (kind == 3) {
             outc = vec4(mix(outc.rgb, edgeCol, eFront * (1.0 - bb)), max(outc.a, eFront * 0.85));
             frag = vec4(outc.rgb, outc.a * alpha);
