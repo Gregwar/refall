@@ -916,19 +916,19 @@ void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
             if (sd <= 0.f) sd = 0.02f + 0.96f * blockRng_.uniform();
             fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), 0.f, sd, co, nb, place});
-            // it bursts: a chunk from each part of the block, flung out from its middle (and up a little), each
-            // its own size and coral
+            // it bursts: a chunk from each part of the block, knocked out from its middle and sinking fast out of the
+            // way, each its own size and coral
             for (int j = 0; j < 2; j++)
                 for (int i = 0; i < 3; i++) {
                     Chunk ch;
                     const float ox = (i - 1) * 0.3f + rng_.range(-0.08f, 0.08f), oy = (j - 0.5f) * 0.42f + rng_.range(-0.08f, 0.08f);
                     ch.p = vec2{p.x + ox, p.y + oy};
-                    const float sp = rng_.range(1.6f, 4.2f);
+                    const float sp = rng_.range(1.2f, 2.6f);
                     const float len = std::max(0.08f, std::sqrt(ox * ox + oy * oy));
-                    ch.v = vec2{ox / len * sp + rng_.range(-1.2f, 1.2f), oy / len * sp + rng_.range(0.5f, 2.5f)};
+                    ch.v = vec2{ox / len * sp + rng_.range(-0.8f, 0.8f), oy / len * sp * 0.4f - rng_.range(1.f, 3.f)};
                     ch.half = rng_.range(0.2f, 0.3f);
                     ch.age = 0.f;
-                    ch.life = rng_.range(0.8f, 1.25f);
+                    ch.life = rng_.range(0.6f, 0.85f);
                     ch.seed = std::fmod(sd + 0.137f * (i + 3 * j + 1), 1.f) + 0.001f;
                     ch.colony = co;
                     ch.type = std::clamp(cl.type, 0, 6);
@@ -1736,10 +1736,10 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     }
     seeds_.erase(std::remove_if(seeds_.begin(), seeds_.end(), [](const Seed& s) { return s.age >= s.life; }), seeds_.end());
     for (auto& fd : fading_) fd.t += dt;
-    for (Chunk& ch : chunks_) { // (water: a strong drag, a slow sinking)
+    for (Chunk& ch : chunks_) { // (water: a drag on the sideways kick, a heavy sinking)
         ch.age += dt;
         const float drag = std::exp(-3.2f * dt);
-        ch.v = vec2{ch.v.x * drag, ch.v.y * drag - 2.4f * dt};
+        ch.v = vec2{ch.v.x * drag, ch.v.y * std::exp(-0.8f * dt) - 20.f * dt};
         ch.p = vec2{ch.p.x + ch.v.x * dt, ch.p.y + ch.v.y * dt};
     }
     chunks_.erase(std::remove_if(chunks_.begin(), chunks_.end(), [](const Chunk& c) { return c.age > c.life; }), chunks_.end());
