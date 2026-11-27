@@ -3,6 +3,17 @@
 Each release's section is its GitHub release message (the release workflow takes the section of its tag): the
 changes to the whole game, then those of single universes, each list with the most important changes first.
 
+## 1.0.14
+
+### Game
+
+- PERFECT CLEAR: survive every song of a stage in one run from its first (no game over; RETRY SONG starts a new run) and its petal becomes a plate of polished gold, its number on a gold coin, with its own celebration on the Voyage's wheel (golden waves, a burst of sparkles); the end-of-run screen and the stage's panel say PERFECT CLEAR
+
+### Universes
+
+- LIBRARY: a gentler perspective on the board (the top rows seen from the front, the lower books only a little from above)
+- TERRARIUM: realistic stars in the night sky at the end (fine points, a few brighter, most faint), no longer big round dots
+
 ## 1.0.13
 
 ### Game
