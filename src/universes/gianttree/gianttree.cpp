@@ -1636,11 +1636,12 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progVeil_, "uVeil", lerp(pal_.veil, bridge_.color, bridge));
         set3f(progVeil_, "uRail", lerp(pal_.glow * 0.5f, bridge_.ink * 0.4f, bridge));
         set1f(progVeil_, "uWellA", pal_.night > 0.5f ? 0.8f : 0.72f);
-        set1f(progVeil_, "uColA", (pal_.night > 0.5f ? 0.4f : 0.66f + 0.08f * wp) * world);
+        set1f(progVeil_, "uColK", world);
         set1f(progVeil_, "uRailA", 0.5f);
         set1f(progVeil_, "uPx", pxPerUnit_);
-        set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], -5.f, layout::LEFT_COLUMN[3]);
-        set4f(progVeil_, "uColR", 5.f, layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+        // the columns as the well, apart from it: HOLD and the score, NEXT and the bonus gauge
+        set4f(progVeil_, "uColL", -11.f, -6.4f, -6.f, 10.f);
+        set4f(progVeil_, "uColR", 6.f, -5.f, 11.f, 10.f);
         ugl::drawFullscreen();
     }
 

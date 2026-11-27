@@ -1055,25 +1055,26 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- the veil: the well and the HUD's columns
+// The well and the two columns in one material: a veil of the sky's colour, its edges cut clean (a pixel wide), a
+// fine rail of light along them.
 inline const char* VEIL_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
 uniform vec4 uView;
 uniform vec3 uVeil, uRail;
-uniform float uWellA, uColA, uRailA, uPx;
-uniform vec4 uColL, uColR;
+uniform float uWellA, uColK, uRailA, uPx;
+uniform vec4 uColL, uColR; // x0, y0, x1, y1
 float box(vec2 p, vec2 c, vec2 h) { vec2 q = abs(p - c) - h; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0); }
 void main() {
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
-    float dw = box(w, vec2(0.0), vec2(5.0, 10.0));
-    float a = uWellA * (1.0 - smoothstep(-0.15, 0.9, dw));
-    for (int i = 0; i < 2; i++) {
-        vec4 r = i == 0 ? uColL : uColR;
-        float dc = box(w, (r.xy + r.zw) * 0.5, (r.zw - r.xy) * 0.5);
-        a = max(a, uColA * (1.0 - smoothstep(-1.5, 2.6, dc)));
+    float a = 0.0, rail = 0.0;
+    for (int i = 0; i < 3; i++) {
+        vec4 r = i == 0 ? vec4(-5.0, -10.0, 5.0, 10.0) : i == 1 ? uColL : uColR;
+        float d = box(w, (r.xy + r.zw) * 0.5, (r.zw - r.xy) * 0.5);
+        float k = i == 0 ? 1.0 : uColK;
+        a = max(a, uWellA * k * clamp(0.5 - d * uPx, 0.0, 1.0));
+        rail = max(rail, k * clamp(1.0 - abs(d) * uPx * 0.9, 0.0, 1.0) * 0.55);
     }
-    float rail = clamp(1.0 - abs(dw) * uPx * 0.9, 0.0, 1.0) * 0.55 + exp(-abs(dw) * 3.0) * 0.12;
-    rail *= smoothstep(10.3, 8.0, w.y) * 0.5 + 0.5;
     vec3 c = uVeil * a + uRail * rail * uRailA;
     frag = vec4(c, a);
 }
